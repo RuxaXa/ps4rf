@@ -34,6 +34,17 @@ jobs:
             tests/test_discovery_a1_external_repro.py \
             tests/test_discovery_semgraph.py \
             tests/test_discovery_semgraph_argument_provenance.py
+      - name: Exercise synthetic CFG, ownership and lock analysis
+        run: |
+          python -m pytest -q \
+            tests/test_discovery_cfg.py \
+            tests/test_discovery_double_release.py \
+            tests/test_discovery_handles.py \
+            tests/test_discovery_lifecycle.py \
+            tests/test_discovery_lock_coverage.py \
+            tests/test_discovery_lockscope.py \
+            tests/test_discovery_objectflow.py \
+            tests/test_discovery_summaries.py
       - name: Exercise offline proof and blind-test protocol
         run: |
           python -m pytest -q \
