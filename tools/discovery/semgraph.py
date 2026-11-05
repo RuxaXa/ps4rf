@@ -30,6 +30,7 @@ Edge kinds, all evidence bearing
 from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
+import json
 from collections import Counter
 from typing import Dict, List, Optional, Tuple
 
@@ -91,7 +92,12 @@ class Graph:
     def edge(self, src: str, dst: str, kind: str, witness: dict, **attrs) -> bool:
         if not witness or not witness.get("site") or not witness.get("text"):
             raise AssertionError(f"edge {src}->{dst} ({kind}) has no witness")
-        key = (src, dst, kind, witness["site"])
+        # Site-only deduplication discarded independently different evidence:
+        # the first scanner result won even if a second carried stronger proof.
+        # Preserve distinct witnesses/detectors/statuses, dedupe exact records.
+        key = json.dumps({"src": src, "dst": dst, "kind": kind,
+                          "witness": witness, "attrs": attrs},
+                         sort_keys=True, default=str)
         if key in self._keys:
             return False
         self._keys.add(key)
@@ -110,7 +116,8 @@ class Graph:
 
     def export(self) -> dict:
         edges = sorted(self.edges, key=lambda e: (e["src"], e["kind"], e["dst"],
-                                                  str(e["witness"]["site"])))
+                                                  str(e["witness"]["site"]),
+                                                  json.dumps(e, sort_keys=True, default=str)))
         edge_counts: Dict[str, int] = {}
         for edge in edges:
             edge_counts[edge["kind"]] = edge_counts.get(edge["kind"], 0) + 1
