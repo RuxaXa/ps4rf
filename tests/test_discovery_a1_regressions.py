@@ -274,12 +274,16 @@ def test_a_different_object_in_the_argument_register_is_not_a_transfer(
     assert semgraph._argument_carries(ins, call.address, "rax") is False
 
 
-def test_a_lea_into_the_argument_register_still_proves_a_transfer(fixture_doc,
-                                                                  fixture_image):
-    """The positive twin: `lea rdi, [rax+0x10]` does put the object's address there."""
+def test_an_interior_pointer_lea_does_not_prove_object_identity(fixture_doc,
+                                                                 fixture_image):
+    """An interior address (rax+0x10) need not be the refcounted object pointer.
+
+    The old A1-06 test treated a derived address as the identical acquired
+    object; that was an overclaim, so it stays UNKNOWN rather than PROVED.
+    """
     ins = instructions_of(fixture_doc, fixture_image, "pass_by_lea")
     call = next(x for x in ins if x.mnemonic == "call")
-    assert semgraph._argument_carries(ins, call.address, "rax") is True
+    assert semgraph._argument_carries(ins, call.address, "rax") is False
 
 
 def test_an_unproven_transfer_hop_stays_unknown_in_a_chain():
