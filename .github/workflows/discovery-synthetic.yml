@@ -32,3 +32,16 @@ jobs:
           python -m pytest -q \
             tests/test_discovery_a1_regressions.py \
             tests/test_discovery_semgraph_argument_provenance.py
+      - name: Exercise offline proof and blind-test protocol
+        run: |
+          python -m pytest -q \
+            tests/test_discovery_authz.py \
+            tests/test_discovery_blindrun.py \
+            tests/test_discovery_blindscore.py \
+            tests/test_discovery_corpus.py \
+            tests/test_discovery_holdback.py \
+            tests/test_discovery_predict.py \
+            tests/test_discovery_seal.py \
+            tests/test_discovery_splits.py \
+            tests/test_discovery_proof_levels.py \
+            tests/test_discovery_lock_paths_unit.py
