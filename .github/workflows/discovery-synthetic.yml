@@ -31,6 +31,7 @@ jobs:
         run: |
           python -m pytest -q \
             tests/test_discovery_a1_regressions.py \
+            tests/test_discovery_a1_external_repro.py \
             tests/test_discovery_semgraph_argument_provenance.py
       - name: Exercise offline proof and blind-test protocol
         run: |
