@@ -630,11 +630,16 @@ def _hop(edge: dict, nodes: Dict[str, dict]) -> dict:
     crosses = (bool(src_node.get("subsystem"))
                and bool(dst_node.get("subsystem"))
                and src_node.get("subsystem") != dst_node.get("subsystem"))
-    return {"from": edge["src"], "to": edge["dst"], "kind": edge["kind"],
-            "status": edge.get("status", UNKNOWN),
-            "witness": edge["witness"],
-            "detector": edge.get("detector"),
-            "cross_subsystem": crosses}
+    hop = {"from": edge["src"], "to": edge["dst"], "kind": edge["kind"],
+           "status": edge.get("status", UNKNOWN),
+           "witness": edge["witness"],
+           "detector": edge.get("detector"),
+           "cross_subsystem": crosses}
+    if "evidence" in edge:
+        hop["evidence"] = edge["evidence"]
+    if edge.get("evidence_conflict"):
+        hop["evidence_conflict"] = True
+    return hop
 
 
 def _path_key(hops: List[dict]) -> tuple:
