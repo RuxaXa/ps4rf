@@ -150,3 +150,19 @@ def test_graph_export_is_stable_when_evidence_arrives_in_reverse_order():
             graph.edge("function:0x10", "function:0x20", "calls",
                        witness, **record)
     assert a.export() == b.export()
+
+
+def test_proved_transfer_requires_both_witness_halves():
+    import pytest
+    witness = {"site": "0x20", "kind": "argument-passing", "text": "mov rdi, rax"}
+    graph = Graph()
+    with pytest.raises(AssertionError, match="callee object-identity witness"):
+        graph.edge("function:0x10", "function:0x30", "transfers-reference", witness,
+                   status="proved", argument_proven=True)
+    with pytest.raises(AssertionError, match="callee object-identity witness"):
+        graph.edge("function:0x10", "function:0x30", "transfers-reference", witness,
+                   status="proved", argument_proven=False,
+                   callee_identity_witness={"site": "0x31", "text": "drop arg0"})
+    assert graph.edge("function:0x10", "function:0x30", "transfers-reference", witness,
+                      status="proved", argument_proven=True,
+                      callee_identity_witness={"site": "0x31", "text": "drop arg0"})
