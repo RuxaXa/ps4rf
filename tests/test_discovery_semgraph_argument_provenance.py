@@ -131,13 +131,15 @@ def test_graph_keeps_distinct_evidence_at_same_site():
     witness = {"site": "0x10", "kind": "call", "text": "call 0x20"}
     assert graph.edge("function:0x10", "function:0x20", "calls", witness,
                       detector="D1", status=UNKNOWN)
-    assert graph.edge("function:0x10", "function:0x20", "calls", witness,
-                      detector="D2", status="proved")
+    assert not graph.edge("function:0x10", "function:0x20", "calls", witness,
+                          detector="D2", status="proved")
     assert not graph.edge("function:0x10", "function:0x20", "calls", witness,
                           detector="D1", status=UNKNOWN)
     exported = graph.export()
-    assert len(exported["edges"]) == 2
-    assert {edge["status"] for edge in exported["edges"]} == {UNKNOWN, "proved"}
+    assert len(exported["edges"]) == 1
+    edge = exported["edges"][0]
+    assert edge["status"] == "proved"
+    assert {rec["attrs"]["status"] for rec in edge["evidence"]} == {UNKNOWN, "proved"}
 
 
 def test_graph_export_is_stable_when_evidence_arrives_in_reverse_order():
@@ -181,4 +183,37 @@ def test_chain_prefers_proved_over_unknown_witness_at_same_site():
                "bug_class": "OWNERSHIP_DOUBLE_FREE", "rank": 1}
     selected = chains(graph.export(), {"findings": [finding]}, facts={})["chains"][0]
     assert selected["hop_status"] == "proved"
-    assert selected["path_selection"]["paths_considered"] >= 2
+    assert selected["path_selection"]["paths_considered"] == 1
+    assert len(graph.export()["edges"][0]["evidence"]) == 2
+
+
+def test_parallel_evidence_does_not_multiply_structural_chain_paths():
+    graph = Graph()
+    graph.node("entry:sysent[1]", "entry")
+    for i in range(4):
+        graph.node(f"function:0x{i+10:x}", "function")
+    endpoints = [("entry:sysent[1]", "function:0xa", "reaches")]
+    endpoints.extend((f"function:0x{i+10:x}", f"function:0x{i+11:x}", "calls")
+                     for i in range(3))
+    for j, (src, dst, kind) in enumerate(endpoints):
+        for detector in ("D1", "D2", "D3"):
+            graph.edge(src, dst, kind,
+                       {"site": hex(j+0x100), "kind": kind, "text": f"{src}->{dst}"},
+                       detector=detector, status="proved")
+    exported = graph.export()
+    assert len(exported["edges"]) == 4
+    finding = {"detector": "D1", "function": {"rva": "0xd"},
+               "bug_class": "OWNERSHIP_DOUBLE_FREE", "rank": 1}
+    selected = chains(exported, {"findings": [finding]}, facts={})["chains"][0]
+    assert selected["hop_status"] == "proved"
+    assert selected["path_selection"]["paths_considered"] == 1
+
+
+def test_conflicting_proof_and_refutation_degrades_to_unknown():
+    graph = Graph()
+    witness = {"site": "0x30", "kind": "call", "text": "call 0x10"}
+    graph.edge("function:0x1", "function:0x2", "calls", witness, status="proved")
+    graph.edge("function:0x1", "function:0x2", "calls", witness, status="refuted")
+    edge = graph.export()["edges"][0]
+    assert edge["status"] == UNKNOWN
+    assert edge["evidence_conflict"] is True
