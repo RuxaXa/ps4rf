@@ -34,7 +34,11 @@ jobs:
             tests/test_discovery_a1_external_repro.py \
             tests/test_discovery_semgraph.py \
             tests/test_discovery_semgraph_argument_provenance.py
-      - name: Exercise synthetic CFG, ownership and lock analysis
+      # Ten tests require external prerequisites that this public export does
+      # not contain. They remain runnable on the local analysis host:
+      # 8 pinned-kernel tests and 2 assembler-version-sensitive fixture hashes.
+      # Excluding these node IDs is NOT a passing result for those ten tests.
+      - name: Exercise firmware-free CFG, ownership and lock analysis
         run: |
           python -m pytest -q \
             tests/test_discovery_cfg.py \
@@ -44,7 +48,15 @@ jobs:
             tests/test_discovery_lock_coverage.py \
             tests/test_discovery_lockscope.py \
             tests/test_discovery_objectflow.py \
-            tests/test_discovery_summaries.py
+            tests/test_discovery_summaries.py \
+            --deselect=tests/test_discovery_cfg.py::test_every_direct_conditional_branch_in_a_real_body_has_its_taken_edge \
+            --deselect=tests/test_discovery_double_release.py::test_the_cfg_carries_conditional_branch_targets \
+            --deselect=tests/test_discovery_double_release.py::test_the_fixed_body_stays_unactionable_while_the_vulnerable_one_stays_actionable \
+            --deselect=tests/test_discovery_double_release.py::test_d2_does_not_claim_a_kill_free_path_across_a_loop_on_the_fixed_body \
+            --deselect=tests/test_discovery_lockscope.py::test_lapse_pair_is_resolved_from_sysent_cfg_and_callgraph \
+            --deselect=tests/test_discovery_lockscope.py::test_d3_discriminates_vulnerable_and_fixed_lapse \
+            --deselect=tests/test_discovery_lifecycle.py::test_fixture_is_reproducible_and_pinned \
+            --deselect=tests/test_discovery_lockscope.py::test_fixture_is_reproducible_and_pinned
       - name: Exercise offline proof and blind-test protocol
         run: |
           python -m pytest -q \
