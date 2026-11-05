@@ -92,6 +92,13 @@ class Graph:
     def edge(self, src: str, dst: str, kind: str, witness: dict, **attrs) -> bool:
         if not witness or not witness.get("site") or not witness.get("text"):
             raise AssertionError(f"edge {src}->{dst} ({kind}) has no witness")
+        if kind == "transfers-reference" and attrs.get("status") == PROVED:
+            # Proving caller placement alone does not identify callee's object.
+            # Require both independently checkable witness halves.
+            callee = attrs.get("callee_identity_witness")
+            if (not attrs.get("argument_proven") or not isinstance(callee, dict)
+                    or not callee.get("site") or not callee.get("text")):
+                raise AssertionError("proved transfer requires a callee object-identity witness")
         # Site-only deduplication discarded independently different evidence:
         # the first scanner result won even if a second carried stronger proof.
         # Preserve distinct witnesses/detectors/statuses, dedupe exact records.
