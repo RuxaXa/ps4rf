@@ -185,6 +185,7 @@ def test_chain_prefers_proved_over_unknown_witness_at_same_site():
     assert selected["hop_status"] == "proved"
     assert selected["path_selection"]["paths_considered"] == 1
     assert len(graph.export()["edges"][0]["evidence"]) == 2
+    assert len(selected["hops"][0]["evidence"]) == 2
 
 
 def test_parallel_evidence_does_not_multiply_structural_chain_paths():
