@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 
 from capstone.x86 import X86_OP_IMM, X86_OP_MEM, X86_OP_REG
-from tools.discovery.semgraph import _argument_carries, _transfer_status, POSSIBLE, UNKNOWN
+from tools.discovery.semgraph import _argument_carries, _transfer_status, POSSIBLE, UNKNOWN, Graph
 
 
 @dataclass
@@ -123,3 +123,30 @@ def test_caller_only_witness_does_not_prove_callee_drop_identity():
     assert _transfer_status(True) == POSSIBLE
     assert _transfer_status(False) == UNKNOWN
     assert _transfer_status(True) != "proved"
+
+
+def test_graph_keeps_distinct_evidence_at_same_site():
+    """Independent findings at one call site must not erase each other."""
+    graph = Graph()
+    witness = {"site": "0x10", "kind": "call", "text": "call 0x20"}
+    assert graph.edge("function:0x10", "function:0x20", "calls", witness,
+                      detector="D1", status=UNKNOWN)
+    assert graph.edge("function:0x10", "function:0x20", "calls", witness,
+                      detector="D2", status="proved")
+    assert not graph.edge("function:0x10", "function:0x20", "calls", witness,
+                          detector="D1", status=UNKNOWN)
+    exported = graph.export()
+    assert len(exported["edges"]) == 2
+    assert {edge["status"] for edge in exported["edges"]} == {UNKNOWN, "proved"}
+
+
+def test_graph_export_is_stable_when_evidence_arrives_in_reverse_order():
+    witness = {"site": "0x10", "kind": "call", "text": "call 0x20"}
+    a, b = Graph(), Graph()
+    records = [{"detector": "D1", "status": UNKNOWN},
+               {"detector": "D2", "status": "proved"}]
+    for graph, sequence in ((a, records), (b, list(reversed(records)))):
+        for record in sequence:
+            graph.edge("function:0x10", "function:0x20", "calls",
+                       witness, **record)
+    assert a.export() == b.export()
