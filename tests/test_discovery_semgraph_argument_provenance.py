@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 
 from capstone.x86 import X86_OP_IMM, X86_OP_MEM, X86_OP_REG
-from tools.discovery.semgraph import _argument_carries, _transfer_status, POSSIBLE, UNKNOWN, Graph
+from tools.discovery.semgraph import _argument_carries, _transfer_status, POSSIBLE, UNKNOWN, Graph, chains
 
 
 @dataclass
@@ -166,3 +166,19 @@ def test_proved_transfer_requires_both_witness_halves():
     assert graph.edge("function:0x10", "function:0x30", "transfers-reference", witness,
                       status="proved", argument_proven=True,
                       callee_identity_witness={"site": "0x31", "text": "drop arg0"})
+
+
+def test_chain_prefers_proved_over_unknown_witness_at_same_site():
+    graph = Graph()
+    graph.node("entry:sysent[4]", "entry")
+    graph.node("function:0x20", "function")
+    witness = {"site": "0x40", "kind": "entry-table", "text": "sysent[4] -> 0x20"}
+    graph.edge("entry:sysent[4]", "function:0x20", "reaches", witness,
+               status=UNKNOWN, detector="D1")
+    graph.edge("entry:sysent[4]", "function:0x20", "reaches", witness,
+               status="proved", detector="D2")
+    finding = {"detector": "D2", "function": {"rva": "0x20"},
+               "bug_class": "OWNERSHIP_DOUBLE_FREE", "rank": 1}
+    selected = chains(graph.export(), {"findings": [finding]}, facts={})["chains"][0]
+    assert selected["hop_status"] == "proved"
+    assert selected["path_selection"]["paths_considered"] >= 2
