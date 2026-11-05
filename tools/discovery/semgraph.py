@@ -125,6 +125,16 @@ class Graph:
         }
 
 
+def _transfer_status(argument_placement_proven: bool) -> str:
+    """Never call a release transfer PROVED from a caller-only witness.
+
+    Proving that a register value enters a callee does not prove the callee
+    drops that particular object. ReleaseShape.drops is local and has no
+    argument-to-drop identity mapping, so PROVED cannot be produced here.
+    """
+    return POSSIBLE if argument_placement_proven else UNKNOWN
+
+
 def _argument_carries(insns, call_site: int, obj_reg: str,
                       obj_load_site: Optional[int] = None) -> bool:
     """Conservative local argument-placement witness for an acquired object.
@@ -394,22 +404,28 @@ def build(scan: dict, handles_mod, image, index, ownership=None,
                     oid = objects.get(acq.obj_reg)
                     if oid is None:
                         continue
-                    # The callee dropping *a* reference says nothing about *this*
-                    # object.  Only an argument-register hand-off proves the
-                    # transfer; without it the edge stays unknown, so a chain can
-                    # never read "leads to a release" as evidence.
-                    proven = argument_carries(insns, site, acq.obj_reg, acq.obj_load)
-                    text = (f"{acq.obj_reg} is passed to {hex(tgt)} at {hex(site)}, which "
-                            f"drops a reference"
-                            if proven else
+                    # The call-site placement is only HALF of an ownership
+                    # transfer: ReleaseShape tells us the callee drops *some*
+                    # reference, not that its drop consumes the passed argument.
+                    # It may dereference an unrelated global, a different argument,
+                    # or overwrite the register before the drop. Keep this hop
+                    # possible until a callee-side identity/lifetime witness exists.
+                    placement_proven = argument_carries(
+                        insns, site, acq.obj_reg, acq.obj_load)
+                    status = _transfer_status(placement_proven)
+                    text = (f"{acq.obj_reg} reaches an argument register of "
+                            f"{hex(tgt)} at {hex(site)}, but the callee's drop "
+                            f"has not been tied to that argument"
+                            if placement_proven else
                             f"{hex(tgt)} drops a reference, but no argument register "
-                            f"receives {acq.obj_reg} at {hex(site)}")
+                            f"is proven to receive {acq.obj_reg} at {hex(site)}")
                     g.edge(fid, tid, "transfers-reference",
-                           _witness(hex(site), "argument-passing" if proven
-                                    else "argument-passing-unproven", text),
+                           _witness(hex(site), "argument-placement-only"
+                                    if placement_proven else "argument-passing-unproven", text),
                            detector=finding["detector"],
-                           status=PROVED if proven else UNKNOWN,
-                           argument_proven=proven)
+                           status=status,
+                           argument_proven=placement_proven,
+                           callee_identity_proven=False)
 
         claims = finding.get("claims") or {}
         target = claims.get("decision_target")
