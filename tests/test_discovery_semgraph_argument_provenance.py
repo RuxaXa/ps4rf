@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 
 from capstone.x86 import X86_OP_IMM, X86_OP_MEM, X86_OP_REG
-from tools.discovery.semgraph import _argument_carries
+from tools.discovery.semgraph import _argument_carries, _transfer_status, POSSIBLE, UNKNOWN
 
 
 @dataclass
@@ -112,3 +112,14 @@ def test_branch_can_skip_object_load():
     code = [Ins(0x0A, "jne", [imm(0x14)]), move(0x10, "rax", mem("rbx")),
             move(0x14, "rdi", reg("rax")), call(0x20)]
     assert not _argument_carries(code, 0x20, "rax", obj_load_site=0x10)
+
+
+def test_caller_only_witness_does_not_prove_callee_drop_identity():
+    """Caller passes A, but callee may drop unrelated B.
+
+    A proven call-site placement alone cannot be PROVED as ownership transfer;
+    it needs separate callee-side object-identity evidence.
+    """
+    assert _transfer_status(True) == POSSIBLE
+    assert _transfer_status(False) == UNKNOWN
+    assert _transfer_status(True) != "proved"
