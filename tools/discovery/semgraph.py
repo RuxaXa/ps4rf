@@ -73,7 +73,9 @@ class Graph:
     def __init__(self) -> None:
         self.nodes: Dict[str, dict] = {}
         self.edges: List[dict] = []
-        self._keys = set()
+        self._keys = set()      # exact evidence records
+        self._by_site = {}      # one structural edge per source/destination/kind/site
+        self._observations = {} # all distinct witnesses for each structural edge
 
     def node(self, nid: str, kind: str, **attrs) -> str:
         cur = self.nodes.get(nid)
@@ -99,17 +101,45 @@ class Graph:
             if (not attrs.get("argument_proven") or not isinstance(callee, dict)
                     or not callee.get("site") or not callee.get("text")):
                 raise AssertionError("proved transfer requires a callee object-identity witness")
-        # Site-only deduplication discarded independently different evidence:
-        # the first scanner result won even if a second carried stronger proof.
-        # Preserve distinct witnesses/detectors/statuses, dedupe exact records.
-        key = json.dumps({"src": src, "dst": dst, "kind": kind,
-                          "witness": witness, "attrs": attrs},
-                         sort_keys=True, default=str)
-        if key in self._keys:
+        # Structural graph edges must remain unique. Otherwise independent
+        # detector findings at each hop can multiply path enumeration
+        # exponentially. Preserve all evidence without duplicating the edge.
+        structural = (src, dst, kind, str(witness["site"]))
+        record = {"witness": dict(witness), "attrs": dict(attrs)}
+        record_key = json.dumps([structural, record], sort_keys=True, default=str)
+        if record_key in self._keys:
             return False
-        self._keys.add(key)
-        self.edges.append(dict(attrs, src=src, dst=dst, kind=kind, witness=witness))
-        return True
+        self._keys.add(record_key)
+        if structural not in self._by_site:
+            edge = dict(attrs, src=src, dst=dst, kind=kind, witness=dict(witness))
+            self._by_site[structural] = edge
+            self._observations[structural] = [record]
+            self.edges.append(edge)
+            return True
+
+        observations = self._observations[structural]
+        observations.append(record)
+        defaults = {"calls": PROVED, "tail-jumps": PROVED, "reaches": PROVED,
+                    "transfers-reference": POSSIBLE}
+
+        def rank(item):
+            status = item["attrs"].get("status", defaults.get(kind, UNKNOWN))
+            return (STATUS_ORDER.get(status, STATUS_ORDER[UNKNOWN]),
+                    json.dumps(item, sort_keys=True, default=str))
+
+        observations.sort(key=rank)
+        preferred = observations[0]
+        edge = self._by_site[structural]
+        edge.clear()
+        edge.update(preferred["attrs"])
+        edge.update(src=src, dst=dst, kind=kind, witness=preferred["witness"],
+                    evidence=list(observations))
+        levels = {item["attrs"].get("status", defaults.get(kind, UNKNOWN))
+                  for item in observations}
+        if REFUTED in levels and (PROVED in levels or POSSIBLE in levels):
+            edge["status"] = UNKNOWN
+            edge["evidence_conflict"] = True
+        return False
 
     def out_edges(self, nid: str, kinds: Optional[Iterable[str]] = None) -> List[dict]:
         wanted = set(kinds) if kinds else None
