@@ -125,36 +125,115 @@ class Graph:
         }
 
 
-def _argument_carries(insns, call_site: int, obj_reg: str) -> bool:
-    """Does the call at ``call_site`` actually receive ``obj_reg``?
+def _argument_carries(insns, call_site: int, obj_reg: str,
+                      obj_load_site: Optional[int] = None) -> bool:
+    """Conservative local argument-placement witness for an acquired object.
 
-    Checking that the callee merely *can* drop a reference is not provenance.  The
-    register has to be moved into a System V argument register in the setup window
-    before the call; otherwise the edge is guesswork and is recorded as unknown
-    instead of possible.
+    Operand-text matching is not provenance: a field load through an object
+    register does not yield the same object, and later argument overwrites
+    invalidate earlier placements. Only a full-width register move or an
+    identity LEA can establish this bounded local witness.
+
+    This is not an interprocedural lifetime proof. Unknown indirect branches
+    and aliases beyond the window stay UNKNOWN.
     """
-    idx = None
-    for pos, ins in enumerate(insns):
-        if ins.address == call_site:
-            idx = pos
-            break
+    idx = next((pos for pos, ins in enumerate(insns)
+                if ins.address == call_site), None)
     if idx is None:
         return False
+
+    # Partial-register writes invalidate the corresponding 64-bit argument.
+    aliases = {"edi": "rdi", "di": "rdi", "dil": "rdi",
+               "esi": "rsi", "si": "rsi", "sil": "rsi",
+               "edx": "rdx", "dx": "rdx", "dl": "rdx", "dh": "rdx",
+               "ecx": "rcx", "cx": "rcx", "cl": "rcx", "ch": "rcx",
+               "eax": "rax", "ax": "rax", "al": "rax", "ah": "rax"}
+    for num in (8, 9, 10, 11, 12, 13, 14, 15):
+        aliases.update({f"r{num}d": f"r{num}",
+                        f"r{num}w": f"r{num}",
+                        f"r{num}b": f"r{num}"})
+
+    def canonical(reg: str) -> str:
+        return aliases.get(reg, reg)
+
+    if canonical(obj_reg) != obj_reg:
+        return False  # A partial pointer is not a full object identity.
+
+    def target(ins) -> Optional[int]:
+        if ins.operands and ins.operands[0].type == X86_OP_IMM:
+            return int(ins.operands[0].imm)
+        return None
+
+    def writes(ins) -> set:
+        try:
+            _reads, regs = ins.regs_access()
+            return {canonical(ins.reg_name(r)) for r in regs}
+        except Exception:
+            # Missing Capstone detail is not proof of register preservation.
+            return set(ARG_REGS) | {obj_reg}
+
+    clobbered = set()
+    # At most 13 preceding instructions: no guessed long-range provenance.
     for back in range(idx - 1, max(-1, idx - 14), -1):
         ins = insns[back]
-        if len(ins.operands) < 2 or ins.operands[0].type != X86_OP_REG:
+        mnemonic = ins.mnemonic.split()[-1].lower()
+        if (mnemonic in ("call", "ret", "jmp") or mnemonic.startswith("j")
+                or mnemonic.startswith("loop")):
+            return False
+
+        written_args = writes(ins) & set(ARG_REGS)
+        if not written_args:
             continue
-        mnemonic = ins.mnemonic.split()[-1]
-        if mnemonic not in ("mov", "movabs", "lea"):
+        # Include implicit and second-operand writes, e.g. xchg.
+        eligible = written_args - clobbered
+        clobbered.update(written_args)
+        if not eligible or not ins.operands or ins.operands[0].type != X86_OP_REG:
             continue
         dst = ins.reg_name(ins.operands[0].reg)
-        if dst not in ARG_REGS:
+        arg = canonical(dst)
+        if arg not in eligible:
             continue
-        source = ins.op_str.split(",", 1)[1] if "," in ins.op_str else ""
-        if obj_reg in source:
-            return True
-    return False
+        if dst != arg or len(ins.operands) < 2:
+            continue  # Partial-width assignment truncates/changes pointer.
 
+        src = ins.operands[1]
+        carries = (mnemonic in ("mov", "movabs") and src.type == X86_OP_REG
+                   and ins.reg_name(src.reg) == obj_reg)
+        if mnemonic == "lea" and src.type == X86_OP_MEM:
+            # Interior and indexed addresses do NOT prove identical objects.
+            carries = (ins.reg_name(src.mem.base) == obj_reg
+                       and not src.mem.index and src.mem.disp == 0)
+        if not carries:
+            continue
+
+        if obj_load_site is not None:
+            if not (obj_load_site <= ins.address < call_site):
+                continue
+            # Clobbers after acquisition and before placement destroy identity.
+            for mid in insns:
+                if not (obj_load_site < mid.address < ins.address):
+                    continue
+                if mid.mnemonic.split()[-1].lower() in ("call", "syscall"):
+                    return False
+                if obj_reg in writes(mid):
+                    return False
+            # A direct branch can skip acquisition but reach placement.
+            if any(other.address < obj_load_site
+                   and (other.mnemonic.split()[-1].lower().startswith("j")
+                        or other.mnemonic.split()[-1].lower().startswith("loop"))
+                   and (jump := target(other)) is not None
+                   and obj_load_site < jump <= ins.address for other in insns):
+                return False
+
+        # A direct branch can skip the placement and reach the call.
+        if any(other.address < ins.address
+               and (other.mnemonic.split()[-1].lower().startswith("j")
+                    or other.mnemonic.split()[-1].lower().startswith("loop"))
+               and (jump := target(other)) is not None
+               and ins.address < jump <= call_site for other in insns):
+            return False
+        return True
+    return False
 
 def build(scan: dict, handles_mod, image, index, ownership=None,
           entry_meta: Optional[Dict[str, int]] = None,
@@ -196,8 +275,9 @@ def build(scan: dict, handles_mod, image, index, ownership=None,
             shapes[rva] = None
         return shapes[rva]
 
-    def argument_carries(insns, call_site: int, obj_reg: str) -> bool:
-        return _argument_carries(insns, call_site, obj_reg)
+    def argument_carries(insns, call_site: int, obj_reg: str,
+                         obj_load_site: Optional[int] = None) -> bool:
+        return _argument_carries(insns, call_site, obj_reg, obj_load_site)
 
     for finding in scan.get("findings", []):
         func = finding["function"]
@@ -318,7 +398,7 @@ def build(scan: dict, handles_mod, image, index, ownership=None,
                     # object.  Only an argument-register hand-off proves the
                     # transfer; without it the edge stays unknown, so a chain can
                     # never read "leads to a release" as evidence.
-                    proven = argument_carries(insns, site, acq.obj_reg)
+                    proven = argument_carries(insns, site, acq.obj_reg, acq.obj_load)
                     text = (f"{acq.obj_reg} is passed to {hex(tgt)} at {hex(site)}, which "
                             f"drops a reference"
                             if proven else
