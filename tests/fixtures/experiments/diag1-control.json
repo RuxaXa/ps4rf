@@ -1,0 +1,34 @@
+{
+  "name": "diag1-control",
+  "profile": "fw1352",
+  "version": 1,
+  "provenance": {
+    "source": "W18b measurement-path diagnosis step recipe (known-good small reads)",
+    "source_file": "own1-recipe-v2.json",
+    "source_sha256": "ebb963e99e81d7c31168085d3e691b0dd21f6103a4ec9c4676b8a535734e39c9",
+    "note": "diagnosis only, not an oracle recipe; OWN-1 trigger is not part of any step"
+  },
+  "limits": {
+    "max_entries": 16,
+    "max_entry_len": 4096,
+    "max_disp": 4096
+  },
+  "entries": [
+    {
+      "i": 0,
+      "name": "BMP_LIMIT",
+      "type": "RVA_READ",
+      "rva": "0x238A848",
+      "length": 8,
+      "role": "lifetime control"
+    },
+    {
+      "i": 1,
+      "name": "BMP_ROOT",
+      "type": "RVA_READ",
+      "rva": "0x238A870",
+      "length": 8,
+      "role": "authority"
+    }
+  ]
+}

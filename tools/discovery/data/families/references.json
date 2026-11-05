@@ -1,0 +1,225 @@
+{
+  "schema": "ps4rf.discovery.references/1",
+  "note": "Reference assertions. Each one is either a hard fact (a published constant that must resolve in our image) or a scanner label (a detector expectation at a named function). Hard facts must PASS; a scanner label records the measurement and may fail -- a failing label is a result, not a bug in the test.",
+  "assertions": [
+    {
+      "id": "pppwn-900-xfast-syscall",
+      "family": "pppwn",
+      "kind": "prologue",
+      "firmware": "9.00",
+      "rva": "0x1c0",
+      "expect_any": [
+        "0f01f8",
+        "0f01f80f",
+        "55"
+      ],
+      "source": "PPPwn stage1/offsets.h FW9.00 kdlsym_addr_Xfast_syscall = 0xffffffff822001c0, retail kbase 0xffffffff82200000",
+      "grade": "B"
+    },
+    {
+      "id": "pppwn-900-nd6-llinfo-timer",
+      "family": "pppwn",
+      "kind": "prologue",
+      "firmware": "9.00",
+      "rva": "0xad070",
+      "expect_any": [
+        "554889e5",
+        "55488bec",
+        "e9"
+      ],
+      "source": "PPPwn stage1/offsets.h FW9.00 kdlsym_addr_nd6_llinfo_timer = 0xffffffff822ad070",
+      "grade": "B"
+    },
+    {
+      "id": "pppwn-900-kmem-alloc",
+      "family": "pppwn",
+      "kind": "prologue",
+      "firmware": "9.00",
+      "rva": "0x37be70",
+      "expect_any": [
+        "554889e5",
+        "55488bec",
+        "e9"
+      ],
+      "source": "PPPwn stage1/offsets.h FW9.00 kdlsym_addr_kmem_alloc = 0xffffffff8257be70",
+      "grade": "B"
+    },
+    {
+      "id": "pppwn-900-kproc-create",
+      "family": "pppwn",
+      "kind": "prologue",
+      "firmware": "9.00",
+      "rva": "0x969e0",
+      "expect_any": [
+        "554889e5",
+        "55488bec",
+        "e9"
+      ],
+      "source": "PPPwn stage1/offsets.h FW9.00 kdlsym_addr_kproc_create = 0xffffffff822969e0",
+      "grade": "B"
+    },
+    {
+      "id": "pppwn-900-kernel-map-slot",
+      "family": "pppwn",
+      "kind": "ptr_slot",
+      "firmware": "9.00",
+      "rva": "0x2268d48",
+      "source": "PPPwn stage1/offsets.h FW9.00 kdlsym_addr_kernel_map = 0xffffffff84468d48; note the 48 MiB reference dump is a physical image, so this data RVA may not be file-backed -- the assertion then SKIPs instead of pretending",
+      "grade": "B"
+    },
+    {
+      "id": "lapse-900-sysent661-slot",
+      "family": "lapse",
+      "kind": "sysent",
+      "firmware": "9.00",
+      "number": 661,
+      "expect_narg": 4,
+      "expect_thrcnt": 1,
+      "expect_handler_rva": "0x410830",
+      "source": "PSFree lapse.mjs offset_sysent_661 = 0x1107f00 with sysent base 0x1100310 from kpatch/900.c syscall-11 slot 0x1100520",
+      "grade": "B"
+    },
+    {
+      "id": "lapse-900-sysent662-handler",
+      "family": "lapse",
+      "kind": "sysent",
+      "firmware": "9.00",
+      "number": 662,
+      "expect_narg": 3,
+      "source": "PSFree module/chain.mjs aio_multi_delete = 662; narg from the sysent entry itself (3 arguments: ids, num_ids, sce_errors)",
+      "grade": "B"
+    },
+    {
+      "id": "lapse-1352-sysent662-handler",
+      "family": "lapse",
+      "kind": "sysent",
+      "firmware": "13.52",
+      "number": 662,
+      "expect_narg": 3,
+      "source": "same syscall number on the primary firmware; the handler is a 12-byte argument wrapper that tail-jumps into the implementation",
+      "grade": "B"
+    },
+    {
+      "id": "kexec-1352-jmp-rsi",
+      "family": "lapse",
+      "kind": "bytes",
+      "firmware": "13.52",
+      "rva": "0x4d6d0",
+      "expect": "ff26",
+      "source": "afterglow FIRMWARE['13.52'].k_jmp_rsi = 0x4d6d0 and PSFree kpatch/900.c kbase+0x4c7ad on 9.00; here verified as the 13.52 instantiation",
+      "grade": "B"
+    },
+    {
+      "id": "kexec-900-jmp-rsi",
+      "family": "lapse",
+      "kind": "bytes",
+      "firmware": "9.00",
+      "rva": "0x4c7ad",
+      "expect": "ff26",
+      "source": "PSFree kpatch/900.c writes kbase+0x4c7ad into sysent[11]",
+      "grade": "B"
+    },
+    {
+      "id": "afterglow-1352-anchor",
+      "family": "afterglow",
+      "kind": "prologue",
+      "firmware": "13.52",
+      "rva": "0xe6c60",
+      "expect_any": [
+        "554889e5"
+      ],
+      "source": "afterglow FIRMWARE['13.52'].anchor = 0xe6c60 (kl_lock leak anchor); verified independently in phase16 P1",
+      "grade": "B"
+    },
+    {
+      "id": "afterglow-1352-swap-rbp",
+      "family": "afterglow",
+      "kind": "bytes",
+      "firmware": "13.52",
+      "rva": "0xa80c98",
+      "expect": "4e95c3",
+      "source": "afterglow FIRMWARE['13.52'].swap_rbp = 0xa80c98 (xchg rbp, rax; ret), unique in text per phase16",
+      "grade": "B"
+    },
+    {
+      "id": "afterglow-1352-patchset-bcopy",
+      "family": "afterglow",
+      "kind": "bytes",
+      "firmware": "13.52",
+      "rva": "0xacd",
+      "expect": "eb",
+      "source": "afterglow PATCH_TABLE['13.52'] first row (bcopy site) as verified in phase16 P1 (11 exact / 3 equivalent / 1 divergent)",
+      "grade": "B"
+    },
+    {
+      "id": "purity-1352-sysent11-patched",
+      "family": "afterglow",
+      "kind": "sysent",
+      "firmware": "13.52",
+      "number": 11,
+      "expect_narg": 2,
+      "expect_thrcnt": 1,
+      "expect_handler_rva": "0x4d6d0",
+      "source": "the image carries the kexec patch triple (narg=2, sy_call=jmp[rsi], thrcnt=1) -- proof that this dump is NOT pristine",
+      "grade": "B"
+    },
+    {
+      "id": "purity-900-sysent11-patched",
+      "family": "lapse",
+      "kind": "sysent",
+      "firmware": "9.00",
+      "number": 11,
+      "expect_narg": 2,
+      "expect_thrcnt": 1,
+      "expect_handler_rva": "0x4c7ad",
+      "source": "PSFree kpatch/900.c writes exactly this triple; our 9.00 image reads it back -- the reference dump is kpatched too",
+      "grade": "B"
+    },
+    {
+      "id": "prison0-chain-1352",
+      "family": "lapse",
+      "kind": "ptr_slot_relative",
+      "firmware": "13.52",
+      "rva": "0x111fa18",
+      "expect_rva": "0x1a5c0c0",
+      "source": "raw13 ps4_offsets.js k_prison0 = 0x1a5c0c0 (struct) vs slot 0x111fa18; the slot must hold base+that RVA, so the expectation is expressed as an RVA and stays KASLR-independent",
+      "grade": "B"
+    },
+    {
+      "id": "lapse-900-detector-label",
+      "family": "lapse",
+      "kind": "detector",
+      "firmware": "9.00",
+      "function_rva": "0x410870",
+      "expect": "fire",
+      "detectors": [
+        "D3_lock_coverage",
+        "D4_table_slot_lifecycle",
+        "D1_use_after_release",
+        "D2_double_release"
+      ],
+      "source": "the vulnerable aio_multi_delete implementation on 9.00 (sysent[662] -> 0x410850 wrapper -> 0x410870 body)",
+      "grade": "H",
+      "size": "0x8f0",
+      "size_note": "the label names the body explicitly: on 9.00 the sweep index gives a 32-byte record because the body is not a call target, which would make the label untestable rather than false"
+    },
+    {
+      "id": "lapse-1352-detector-label",
+      "family": "lapse",
+      "kind": "detector",
+      "firmware": "13.52",
+      "function_rva": "0x11f710",
+      "expect": "no_fire",
+      "detectors": [
+        "D3_lock_coverage",
+        "D4_table_slot_lifecycle",
+        "D1_use_after_release",
+        "D2_double_release"
+      ],
+      "source": "the fixed aio_multi_delete on 13.52 (outside the family's vulnerable range)",
+      "grade": "H",
+      "size": "0x8f0",
+      "size_note": "the label names the body explicitly: on 9.00 the sweep index gives a 32-byte record because the body is not a call target, which would make the label untestable rather than false"
+    }
+  ]
+}

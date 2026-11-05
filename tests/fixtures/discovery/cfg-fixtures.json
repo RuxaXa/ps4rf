@@ -1,0 +1,163 @@
+{
+  "base_rva": "0x1000",
+  "cfg": {
+    "fixture_cfg_cond_two_ways": {
+      "empty": [
+        "cfg_two_else",
+        "cfg_two_fall"
+      ],
+      "note": "a conditional branch has exactly two successors: taken and fall-through",
+      "successors": {
+        "cfg_two_branch": [
+          "cfg_two_else",
+          "cfg_two_fall"
+        ]
+      }
+    },
+    "fixture_cfg_indirect": {
+      "note": "an indirect jmp has no direct successor; the next instruction is not one",
+      "successors": {
+        "cfg_indirect_branch": []
+      },
+      "unreachable": [
+        "cfg_indirect_after"
+      ]
+    },
+    "fixture_cfg_jmp_only": {
+      "empty": [
+        "cfg_jmp_target",
+        "cfg_jmp_dead"
+      ],
+      "note": "a direct jmp has the target only, never a fall-through",
+      "successors": {
+        "cfg_jmp_branch": [
+          "cfg_jmp_target"
+        ]
+      },
+      "unreachable": [
+        "cfg_jmp_dead"
+      ]
+    },
+    "fixture_cfg_loop": {
+      "empty": [
+        "cfg_loop_exit"
+      ],
+      "note": "back edge and loop exit are both edges of the same block",
+      "successors": {
+        "cfg_loop_body": [
+          "cfg_loop_body",
+          "cfg_loop_exit"
+        ]
+      }
+    },
+    "fixture_cfg_same_target": {
+      "note": "taken target == fall-through: one successor, not two identical ones",
+      "successors": {
+        "cfg_same_branch": [
+          "cfg_same_next"
+        ]
+      },
+      "unique_edges": [
+        "cfg_same_branch"
+      ]
+    },
+    "fixture_cfg_tail": {
+      "note": "a jmp out of the function is a tail call, not an internal edge",
+      "successors": {
+        "cfg_tail_branch": []
+      },
+      "tail_jumps": {
+        "cfg_tail_branch": "d2_free"
+      }
+    }
+  },
+  "functions": {
+    "fixture_cfg_cond_two_ways": {
+      "rva": "0x1001",
+      "size": "0xe"
+    },
+    "fixture_cfg_indirect": {
+      "rva": "0x1027",
+      "size": "0x8"
+    },
+    "fixture_cfg_jmp_only": {
+      "rva": "0x100f",
+      "size": "0xe"
+    },
+    "fixture_cfg_loop": {
+      "rva": "0x102f",
+      "size": "0x6"
+    },
+    "fixture_cfg_same_target": {
+      "rva": "0x101d",
+      "size": "0xa"
+    },
+    "fixture_cfg_tail": {
+      "rva": "0x1035",
+      "size": "0x5"
+    }
+  },
+  "image_hex": "c34885ff7406b801000000c331c0c3eb06b807000000c3b802000000c385c07400b803000000c3ffe0b804000000c348ffcf75fbc34889f7ebc6",
+  "image_sha256": "69e3daf105731985af35be5f83ec9596e9b1e48ed8e7fbf77a3f32f274e2bd24",
+  "labels": {
+    "cfg_indirect_after": {
+      "rva": "0x1029",
+      "size": "0x0"
+    },
+    "cfg_indirect_branch": {
+      "rva": "0x1027",
+      "size": "0x0"
+    },
+    "cfg_jmp_branch": {
+      "rva": "0x100f",
+      "size": "0x0"
+    },
+    "cfg_jmp_dead": {
+      "rva": "0x1011",
+      "size": "0x0"
+    },
+    "cfg_jmp_target": {
+      "rva": "0x1017",
+      "size": "0x0"
+    },
+    "cfg_loop_body": {
+      "rva": "0x102f",
+      "size": "0x0"
+    },
+    "cfg_loop_exit": {
+      "rva": "0x1034",
+      "size": "0x0"
+    },
+    "cfg_same_branch": {
+      "rva": "0x101d",
+      "size": "0x0"
+    },
+    "cfg_same_next": {
+      "rva": "0x1021",
+      "size": "0x0"
+    },
+    "cfg_tail_branch": {
+      "rva": "0x1035",
+      "size": "0x0"
+    },
+    "cfg_two_branch": {
+      "rva": "0x1001",
+      "size": "0x0"
+    },
+    "cfg_two_else": {
+      "rva": "0x100c",
+      "size": "0x0"
+    },
+    "cfg_two_fall": {
+      "rva": "0x1006",
+      "size": "0x0"
+    },
+    "d2_free": {
+      "rva": "0x1000",
+      "size": "0x1"
+    }
+  },
+  "schema": "ps4rf.discovery.cfg-fixtures/1",
+  "source": "cfg-fixtures.S",
+  "source_sha256": "7f5cb3edad6e9386f577bdfe51bdf46a9b4d36bd031c75aeef2ba6b86827aa88"
+}

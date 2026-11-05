@@ -1,0 +1,80 @@
+{
+  "id": "afterglow",
+  "name": "afterglow - kqueue knote held past a /dev/apm clone free (fd teardown use-after-free)",
+  "role": "training",
+  "burned_reason": "",
+  "platform": [
+    "ps4"
+  ],
+  "bug_class": "UAF",
+  "subsystem": "kernel/kqueue + device clone (/dev/apm)",
+  "root_cause": {
+    "summary": "A kqueue knote registered on a cloned /dev/apm unit is not unlinked when the clone is destroyed, so the kqueue keeps a note that points into freed memory. The exploit opens one numbered unit of the cloning node twice (two descriptors on the same /dev/apm<unit>), registers an EVFILT_READ knote on the first descriptor through kevent(), and then closes the second. The device close path (fo_close, which reaches apmclose and ends in destroy_dev_sched) tears the clone down while the queue's note list still references it. From then on every path that walks the notes - the kevent() scan, knote_fdclose() from exit1(), and kqueue_close() - reads dead memory. The exploit refills the hole with a 104-byte user-controlled object in the same 128-byte malloc zone through setsockopt() and re-arms kevent(); ring 0 takes a stack pointer and a pivot out of that object before a single attacker instruction runs.",
+    "primitive": "use-after-free of a kqueue knote / device-clone object in the 128-byte malloc zone; the freed slot is reclaimed by a 104-byte controlled allocation, producing a ring-0 stack pivot and ROP",
+    "trigger": "open /dev/apm<unit>, kevent(EVFILT_READ, filter 0xFFFF) on that fd, open /dev/apm<unit> again, close the second fd to free the clone, spray 104-byte objects with setsockopt(fd, 17, 128, req, 40) over 126 sockets, then call kevent() again on the queue",
+    "consequence": "kernel ROP; the exploit then obtains kernel read/write, sets uid 0, makes mmap hand out RWX and opens syscall 11 as a kexec gate"
+  },
+  "discovery_approach": {
+    "summary": "No discovery write-up exists. The family appears as a complete exploit whose comments describe only the mechanics needed to make teardown safe: notes hang on clones freed long ago, kqueue_close() takes its note-array length from the high half of the quadword at kq+0xa0, and leaving the handles armed makes the next process exit run fo_close into apmclose and never finish. The PS4 dev wiki still lists the family as 'Undocumented', records only that it opens /dev/apm many times, and marks it unpatched as of 14.00. A separate 13.52 research paper claims a knote use-after-free of the same subsystem through pipe close, but its trigger differs and it reports exploitation as blocked.",
+    "signals": [
+      "a kqueue note list whose entries reference a device clone after the clone's close path reached destroy_dev_sched",
+      "exit1()/knote_fdclose() walking notes attached to a freed clone, and kqueue_close() taking its note-array length from the high half of kq+0xa0",
+      "kevent() re-arm on a queue whose backing unit was already freed; the exploit tolerates a failed reclaim because a fresh clone makes the second arm 'merely useless instead of fatal'",
+      "a cloning device node whose per-open units can be opened twice, so one descriptor can free a unit another descriptor is still monitoring"
+    ],
+    "blind_usable": false
+  },
+  "firmware": {
+    "affected": [
+      "13.52",
+      "14.00"
+    ],
+    "fixed_in": "not fixed as of 14.00",
+    "differences": [
+      "13.52 and 14.00 run the same bug: the port's per-firmware tables differ only in kernel addresses (anchor, swap_rbp, prison0, rootvnode, padding), and TECHNICAL.md states the kernel bug, the reclaim and the handle teardown are shared with the Lua original",
+      "the address-only difference is visible in the bootstrap stub: between 13.52 and 14.00 exactly two of its ten write targets moved (the two 0x33 -> 0x37 immediates), and afterglow ships one patch set per firmware because those fixed kernel addresses moved",
+      "no fixed firmware is known; the dev wiki says 'No' as of 14.00 and speculates the family may also affect PS5 firmware up to 13.60"
+    ]
+  },
+  "patch_evidence": {
+    "available": false,
+    "what": "no vendor fix, diff or fix write-up in the public record; the PS4 dev wiki entry is explicitly 'to be documented' and lists the family as unpatched as of 14.00",
+    "limits": "the only 'patches' in the exploit are the GoldHEN-compatible kernel patch sets it applies after exploitation, not a fix; no firmware bytes are stored in this repository"
+  },
+  "sources": [
+    {
+      "url": "https://raw.githubusercontent.com/well0nez/afterglow-web/main/afterglow.js",
+      "supports": "the exact trigger sequence (two descriptors on the same /dev/apm<unit>, kevent EVFILT_READ with filter 0xFFFF on the first, close of the second as the free, setsockopt(level 17, optname 128) spray of a 104-byte object, re-arm); the note/clone lifetime statements ('our notes hang on clones freed long ago', 'closing a queue walks its notes and detaches each one from a device that is gone'); the kq+0xa0 high-half note-array length used by kqueue_close(); the per-CPU-bucket requirement for the free and the refill",
+      "kind": "repo"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/well0nez/afterglow-web/main/README.md",
+      "supports": "firmware 13.52 and 14.00 support; the failure mode when handles are left armed (the next process exit runs fo_close into apmclose and never completes); the statement that the reclaimed object supplies the stack pointer, which the kernel reads before exploit code runs",
+      "kind": "repo"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/well0nez/afterglow-web/main/TECHNICAL.md",
+      "supports": "the kernel bug, the reclaim and the handle teardown are the same as in the Lua version of afterglow; per-firmware patch sets exist because fixed kernel addresses moved between 13.52 and 14.00",
+      "kind": "repo"
+    },
+    {
+      "url": "https://www.psdevwiki.com/ps4/Vulnerabilities",
+      "supports": "the family is recorded as 'Undocumented kernel vulnerability (codename afterglow)', affected 'FW <= ?14.00?', 'To be documented', 'Opens the device /dev/apm many times', not patched as of 14.00, and possibly affecting PS5 firmware up to 13.60",
+      "kind": "writeup"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/BillZaiD/ps4-kernel-uaf-research-fw1352/main/README.md",
+      "supports": "independent 13.52 claim that a kqueue knote is freed by closing a pipe fd it monitors while the queue still references it, and that the freed slot is reclaimed by EVFILT_USER knotes; also claims exploitation is blocked by the sandbox and by kernel-pointer stripping. Its trigger differs from afterglow's and it conflicts with afterglow's working 13.52 run; used only as a corroborating signal that knotes can outlive fd teardown",
+      "kind": "repo"
+    }
+  ],
+  "confidence": "medium",
+  "gaps": [
+    "which structure is the freed object is never stated: the comments speak of 'the hole', 'our notes' and 'clones freed long ago' but do not say whether the reclaimed 128-byte allocation is the knote, the /dev/apm clone/softc, or a kqueue note slot",
+    "the two fake-object fields used for control (+0x38 pivot, +0x58 frame) are not explained and do not obviously match the FreeBSD-9 knote layout quoted by the secondary 13.52 paper (kn_fop at +0x68, kn_sdata at +0x58); no fetched source reconciles them",
+    "no fix is public: unpatched as of 14.00, and whether later firmware changed the knote/clone teardown is unknown",
+    "PS5 exposure is unconfirmed: the PS4 wiki only says 'maybe ... especially PS5 FWs <= 13.60', and no PS5 implementation is public",
+    "the discovery path is not public - the exploit appeared complete, first as a Lua game-process payload and then as this WebKit port",
+    "the independent 13.52 knote/pipe paper reports the same subsystem with a different trigger and claims exploitation is blocked; the conflict with afterglow's working 13.52 exploit is unresolved and its reliability is unverified"
+  ]
+}

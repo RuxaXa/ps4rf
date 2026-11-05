@@ -1,0 +1,78 @@
+{
+  "id": "netcontrol-double-fdrop",
+  "name": "sys_netcontrol netevent double fdrop - double put of a struct file",
+  "role": "training",
+  "burned_reason": "",
+  "platform": [
+    "ps4",
+    "ps5"
+  ],
+  "bug_class": "REFCOUNT",
+  "subsystem": "kernel/net (sys_netcontrol, netevent queue)",
+  "root_cause": {
+    "summary": "kern_netevent_clear_queue() finds the netevent entry by the socket fd supplied by the caller, clears the entry, and then calls fdrop() twice: once for the reference the netevent took when the socket was added and once for getsock_cap()'s own reference. The entry stores only the fd number, not the file pointer, so the lookup can be made to match the wrong socket: add s1 (refcount 2), close s1 (1), create s2 which reuses s1's fd (1), then clear with s2's fd. bnet_netevent_clear_queue() does not match, so the 'netevent' fdrop lands on s2, which drops to refcount 0 while the fd table still references it, and s1's reference is leaked. The freed file stays reachable through the descriptor; on PS4 fcntl(F_SETFL) calls fhold()/fdrop() directly and frees it again, while on PS5 fcntl goes through fget() and hangs on the zero refcount, so the public PS5 trigger is dup().",
+    "primitive": "double fput of struct file, leaving a freed file reachable from the descriptor table",
+    "trigger": "netcontrol(if_index 0, cmd 0x20000003) with s1's fd, close(s1), socket() to reuse the fd, netcontrol(cmd 0x20000007) with the new fd, then dup() (PS5) or fcntl(F_SETFL) (PS4) to use the stale file",
+    "consequence": "use-after-free of a file/socket object; the public implementation converts it into arbitrary kernel read/write by corrupting a pipebuf buffer pointer, then jailbreaks"
+  },
+  "discovery_approach": {
+    "summary": "slidybat reported the fd-reuse mismatch to PlayStation's HackerOne programme on 2025-08-30 (report 3320669, severity high, $10,000, disclosed 2026-05-01). The report quotes the pre-fix set/clear handlers, gives the five-step reproduction and notes the platform difference in fcntl. TheFloW published a BD-J implementation chained with BD-JB3 (PS4) and BD-JB2 (PS5) on 2025-11-02, and Gezine chained it with PS5 BD-JB-EX in 2026.",
+    "signals": [
+      "a clear/remove handler that compares a stored fd number with a caller-supplied fd instead of comparing struct file pointers",
+      "two consecutive fdrop() calls on the same struct file in one success path",
+      "a reference taken by getsock_cap() that is not distinguished from the reference owned by the netevent entry",
+      "an fd table entry that still points at a file whose refcount already reached zero"
+    ],
+    "blind_usable": false
+  },
+  "firmware": {
+    "affected": [
+      "12.00",
+      "13.00"
+    ],
+    "fixed_in": "12.02 (PS5), 13.02 (PS4)",
+    "differences": [
+      "the defect itself is the fd-value comparison in the netevent lookup: an fd recycled by close() + socket() defeats the match and the second fdrop lands on a file that never held the reference",
+      "PS4 and PS5 differ only in the use primitive: PS4's fcntl(F_SETFL) calls fhold()/fdrop() without fget(), so it frees the stale file again, while PS5's fcntl goes through fget() and the zero refcount makes it hang - which is why the public PS5 trigger is dup()",
+      "the fix landed in PS5 12.02 and PS4 13.02 per the dev wiki; no post-fix code or diff is public"
+    ]
+  },
+  "patch_evidence": {
+    "available": false,
+    "what": "the disclosed HackerOne report supplies the pre-fix kern_netevent_set_queue/clear_queue code and the exact reproduction; the dev wiki supplies the first fixed versions (PS5 12.02, PS4 13.02)",
+    "limits": "the post-fix handler is not shown and no vendor diff was published; the fix mechanism can only be inferred from the defect"
+  },
+  "sources": [
+    {
+      "url": "https://hackerone.com/reports/3320669",
+      "supports": "the whole mechanism: getsock_cap() reference owned by the netevent, two fdrop() calls in the clear path, fd-number comparison instead of file-pointer comparison, the five-step reproduction, PS4 fcntl(F_SETFL) re-freeing the file vs PS5 fget() hanging, weakness 'Double Free', disclosed 2026-05-01",
+      "kind": "advisory"
+    },
+    {
+      "url": "https://www.psdevwiki.com/ps4/Vulnerabilities",
+      "supports": "PS4 affected through 13.00 and fixed in 13.02; credits slidybat (discovery 2025-08-30) and TheFloW (public implementation 2025-11-02); the note that PS5 needs dup() because unprivileged libkernel lacks a dup wrapper",
+      "kind": "writeup",
+      "verified_via": "wayback",
+      "snapshot": "20260710164118"
+    },
+    {
+      "url": "https://www.psdevwiki.com/ps5/Vulnerabilities",
+      "supports": "PS5 affected through 12.00 and fixed in 12.02, plus the implementation list (TheFloW 2025-11-02, Gezine 2026-05-03)",
+      "kind": "writeup",
+      "verified_via": "wayback",
+      "snapshot": "20260709162809"
+    },
+    {
+      "url": "https://gist.github.com/TheOfficialFloW/7174351201b5260d7780780f4059bebf",
+      "supports": "the public implementation's use of __sys_netcontrol cmd 0x20000003/0x20000007, dup(), kqueue/pipe primitives, and its conversion of the file UAF into arbitrary R/W by overwriting a pipebuf's buffer pointer",
+      "kind": "repo"
+    }
+  ],
+  "confidence": "high",
+  "gaps": [
+    "the report does not name the fixed code or the check that was added; only the first fixed versions are public",
+    "the PS5 range lower bound is not stated (the wiki section title only gives '<= 12.00')",
+    "the exploit's later stages (pipebuf corruption, allproc walk, ucred patch) are specific to the quoted implementation and are not part of the bug description",
+    "no source states whether the double fdrop is also reachable from other netcontrol commands or other netevent users"
+  ]
+}

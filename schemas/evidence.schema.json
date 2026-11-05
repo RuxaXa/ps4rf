@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ps4rf:schemas/evidence.schema.json",
+  "title": "PS4RF Evidence v1",
+  "type": "object",
+  "additionalProperties": true
+}

@@ -1,0 +1,16 @@
+---
+comment: Synthetic ps4rf fixture entry written in the upstream GTFOBins entry format; not a real GTFOBins entry and contains no real recipe.
+functions:
+  shell:
+    - code: sudo ./synthetic-gamma
+      contexts:
+        sudo:
+  command:
+    - code: sudo ./synthetic-gamma --synthetic-cmd
+      contexts:
+        sudo:
+  library-load:
+    - code: sudo ./synthetic-gamma --synthetic-lib
+      contexts:
+        sudo:
+...

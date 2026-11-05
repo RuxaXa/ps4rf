@@ -1,0 +1,564 @@
+{
+ "agent": {
+  "cases": [
+   {
+    "id": "canceled_request_emits_recovery_required",
+    "observed": {
+     "pending_count": 0,
+     "sent": [
+      {
+       "operation": "memory.alloc",
+       "payload": {
+        "error": {
+         "code": "SESSION_RECOVERY_REQUIRED"
+        },
+        "status": "ERROR"
+       },
+       "request_id": "REQ-00000000000000000000000000000001"
+      }
+     ]
+    }
+   },
+   {
+    "id": "canceled_request_with_dead_transport_sends_nothing",
+    "observed": {
+     "pending_count": 0,
+     "sent": []
+    }
+   },
+   {
+    "id": "worker_crash_records_evidence",
+    "observed": {
+     "evidence": [
+      {
+       "exception": "ValueError",
+       "operation": "op.crash",
+       "request_id": "REQ-00000000000000000000000000000001",
+       "result": "WORKER_CRASH"
+      }
+     ]
+    }
+   },
+   {
+    "id": "default_pool_configuration",
+    "observed": {
+     "agent_cap": 8,
+     "max_inflight": 8,
+     "workers": 4
+    }
+   },
+   {
+    "id": "gate_resource_allocation",
+    "observed": {
+     "ref_matches_pattern": true,
+     "ref_pattern": "gate:<8 random bytes, uppercase hex>",
+     "registered_in_agent_map": true,
+     "registered_in_manager": true
+    }
+   }
+  ]
+ },
+ "channel": {
+  "cases": [
+   {
+    "id": "open_roundtrip",
+    "observed": {
+     "matches_canonical": true,
+     "plaintext_hex": "7b2270726f6265223a226368616e6e656c2d6f70656e227d",
+     "sequence": 0
+    }
+   },
+   {
+    "exception": "AuthenticationFailed",
+    "id": "open_wrong_message_type_rejected",
+    "outcome": "raises",
+    "qualified": "core.rpc.handshake.AuthenticationFailed"
+   },
+   {
+    "exception": "ReplayDetected",
+    "id": "open_sequence_gap_rejected",
+    "outcome": "raises",
+    "qualified": "core.rpc.handshake.ReplayDetected"
+   },
+   {
+    "exception": "ReplayDetected",
+    "id": "open_replay_rejected",
+    "outcome": "raises",
+    "qualified": "core.rpc.handshake.ReplayDetected"
+   },
+   {
+    "exception": "AuthenticationFailed",
+    "id": "cross_direction_open_rejected",
+    "outcome": "raises",
+    "qualified": "core.rpc.handshake.AuthenticationFailed"
+   }
+  ],
+  "note": "Authentication failures (bad tag, foreign message type, wrong direction) surface as core.rpc.handshake.AuthenticationFailed, a ProtocolError subclass; the cryptography library exception InvalidTag never escapes the RPC layer (W0/D9, Core/Wire Revision R1). The mapping lives in the shared helper core.rpc.handshake.open_authenticated, which mock and native must both follow."
+ },
+ "direction_fsm": {
+  "agent_to_host": [
+   "RESPONSE",
+   "EVENT",
+   "BYE"
+  ],
+  "host_to_agent": [
+   "REQUEST"
+  ],
+  "source": "docs/spec-history/Pasted_text(7).txt l.612-623 (F16 direction FSM)",
+  "wrong_direction_outcome": "ProtocolError, session closed immediately (fail-close)"
+ },
+ "frames": [
+  {
+   "canonical_hex": "7b22626f6479223a7b22617267756d656e7473223a7b7d2c226f7065726174696f6e223a2273657373696f6e2e70696e67227d2c22686561646572223a7b22726571756573745f6964223a225245512d3030303030303030303030303030303030303030303030303030303030303031227d7d",
+   "ciphertext_hex": "270c87b5ca90894abe164c8c4c2860ea21747e128ec8a39bf4d5a1b8ca594738b54363e6a803fe8683a0de1b18e73109c0ac8cdc8283270afaa2b835aae64c0226215610f66f8304858399a80cadad543eeca80ba268150505dc11e78e23a56d3bff0181a3885debbb73120d2c53c5bc614a1e1b233634d3a5819d6bd9be9cd964c6ce",
+   "direction": "host-to-agent",
+   "frame_len": 131,
+   "frame_type_byte": 1,
+   "header_hex": "00000083010000000000000000",
+   "id": "h2a_request_ping_seq0",
+   "message_type": "REQUEST",
+   "nonce_hex": "7cf6b6e30000000000000000",
+   "object": {
+    "body": {
+     "arguments": {},
+     "operation": "session.ping"
+    },
+    "header": {
+     "request_id": "REQ-00000000000000000000000000000001"
+    }
+   },
+   "sequence": 0,
+   "shape_source": "docs/spec-history/Pasted_text(5).txt l.953-967 (session loop: header.request_id / header.in_reply_to / {\"status\",\"result\"})",
+   "wire_hex": "00000083010000000000000000270c87b5ca90894abe164c8c4c2860ea21747e128ec8a39bf4d5a1b8ca594738b54363e6a803fe8683a0de1b18e73109c0ac8cdc8283270afaa2b835aae64c0226215610f66f8304858399a80cadad543eeca80ba268150505dc11e78e23a56d3bff0181a3885debbb73120d2c53c5bc614a1e1b233634d3a5819d6bd9be9cd964c6ce",
+   "wire_spec_version": 1
+  },
+  {
+   "canonical_hex": "7b22626f6479223a7b22617267756d656e7473223a7b2273697a65223a343039367d2c226f7065726174696f6e223a226d656d6f72792e616c6c6f63227d2c22686561646572223a7b22726571756573745f6964223a225245512d3031323334353637383961626364656630313233343536373839616263646566227d7d",
+   "ciphertext_hex": "a12afda8eaa2d9a37bebcd6dc0bfe37a6fd083475fe6f85a0736d063e0e933b7e634f5967de8265cf283599d4affd0ba04bf48ffee653f788f8f37b2c507512ce0f0b25a3b515e0f60853c2986d569f5411f112591a71288b2f211d338e450b27193cd6575b7f100c4641f9b595378671e31f4173d83cfa2a74031438267dad83991e1341aaa0e9f5c8fddb12ad8",
+   "direction": "host-to-agent",
+   "frame_len": 142,
+   "frame_type_byte": 1,
+   "header_hex": "0000008e010000000000000001",
+   "id": "h2a_request_alloc_seq1",
+   "message_type": "REQUEST",
+   "nonce_hex": "7cf6b6e30000000000000001",
+   "object": {
+    "body": {
+     "arguments": {
+      "size": 4096
+     },
+     "operation": "memory.alloc"
+    },
+    "header": {
+     "request_id": "REQ-0123456789abcdef0123456789abcdef"
+    }
+   },
+   "sequence": 1,
+   "shape_source": "docs/spec-history/Pasted_text(5).txt l.953-967 (session loop: header.request_id / header.in_reply_to / {\"status\",\"result\"})",
+   "wire_hex": "0000008e010000000000000001a12afda8eaa2d9a37bebcd6dc0bfe37a6fd083475fe6f85a0736d063e0e933b7e634f5967de8265cf283599d4affd0ba04bf48ffee653f788f8f37b2c507512ce0f0b25a3b515e0f60853c2986d569f5411f112591a71288b2f211d338e450b27193cd6575b7f100c4641f9b595378671e31f4173d83cfa2a74031438267dad83991e1341aaa0e9f5c8fddb12ad8",
+   "wire_spec_version": 1
+  },
+  {
+   "canonical_hex": "7b22686561646572223a7b22696e5f7265706c795f746f223a225245512d3030303030303030303030303030303030303030303030303030303030303031227d2c22726573756c74223a7b7d2c22737461747573223a224f4b227d",
+   "ciphertext_hex": "9b0aa904c3bf239a5aa97df26d44b970a8eb4118ec8f2cc0983b2795c8b395e61f65900800257e88a256b5faf95b51b523a5fd95a9852d065007405f5f5973156054d3b4aeeb232488bf39ec563eb86627463676701cdaa75df504f4b95a9988bc3be865ba36860edab671",
+   "direction": "agent-to-host",
+   "frame_len": 107,
+   "frame_type_byte": 2,
+   "header_hex": "0000006b020000000000000000",
+   "id": "a2h_response_ok_seq0",
+   "message_type": "RESPONSE",
+   "nonce_hex": "6470db330000000000000000",
+   "object": {
+    "header": {
+     "in_reply_to": "REQ-00000000000000000000000000000001"
+    },
+    "result": {},
+    "status": "OK"
+   },
+   "sequence": 0,
+   "shape_source": "docs/spec-history/Pasted_text(5).txt l.953-967 (session loop: header.request_id / header.in_reply_to / {\"status\",\"result\"})",
+   "wire_hex": "0000006b0200000000000000009b0aa904c3bf239a5aa97df26d44b970a8eb4118ec8f2cc0983b2795c8b395e61f65900800257e88a256b5faf95b51b523a5fd95a9852d065007405f5f5973156054d3b4aeeb232488bf39ec563eb86627463676701cdaa75df504f4b95a9988bc3be865ba36860edab671",
+   "wire_spec_version": 1
+  },
+  {
+   "canonical_hex": "7b226572726f72223a7b22636f6465223a22544f4f5f4d414e595f494e464c49474854227d2c22686561646572223a7b22696e5f7265706c795f746f223a225245512d3031323334353637383961626364656630313233343536373839616263646566227d2c22737461747573223a224552524f52227d",
+   "ciphertext_hex": "b819dd9e42cd3337fdd484c13efe08e98f5a7cb1939077564172822e70b903e3bb2da1a852ac424d71a0a8168f3a98fb74ca1bb241b045666bd104b4e8c63167c53f5aac50626a2fedf43f12e04e48d3b15ed5a2f3c9af57eb1c5f736a8cbb65c3d0892e229fdcfd7a816bea55ca2836f4094a3f137085f8180696e567263fa6abd93d799ee9e2",
+   "direction": "agent-to-host",
+   "frame_len": 135,
+   "frame_type_byte": 2,
+   "header_hex": "00000087020000000000000001",
+   "id": "a2h_response_error_seq1",
+   "message_type": "RESPONSE",
+   "nonce_hex": "6470db330000000000000001",
+   "object": {
+    "error": {
+     "code": "TOO_MANY_INFLIGHT"
+    },
+    "header": {
+     "in_reply_to": "REQ-0123456789abcdef0123456789abcdef"
+    },
+    "status": "ERROR"
+   },
+   "sequence": 1,
+   "shape_source": "docs/spec-history/Pasted_text(5).txt l.953-967 (session loop: header.request_id / header.in_reply_to / {\"status\",\"result\"})",
+   "wire_hex": "00000087020000000000000001b819dd9e42cd3337fdd484c13efe08e98f5a7cb1939077564172822e70b903e3bb2da1a852ac424d71a0a8168f3a98fb74ca1bb241b045666bd104b4e8c63167c53f5aac50626a2fedf43f12e04e48d3b15ed5a2f3c9af57eb1c5f736a8cbb65c3d0892e229fdcfd7a816bea55ca2836f4094a3f137085f8180696e567263fa6abd93d799ee9e2",
+   "wire_spec_version": 1
+  },
+  {
+   "canonical_hex": "7b22636c65616e7570223a7b227265736f7572636573223a5b5d2c227374617465223a22434f4d504c455445227d2c226d7367223a22425945222c22726561736f6e223a22434c49454e545f434c4f5345227d",
+   "ciphertext_hex": "98fe7764ae618530114e535a61c9f58ac0167fae861ca8d74dd403ce25a3b3ae2f2abb3ec03e6d404255114540d0f442562ee30d370fc2a7302974d7883f8c548eb9fdbfcc0c164fe6ed225882fa573c5b9e375370af80419e1693ccb02a41dae4104f",
+   "direction": "agent-to-host",
+   "frame_len": 99,
+   "frame_type_byte": 4,
+   "header_hex": "00000063040000000000000002",
+   "id": "a2h_bye_seq2",
+   "message_type": "BYE",
+   "nonce_hex": "6470db330000000000000002",
+   "object": {
+    "cleanup": {
+     "resources": [],
+     "state": "COMPLETE"
+    },
+    "msg": "BYE",
+    "reason": "CLIENT_CLOSE"
+   },
+   "sequence": 2,
+   "shape_source": "docs/spec-history/Pasted_text(5).txt l.983-987 (BYE + cleanup report)",
+   "wire_hex": "0000006304000000000000000298fe7764ae618530114e535a61c9f58ac0167fae861ca8d74dd403ce25a3b3ae2f2abb3ec03e6d404255114540d0f442562ee30d370fc2a7302974d7883f8c548eb9fdbfcc0c164fe6ed225882fa573c5b9e375370af80419e1693ccb02a41dae4104f",
+   "wire_spec_version": 1
+  }
+ ],
+ "frozen_sources": {
+  "core/canonical.py": "e35983f1c77cbea889c9b298d17ec99d1728095f8d1a800e2fe1ff80086bcb2d",
+  "core/rpc/handshake.py": "ac745544a65364623c7b41d3255f5ed5d0f601075155a6a4d3b1b53dd3d105bd",
+  "core/rpc/hang.py": "7e108687aa9fd9f0d2f84c79ca5aa23291d49bafb0cacdc64f4e8df3648423eb",
+  "core/rpc/pool.py": "7c148d3c61e5db91c4b305f8c16c9a2208c94b90e0ed723ddf006c96499ae8cb",
+  "core/rpc/requests.py": "90889b97fa2df23d54dbdd23df7e54e1acda9daac888a21dd779757b9ca0d3b8",
+  "mock/agent.py": "d2f34efc3aedac8437519d49a50436416507cfbba94295604aac49b1117fa360"
+ },
+ "hang": {
+  "bases": [
+   "Exception",
+   "BaseException",
+   "object"
+  ],
+  "exception_class": "MockHangReleased",
+  "semantics": "a hung worker blocks permanently and produces no RESPONSE; the client sees a timeout, never a clean BYE; console is treated as recovery-pending",
+  "semantics_source": "docs/spec-history/Pasted_text(5).txt l.906-909, l.990-991"
+ },
+ "pool": {
+  "cases": [
+   {
+    "id": "capacity_and_too_many_inflight",
+    "observed": {
+     "available_tokens_after_finish": 1,
+     "available_tokens_after_task_returned": 0,
+     "available_tokens_while_running": 0,
+     "has_pending_after_finish": false,
+     "has_pending_after_task_returned": true,
+     "submit_a": "OK",
+     "submit_b": "TOO_MANY_INFLIGHT"
+    }
+   },
+   {
+    "id": "poisoned_and_no_token_leak",
+    "observed": {
+     "available_tokens": 2,
+     "poison_returns": {
+      "in_flight": [],
+      "queued": []
+     },
+     "submit_after_poison": "POISONED"
+    }
+   },
+   {
+    "id": "poison_reports_in_flight_and_queued",
+    "observed": {
+     "in_flight": [
+      {
+       "operation": "op.a",
+       "request_id": "REQ-00000000000000000000000000000001",
+       "status": "IN_FLIGHT_AT_RECOVERY"
+      }
+     ],
+     "on_canceled_calls": [
+      "REQ-00000000000000000000000000000002"
+     ],
+     "queued": [
+      "REQ-00000000000000000000000000000002"
+     ]
+    }
+   },
+   {
+    "id": "worker_crash_leaves_task_pending_until_finish",
+    "observed": {
+     "available_tokens_after_crash": 1,
+     "available_tokens_after_finish": 2,
+     "crash_records": [
+      {
+       "exception": "ValueError",
+       "operation": "op.c",
+       "request_id": "REQ-00000000000000000000000000000003"
+      }
+     ],
+     "has_pending_after_crash": true,
+     "has_pending_after_finish": false,
+     "submit": "OK"
+    }
+   },
+   {
+    "id": "shutdown_drains_queued_and_calls_cancel_cb",
+    "observed": {
+     "available_tokens_after_drain": 1,
+     "cancel_cb_calls": [
+      {
+       "operation": "op.b",
+       "request_id": "REQ-00000000000000000000000000000002"
+      }
+     ],
+     "has_pending_after_drain": true
+    }
+   }
+  ],
+  "task_states": [
+   "QUEUED",
+   "RUNNING",
+   "COMPLETED",
+   "CANCELED_AT_RECOVERY"
+  ]
+ },
+ "registry": {
+  "cases": [
+   {
+    "id": "register_and_pending_count",
+    "observed": [
+     {
+      "action": "register",
+      "outcome": "ok",
+      "pending_count": 1,
+      "result": null
+     },
+     {
+      "action": "pending_count",
+      "outcome": "ok",
+      "result": 1
+     }
+    ]
+   },
+   {
+    "id": "bad_ids_rejected",
+    "observed": [
+     {
+      "action": "register",
+      "exception": "ValueError",
+      "message": "bad request id",
+      "outcome": "raises",
+      "pending_count": 0
+     },
+     {
+      "action": "register",
+      "exception": "ValueError",
+      "message": "bad request id",
+      "outcome": "raises",
+      "pending_count": 0
+     },
+     {
+      "action": "register",
+      "exception": "ValueError",
+      "message": "bad request id",
+      "outcome": "raises",
+      "pending_count": 0
+     },
+     {
+      "action": "register",
+      "exception": "ValueError",
+      "message": "bad request id",
+      "outcome": "raises",
+      "pending_count": 0
+     }
+    ]
+   },
+   {
+    "id": "duplicate_pending_rejected",
+    "observed": [
+     {
+      "action": "register",
+      "outcome": "ok",
+      "pending_count": 1,
+      "result": null
+     },
+     {
+      "action": "register",
+      "exception": "ValueError",
+      "message": "duplicate request id",
+      "outcome": "raises",
+      "pending_count": 1
+     },
+     {
+      "action": "pending_count",
+      "outcome": "ok",
+      "result": 1
+     }
+    ]
+   },
+   {
+    "id": "respond_once_semantics",
+    "observed": [
+     {
+      "action": "register",
+      "outcome": "ok",
+      "pending_count": 1,
+      "result": null
+     },
+     {
+      "action": "respond_once",
+      "outcome": "ok",
+      "result": true
+     },
+     {
+      "action": "respond_once",
+      "outcome": "ok",
+      "result": false
+     }
+    ]
+   },
+   {
+    "id": "re_register_after_complete_rejected",
+    "observed": [
+     {
+      "action": "register",
+      "outcome": "ok",
+      "pending_count": 1,
+      "result": null
+     },
+     {
+      "action": "complete",
+      "outcome": "ok",
+      "result": null
+     },
+     {
+      "action": "register",
+      "exception": "ValueError",
+      "message": "duplicate request id",
+      "outcome": "raises",
+      "pending_count": 0
+     }
+    ]
+   },
+   {
+    "id": "completed_cache_eviction_lru_size2",
+    "observed": [
+     {
+      "action": "register",
+      "outcome": "ok",
+      "request_id": "REQ-00000000000000000000000000000001"
+     },
+     {
+      "action": "register",
+      "exception": "ValueError",
+      "outcome": "raises",
+      "request_id": "REQ-00000000000000000000000000000003"
+     }
+    ]
+   }
+  ],
+  "pattern": "^REQ-[0-9a-f]{32}$"
+ },
+ "schema": "ps4rf-parity-vectors-v1",
+ "session": {
+  "hello_ack_objects_source": "tests/fixtures/crypto/vectors-v1.json (shared TEST-ONLY session)",
+  "keys": {
+   "k_agent_to_host": "8a6d948229b65edf2fc138805a87a18c136fbe126102cd0bfccf3d446b155d97",
+   "k_host_to_agent": "10eca20a4a0ffa654d3c2500ffcbf380d6941987cf8e889771761bcdeee6a1a5",
+   "k_hs": "03c57c1fb7df0a5830f47d5559377c6fc6427c770d6cb1e1ade59388ca3c4196"
+  },
+  "nonce_prefixes": {
+   "agent_to_host": "6470db33",
+   "host_to_agent": "7cf6b6e3"
+  },
+  "test_only_material": {
+   "agent_nonce_hex": "000102030405060708090a0b0c0d0e0f",
+   "host_nonce_hex": "101112131415161718191a1b1c1d1e1f",
+   "psk_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+   "session_id": "SES-0123456789ABCDEF",
+   "warning": "TEST-ONLY constants; never valid as production keys."
+  },
+  "transcript_sha256": "67100a45ce21f2300b89b38a756504620261af59adcd9d6c2444019c60a74ad3"
+ },
+ "w0_decisions_applied": [
+  {
+   "decision": "D8",
+   "effect": "EFFECTIVE_LAST_SEQ = 2**53 - 1 is enforced in seal()/open(); reaching it closes the session with SequenceExhausted, never wraps around",
+   "id": "effective_sequence_ceiling",
+   "vectors": [
+    "constants.EFFECTIVE_LAST_SEQ",
+    "boundaries:seal_at_effective_ceiling_then_exhausted",
+    "boundaries:seal_sequence_exhausted"
+   ]
+  },
+  {
+   "decision": "D9",
+   "effect": "the shared helper core.rpc.handshake.open_authenticated maps InvalidTag to AuthenticationFailed (ProtocolError); no library exception escapes the RPC layer",
+   "id": "authentication_failure_mapping",
+   "vectors": [
+    "channel:cases",
+    "boundaries:open_tampered_tag_then_ok"
+   ]
+  },
+  {
+   "decision": "D12",
+   "effect": "wire mapping v1 is in-repo property and single-sourced in core/rpc/wire.py (0x01 REQUEST, 0x02 RESPONSE, 0x03 EVENT, 0x04 BYE, 0x05 READY); any other byte is a protocol error and the session fails closed",
+   "id": "frame_type_byte_table",
+   "vectors": [
+    "wire_frame.type_table",
+    "frames[].frame_type_byte",
+    "frames[].header_hex",
+    "frames[].wire_hex"
+   ]
+  },
+  {
+   "decision": "D13",
+   "effect": "EVENT and READY are reserved: not sent in v0.1, no body, out of the W2 byte parity scope; the host may tolerate READY for mock compatibility",
+   "id": "ready_and_event_scope",
+   "vectors": [
+    "wire_frame.reserved_types",
+    "wire_frame.reserved_semantics",
+    "wire_frame.active_types_w2"
+   ]
+  }
+ ],
+ "wire_frame": {
+  "active_types_w2": [
+   "REQUEST",
+   "RESPONSE",
+   "BYE"
+  ],
+  "direction_check": "the session loop rejects message types outside the F16 inbound set -> ProtocolError -> connection closed, no reply attempt",
+  "header_bytes": 13,
+  "header_layout": "4-byte big-endian ciphertext length | 1 type byte | 8-byte big-endian sequence",
+  "length_check": "before any allocation; n > max_frame_bytes -> FrameLimitExceeded(lib: ProtocolError)",
+  "reserved_semantics": {
+   "EVENT": "reserved message type, no body in v0.1, not sent by the agent (W0/D13)",
+   "READY": "reserved; the host may tolerate it for mock compatibility, native W2 need not send it; it gets wire semantics only once shape, encryption status, capability content and state transition are specified (W0/D13). Sending a reserved type raises ReservedFrameType (fail closed)."
+  },
+  "reserved_types": [
+   "EVENT",
+   "READY"
+  ],
+  "sequence_ceiling": "EFFECTIVE_LAST_SEQ = 2**53 - 1 (W0/D8); beyond it SequenceExhausted, session closed, no wraparound",
+  "source": "docs/spec-history/Pasted_text(5).txt l.644-656 (recv_frame) + l.661 (fail-close matrix); frame type byte table decided by the owner (W0/D12)",
+  "total_frame_bytes": "13 + ciphertext length",
+  "type_byte_vs_aad_mismatch": "the type byte selects the AAD message type, so a byte that contradicts the sealed type fails authentication -> AuthenticationFailed (W0/D9)",
+  "type_table": {
+   "0x01": "REQUEST",
+   "0x02": "RESPONSE",
+   "0x03": "EVENT",
+   "0x04": "BYE",
+   "0x05": "READY"
+  },
+  "type_table_inverse_source": "FRAME_TYPE_NAMES / FRAME_TYPE_BYTES (core/rpc/wire.py)",
+  "type_table_status": "DEFINED — mapping v1 is in-repo property (W0/D12) and lives in the single shared table core/rpc/wire.py; every implementation (host core, mock, native) must use it",
+  "unknown_type_byte": "UnknownFrameType (ProtocolError): protocol error, session fails closed, no reply attempt",
+  "wire_spec_version": 1
+ }
+}

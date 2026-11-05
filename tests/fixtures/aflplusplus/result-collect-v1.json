@@ -1,0 +1,19 @@
+{
+  "groups": [
+    {
+      "members": [
+        "crash_a.bin",
+        "crash_b.bin"
+      ],
+      "signature": "0x41414141"
+    },
+    {
+      "members": [
+        "crash_c.bin"
+      ],
+      "signature": "0x42424242"
+    }
+  ],
+  "tool": "afl-collect",
+  "total": 3
+}

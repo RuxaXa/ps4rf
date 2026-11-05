@@ -1,0 +1,89 @@
+{
+  "base_rva": "0x1000",
+  "cases": {
+    "fixture_alias": "HELD",
+    "fixture_claim_fixed": "HELD",
+    "fixture_claim_missing": "PATH_DEPENDENT",
+    "fixture_different_lock": "DIFFERENT_LOCK",
+    "fixture_early_return": "HELD",
+    "fixture_missing_lock": "PATH_DEPENDENT",
+    "fixture_protected": "HELD",
+    "fixture_shared_claim_write": "DIFFERENT_LOCK",
+    "fixture_unknown": "UNKNOWN"
+  },
+  "image_hex": "65488b1c250000000031c0f0480fb15f18c366662e0f1f8400000000000f1f0065488b04250000000048c7c104000000f0480fb14f18c3660f1f840000000000488b4718488d4810f0480fb14f18c390488b4718488d48f0f0480fb14f18c390c366662e0f1f8400000000000f1f4000554889e548897df885f67409488b7df8e87bffffff488b7df8e8d2ffffffc9c3554889e548897df8488b7df8e85fffffff488b7df8e8b6ffffff488b7df8e86dffffffc9c366662e0f1f840000000000554889e548897df8488975f0488b7df8e82bffffff488b7df0e882ffffff488b7df8e839ffffffc9c30f1f8000000000554889e548897df8488b7df8e8fffeffff488b7df8e856ffffff488b7df8e80dffffffc9c366662e0f1f840000000000554889e548897df8488b7df8e8cffeffff85f67414488b7df8e822ffffff488b7df8e8d9feffffc9c3488b7df8e8cefeffffc9c366662e0f1f84000000000090554889e548897df8e893feffff488b4df865488b04250000000048894120488b7df8e899feffff488b45f8c9c30f1f00554889e548897df8e863feffff488b4df865488b04250000000048894120488b7df8e869feffff488b7df8e880feffff488b45f8c9c3662e0f1f840000000000554889e5e8b7ffffff66c740020000c9c366662e0f1f8400000000000f1f4000554889e548897df8e803feffff65488b042500000000488945f0488b7df8e80dfeffff488b45f8c9c30f1f8000000000554889e548897df885f6740b488b7df8e82bffffffeb04488b45f866c740020000c9c366662e0f1f8400000000006690554889e548897df8488b7df8e8fffeffff66c740020000c9c30f1f8000000000554889e548897df8ffd0488b7df8e8ddfdffffc9c3",
+  "image_sha256": "56e119744ab2152a520bb7c12fbfdce9d8acc79c100302fca85de6974200a081",
+  "schema": "ps4rf.discovery.lock-fixtures/1",
+  "source": "lockscope-fixtures.S",
+  "source_sha256": "feb9ade57b6c19766f18c9c74fc922f04cb0ac4d5d46f391383df41aa15266d9",
+  "symbols": {
+    "claim_object": {
+      "rva": "0x1160",
+      "size": "0x2d"
+    },
+    "claim_shared_object": {
+      "rva": "0x1190",
+      "size": "0x36"
+    },
+    "fixture_alias": {
+      "rva": "0x10f0",
+      "size": "0x25"
+    },
+    "fixture_claim_fixed": {
+      "rva": "0x1250",
+      "size": "0x19"
+    },
+    "fixture_claim_missing": {
+      "rva": "0x1220",
+      "size": "0x23"
+    },
+    "fixture_different_lock": {
+      "rva": "0x10c0",
+      "size": "0x29"
+    },
+    "fixture_early_return": {
+      "rva": "0x1120",
+      "size": "0x34"
+    },
+    "fixture_missing_lock": {
+      "rva": "0x1070",
+      "size": "0x20"
+    },
+    "fixture_protected": {
+      "rva": "0x1090",
+      "size": "0x25"
+    },
+    "fixture_shared_claim_write": {
+      "rva": "0x11d0",
+      "size": "0x11"
+    },
+    "fixture_unknown": {
+      "rva": "0x1270",
+      "size": "0x15"
+    },
+    "lock_acquire": {
+      "rva": "0x1000",
+      "size": "0x12"
+    },
+    "lock_release": {
+      "rva": "0x1020",
+      "size": "0x17"
+    },
+    "not_claim_stack": {
+      "rva": "0x11f0",
+      "size": "0x29"
+    },
+    "release_object": {
+      "rva": "0x1060",
+      "size": "0x1"
+    },
+    "rw_read_acquire": {
+      "rva": "0x1040",
+      "size": "0xf"
+    },
+    "rw_read_release": {
+      "rva": "0x1050",
+      "size": "0xf"
+    }
+  }
+}

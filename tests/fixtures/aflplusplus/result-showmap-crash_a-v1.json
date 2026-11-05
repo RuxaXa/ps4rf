@@ -1,0 +1,18 @@
+{
+  "crashes": true,
+  "input": {
+    "sha256": "dfb355acb8fa8a80e5e1e12d381e648999882aa943ad417789418731638b802b",
+    "size": 32
+  },
+  "signature": "0x41414141",
+  "target": {
+    "sha256": "7c3408ffce2d37de47dfb79fbf64c91ea94031d185130912b5dd4e1af9ae0a1e"
+  },
+  "tool": "afl-showmap",
+  "tuples": [
+    "0x3452",
+    "0x4146",
+    "0x462d",
+    "0x5053"
+  ]
+}

@@ -1,0 +1,484 @@
+PS4RF Übergabeprojekt — Assemblierung, Prüfung, Export-Vorbereitung
+
+Ehrliche Einschränkung vorab (punktuell 14/19): Diese Umgebung hat keine Shell, kein Python, kein git. Ich kann daher weder ZIP/TAR erzeugen noch echte SHA256-Werte berechnen noch ein Pre-Flight-Ergebnis aus einem echten Lauf liefern. Erfundene Hashes wären Fake-Evidence — ausgeschlossen. Geliefert wird deshalb: alle Assemblierungsdateien als vollständiger Text plus ein Export-Builder, der Manifest, Hashes, Archive und die Final-Meldung in einer echten Umgebung deterministisch erzeugt. Dercandidate-Status bleibt unverändert bis zu Hermes' echtem Lauf.
+1. Dokumentationsdateien
+README.md
+PS4RF — PlayStation 4 Research Framework
+
+Modulare Research-Plattform für autorisierte Sicherheitsforschung anPlayStation-4-Systemen (Userland, Kernel, GPUVM, KeyMgr, CCP/SAMU, PUP,Secure Services).
+Ziele
+
+    Userland- und Kernel-Schwachstellen finden und untersuchen
+    Exploit Discovery, Fuzzing, TOCTOU/Race-Research
+    Firmware Diffing (Referenz FW 9.00, Ziel FW 13.52)
+    SAMU/CCP-Research mit Invarianten und Oracles
+    Evidence- und Reproducer-Management (reproduzierbar, hash-gebunden)
+
+Zentraler Grundsatz: Neue Research-Idee = neues Experiment, nicht neuer Payload.
+Architekturüberblick
+Komponente	Aufgabe	Status
+ps4rfctl	Host-CLI, Orchestrierung	Kern vorhanden
+core/	Schemas, Capability-System, RPC, Experiment Engine, Evidence, Budget	FINAL (freeze-patched)
+mock/agent.py	Mock ps4rfd: Handshake, AEAD, Pool, Recovery, Gate/Barrier	FINAL
+Capability System	Availability × Assurance, Authority, Scope-Binding	FINAL
+Evidence Store	Run-Records, Hash-Bindung, VerificationEvidence	FINAL
+Profiles	profiles/fw900, profiles/fw1352	Platzhalter — zu füllen (P5)
+Discovery/Fuzz/Triage	Surface, Candidate, Ranking	Datenmodell FINAL, Engine geplant
+OrbisProbe	Research/Assessment Engine	BLOCKED — Code ausstehend
+Tool-Adapter	Metasploit/Ghidra/Rizin/angr/AFL++	STUB/PLANNED
+echter ps4rfd	Native Agent auf PS4	P4 — explizit NICHT begonnen
+Bootstrap-Provider-Konzept
+
+PS4RF startet den Agent über austauschbare Provider:
+
+    WebKitBootstrap — WebKit-RCE als Einstieg (Zielpfad)
+    GoldHENBootstrap — Development/Recovery (bewusst nur solange nötig)
+    KernelChainBootstrap / PS4RFExploitBootstrap — eigene Chains
+    ExistingJailbreakBootstrap
+
+PS4RF ist nicht von GoldHEN abhängig. Core enthält keinerleiGoldHEN-Annahmen; Bootstrap ist Provider-Interface (bootstrap.detect/ prepare/launch_agent/health).
+Schnellstart (nach Handoff — siehe HERMES-HANDOFF.md)
+
+pip install -e .[dev]python tools/preflight.pypytest -qpython tools/freeze/run_gate_suite.py
+
+Status
+
+Siehe FREEZE-STATUS.md. Autorisierte Forschung only.
+ARCHITECTURE.md
+PS4RF Architektur
+Host vs Target
+
+    Host (Research-PC): ps4rfctl, Experiment Engine, Discovery, Evidence,Profile, OrbisProbe, Tool-Adapter. Orchestrierung und Wahrheit.
+    Target (PS4 / Mock): ps4rfd stellt AUSSCHLIESSLICH Primitive bereit(memory, gpuvm, keymgr, ccp, kernel.snapshot, sync, verify.*). KeineExperiment-Logik, keine Firmware-RVAs im Code — RVAs nur in Profilen.
+
+Handshake-Rollen (normativ, unabhängig von TCP connect/accept)
+
+AGENT (ps4rfd/Mock):  send HELLO → recv HELLO_ACK → send AUTH → recv AUTH_ACKHOST  (ps4rfctl):     recv HELLO → send HELLO_ACK → recv AUTH → send AUTH_ACK
+
+HELLO = AGENT→HOST (agent_version, context, provider, boot_id, nonce).HELLO_ACK = HOST→AGENT (protocol_version, session_id, AEAD-Suite, Limits).Host entscheidet Limits; beide Seiten nutzen exakt das authentisiertehost_hello_ack["limits"]-Objekt (kein DEFAULT nach Handshake).
+
+Transcript: SHA256(JCS(agent_hello) || JCS(host_hello_ack)).
+RPC + AEAD
+
+    Session Key (256 Bit) nur vom Bootstrap injiziert; nie URL/Log/Evidence.
+    HKDF mit Transcript-Bindung; getrennte Richtungsschlüssel(k_agent_to_host/k_host_to_agent), Handshake-Key separat (k_hs).
+    AEAD_CHACHA20_POLY1305 (Default) / AES_256_GCM. Nonce = 32-Bit-HKDF-Präfix|| 64-Bit-Sequence, ausschließlich lokal abgeleitet (Wire: nur seq+ct).
+    AAD ausschließlich via build_aad(protocol_version, session_id, sequence, direction, message_type). Sequence 0..2^64-2, strikt; Duplicate/Skip/Rückwärts → REPLAY_DETECTED → Session-Abort.
+    Framing: MAX_HANDSHAKE_BYTES (64 KiB) vor Read; max_frame_bytes =Ciphertext-Limit (Tag 16); Oversize-Reject verbraucht KEINE Sequence.
+
+Capability-System: Availability × Assurance
+
+    Availability: UNKNOWN/AVAILABLE/DEGRADED/UNAVAILABLE (Session-Wahrheit jetzt)
+    Assurance: UNVERIFIED/OBSERVED/PROVEN (Belegqualität, verfällt nicht durchRecency). Auflösung unabhängig pro Achse.
+    Authority-Tiers: RUNTIME_PROBE ∪ EXPLOIT = Tier 30 — neuester Session-Befundgewinnt, ausschließlich über host-vergebenes observed_seq(provider_created_at ist nie Conflict-Autorität). OPERATOR:availability_write=false; absoluter Override nur via ManualOverride(Assurance max OBSERVED).
+    PROVEN: genau ein Erzeugungspfad — grant_from_verification() ausEvidence-Store-verifizierter VerificationEvidence; Authority-Ceilingentscheidet; privilegierte Namespaces (kernel., gpuvm., keymgr., ccp.,samu., pup., eap., sbram., emc., secure.) verlangenverification_run != trigger_run.
+    Grant: context match ∧ availability==AVAILABLE (∧ DEGRADED && allow_degraded)∧ assurance ≥ Namespace-Minimum. PROVEN + UNAVAILABLE = NOT GRANTED(Beleg bleibt erhalten).
+
+BOOT vs SESSION
+
+    SESSION: an (session_id, boot_id) gebunden; observed_seq nur session-lokal.
+    BOOT: an genau eine boot_id gebunden; überlebt keinen Reboot.expires_on_reboot=False für BOOT-Records ist verboten. Persistente Faktenleben im Profile/Evidence-Store und werden pro Boot NEU ingestiert.
+    Merge (F4): SESSION-Availability in {AVAILABLE, DEGRADED, UNAVAILABLE} gewinnt;sonst BOOT. Assurance = max(BOOT, SESSION); Provenance bleibt erhalten.
+
+Resource Lifecycle + RECOVERY_REQUIRED
+
+    ResourceManager: acquire/attach_cleanup/release/cleanup_all/cleanup_after_hang,atomar (RLock). FREED nur nach tatsächlichem Callback-Erfolg.
+    Normaler Disconnect → cleanup_all. Nach Hang → cleanup_after_hang: nurout_of_band_cleanup_safe=true wird angefasst; alles anderecleanup_attempted=False, UNCERTAIN, console_dirty=true.
+    Poison (atomar): session_poisoned+console_recovery_pending sofort; keineneuen Submissions; queued → CANCELED_AT_RECOVERY (RID abgeschlossen, Responsebei intaktem Transport); in-flight → IN_FLIGHT_AT_RECOVERY in Evidence.
+    RECOVERY_REQUIRED ist konsoleweit, überlebt Reconnect, nur recovery_safe-Ops(session.ping, session.status, telemetry.read).
+
+Experiment Engine + Concurrent Lanes
+
+    YAML → Compiler (Validierung, Safe-Number-Policy, Budget) → JCS-RFC8785-IR →Hash → Negotiation → Run → Evidence. Engine läuft auf dem Host.
+    In-Flight-RPC: BoundedPool (Token = running+queued, Fix A), Request-IDsREQ-<32hex> eindeutig pro Session, max_inflight serverseitig erzwungen,bounded completed cache, duplicate → PROTOCOL_ERROR.
+    Agent-Budget beidseitig: kumulativ Req+Resp-Plaintext, Session- undExperiment-Level (via experiment.load); Überschreitung → atomarer Abort,IN_FLIGHT_AT_ABORT, keine weiteren Responses.
+
+Barrier vs Gate
+
+    Barrier = automatisches Rendezvous (öffnet bei eindeutigen Participants).
+    Gate = manuelles Research-Fenster: arrive registriert Participant (unique),released AUSSCHLIESSLICH via sync.gate.release. Destroy → RESOURCE_DESTROYED(nie Success). Participant-Set verhindert Gate-Vorzeitöffnung.
+    Alle Sync-Objekte sind ResourceManager-Ressourcen; Cleanup entferntRegistry + zerstört Objekt atomar (B12).
+
+Evidence Flow
+
+Experiment.start → Telemetry/Stage/Primitive/Resource-Events → run_record +stages + inputs/outputs + logs + snapshots + crash/hang + cleanup →Manifest-Hashes → canonical_sha256 (JCS + Safe-Number-Policy) überrun_record. VerificationEvidence wird im Store gespeichert, Re-Hash verifiziert,feldweise gegen den Claim verglichen — erst dann PROVEN.
+Exploit Provider / Attack Surface / Candidate
+
+    Provider-Manifest: lifecycle status, requires/provides (verify.*),execution-Kontexte (HOST/WEB_CONTENT/USERLAND_AGENT/... getrennt vonTarget-Kontexten), preconditions, reliability, variants, profile_bindings.
+    Surface: reachability chain (PROVEN ⇒ geordnete, eindeutige Kette),Taint-Locators (symbol+offset, keine Roh-Adressen).
+    Candidate: state == history[-1].state; ab EXPLOIT_CANDIDATE Pflicht-Reproducer.
+
+Diagramm
+
+Research Host    ↓ps4rfctl    ↓Experiment / Discovery / OrbisProbe    ↓RPC (authentisiert, AEAD, versioniert)    ↓ps4rfd  (heute: Mock ps4rfd)    ↓Userland / Kernel / GPUVM / KeyMgr / CCP / SAMU
+
+RESEARCH-MODEL.md
+PS4RF Research Model
+Vier Hauptaufgaben
+
+    OBSERVE — Attack Surfaces erfassen (surface.schema), Reachability-Ketten,Taint-Modell, Firmware-Diffing (v0.1 §30), Patch-Diff-Research (§31).
+    EXPERIMENT — datengetriebene Experimente (IR), Invarianten(INV_SLOT_001, INV_GPUVM_001, INV_CCP_001/002, INV_PUP_001, INV_EAP_001),TOCTOU via Gate/Barrier, Cleanup-Policy, Evidence pro Run.
+    DISCOVER — Fuzzing (structural/stateful/race/differential), Crash/HangTriage, Fingerprint-Dedup, Kandidaten-Ranking.
+    EXPLOIT RESEARCH — Reproducer → Primitive → Exploit → Provider,Capability-Upgrade, Chain-Planning, Reliability-Statistik.
+
+Attack-Surface-Klassen
+
+browser, media, network, usb, bluetooth, filesystem, ipc, kernel, gpu,pup, secure services, package, savegame
+Candidate Lifecycle
+
+OBSERVATION → ANOMALY → BUG → PRIMITIVE → EXPLOIT_CANDIDATE→ EXPLOITABLE → CHAINABLETerminal: CLOSED (widerlegt/behoben) | PARKED (bewusst zurückgestellt)
+
+Regeln: ab EXPLOIT_CANDIDATE Pflicht-Reproducer; CHAINABLE erfordertchain_links; state == history[-1].state; History monoton nicht fallend.
+TOOLS.md
+PS4RF — Externe Integrationen (ehrlicher Status)
+Tool	Zweck	Status
+OrbisProbe	Research/Assessment Engine (discover/rank/prove/propose/...)	BLOCKED — echtes Inventar ausstehend; Extractor vorhanden (tools/inventory/)
+Metasploit	Exploit/Auxiliary/Session-Backend (msfrpcd/MessagePack)	STUB — redact.py FINAL, adapter/provider/mock geplant (P2)
+Ghidra	Headless-Analyse, Diffing	PLANNED (P3)
+Rizin	Schnelle xrefs/CFG	PLANNED (P3)
+angr	CFG/Dataflow/Symbolik	PLANNED (P3)
+AFL++	Parser-Fuzzing	PLANNED (P3)
+Unicorn	Offline-Emulation	PLANNED
+syzkaller-Konzepte	Stateful Program-Corpus	PLANNED (Konzept im Experiment-IR)
+Scapy	Netzwerk-Crafting	PLANNED
+Wireshark/TShark	Capture-Analyse	PLANNED
+mitmproxy	Traffic-Interception	PLANNED
+boofuzz	Protocol-Fuzzing	PLANNED
+
+Keine Integration ist als IMPLEMENTED markiert, die nicht implementiert ist.
+HERMES-HANDOFF.md
+HERMES HANDOFF — PS4RF Core Freeze Candidate
+Aktueller Status (verbindlich, nicht verhandelbar)
+
+FREEZE PATCH APPLIEDNOT TESTED IN REAL EXECUTION ENVIRONMENTNOT TAGGED
+
+Der Tag PS4RF-CORE-1.0-MOCK-READY darf AUSSCHLIESSLICH nach einem realerfolgreichen G1–G8-Lauf von tools/freeze/run_gate_suite.py gesetzt werden.Es existieren keine Testergebnisse. Es existiert kein Tag. Keine Ausnahme.
+Dein erster Auftrag (genau diese Reihenfolge)
+
+a. Repository installieren (pip install -e .[dev], Python ≥ 3.12)b. Dependencies installierenc. python tools/preflight.py — statische Checks; FAILs zuerst fixend. pytest -q — komplette Suitee. python tools/freeze/run_gate_suite.py — G1–G8f. Bei Fehlern: AUSSCHLIESSLICH konkrete Fehler reparieren   (FAILED → Test → Exception → Root Cause → minimaler Fix)g. KEINE neue Core-Architektur entwerfen, keine Features, kein Refactoring   „on the side"h. G1–G8 grün → der Runner setzt den Tag selbst (nicht per Hand)i. FREEZE-REPORT.json archivieren (Evidence, hash-gebunden)
+Danach (feste Reihenfolge)
+
+    OrbisProbe Inventory (NUR echten Code — Extractor:python tools/inventory/extract_orbisprobe_inventory.py <orbisprobe-repo>→ ORBISPROBE-INVENTORY.draft.md zurück in vollständiges Inventory ausbauen)
+    OrbisProbe-PS4RF-Mapping (REUSE/ADAPT/REPLACE/KEEP_EXTERNAL,Konfliktliste C-1..C-8 verifizieren)
+    OrbisProbe Adapter gegen Mock (Interface: discover/rank/prove/propose_experiment/consume_evidence/reclassify/minimize)
+    Metasploit Adapter (gegen Mock-msfrpcd, DoD 8 Punkte aus v0.3 §12.7)
+    Ghidra → Rizin → angr → AFL++
+
+Danach erst (P4): echter ps4rfd planen. Kernel Code / Payloads: nur mitexpliziter neuer Freigabe.
+Normative Quellen
+
+Alle FINAL-Fassungen: core/rpc/pool.py, core/rpc/hang.py,core/resources/manager.py, Glue in mock/agent.py (Fix A, Fix B, B12,gemeinsamer MockHangReleased, AGENT-Rolle). Ältere Varianten sind entfernt.Bei Diskrepanz Code > ältere Chat-Fassungen > Docs.
+HERMES-TODO.md
+HERMES TODO — priorisiert
+P0 — Real Freeze Gate (BLOCKER für alles Weitere)
+
+     pip install -e .[dev]; preflight PASS
+     pytest vollständig grün
+     tools/freeze/run_gate_suite.py: G1–G8 grün
+     Tag PS4RF-CORE-1.0-MOCK-READY NUR durch Runner gesetzt
+     FREEZE-REPORT.json archiviert
+    Fehler: ausschließlich minimal, keine Architekturänderung
+
+P1 — OrbisProbe
+
+     Echten OrbisProbe-Code beschaffen (Repo/Archiv)
+     ORBISPROBE-INVENTORY.md (Module, Entry Points, Datenmodelle, Candidate/Experiment/Evidence-Modelle, Tool-Abhängigkeiten, FW-/PS4-Hardcodes,Live-Exec, Safety Gates, Reporting, Tests)
+     ORBISPROBE-PS4RF-MAPPING.md (REUSE/ADAPT/REPLACE/KEEP_EXTERNAL + Konflikte)
+     Adapter gegen Mock + Parity-Tests
+    Regeln: Profile nur via PS4RF-API; keine RVAs; keine Hardwareprimitive;keine Payload-Delivery; PS4RF = Source of Truth
+
+P2 — Metasploit Adapter
+
+     adapter.py (msfrpcd/MessagePack) + provider.py + mock/msfrpcd_mock.py
+     DoD v0.3 §12.7 vollständig, offline via Mock
+
+P3 — Tool-Adapter
+
+     Ghidra (headless, function list, decompile, xrefs, hashing)
+     Rizin (xrefs, CFG, boundaries)
+     angr (CFG, dataflow, constraints — keine Exploitability-Auto-Behauptung)
+     AFL++ (corpus/crash/reproducer-Verwaltung über Evidence)
+
+P4 — Echter ps4rfd
+
+     Planung NACH Adaptern; PS4-Payload-SDK; ET_DYN ELF; Provider-Interfaces;nur neue native Primitive bei fehlender Capability (v0.1 §70)
+
+P5 — PS4 Live Integration
+
+     Firmware-Profile fw1352/fw900 vervollständigen (Signaturen, RVAs,Strukturen, Validierungskette)
+     Hardware-Acceptance-Tests (Phase 1–7 aus v0.1 §60–66)
+
+PS4-RESEARCH-CONTEXT.md
+PS4 Research Context (kompakter Wissensstand)
+Ziel-Plattform
+
+    Primary: PS4 Slim, Firmware 13.52
+    Reference: Firmware 9.00 (Differential-Fuzzing, Patch-Diff)
+
+Research-Bereiche
+
+Kernel (syscalls/ioctls/cdevsw/copyin-copyout/locking/refcounts),GPUVM (map/unmap/lookup, stale descriptor, validate-use),KeyMgr (Slot-Lifecycle, claim/release, stale handles),CCP (submit, multi-message failure states, FROM_SLOT-Teillängen),SAMU (Secure-Service-Primitives),PUP (valid-invalid-valid Akkumulation, Secure-State-Reset),SBL/Secure Services, SBRAM (cross-processor canary),EAP/EMC (Staging-TOCTOU),GPU, Userland (WebKit, Browser-IPC, Media/Package/Savegame-Parser),ioctl/syscall surfaces, TOCTOU/Double-Fetch, Firmware Diffing.
+Bekannte Exploit-Primitive (FW 13.52, aus früheren Befunden)
+
+copyout, sx_xlock/sx_xunlock, gpuvm_map/unmap, keymgr allocator/release,CCP submit — alle nur über Profile gebunden, nie hardcodiert.
+Definierte Experimente (Namen, noch NICHT implementiert)
+
+historical_hmac_prefix, zero_key_c3, slot_release_reuse,slot_ownership_toctou, gpuvm_validate_unmap_use, gpuvm_stale_descriptor,ccp_double_fetch, ccp_multi_message_failure, pup_valid_invalid_valid,pup_state_accumulation, eap_staging_toctou, sbram_cross_processor_canary
+Invarianten-IDs (fest vergeben)
+
+INV_SLOT_001 (freigegebener Slot nicht nutzbar),INV_GPUVM_001 (kein stale descriptor nach UNMAP),INV_CCP_001 (FROM_SLOT keine unerlaubte Teillänge),INV_CCP_002 (kein partieller Zustand N+1 nach Failure N),INV_PUP_001 (Secure-State-Reset nach fehlgeschlagener Validierung),INV_EAP_001 (Staging vor Consumption unvertauschbar)
+Grenzen dieses Dokuments
+
+Keine vollständigen Chatverläufe, keine RVAs, keine Payloads — nurstrukturierter aktueller Stand. Firmware-Details gehören ausschließlich inprofiles/ sobald sie belegt sind.
+SAFETY-AND-EXECUTION-RULES.md
+Safety & Execution Rules (normativ)
+
+    Keine Capability als PROVEN ohne VerificationEvidence(Store-Binding, Feldvergleich, Re-Hash, Authority-Ceiling, Run-Separationfür privilegierte Namespaces).
+    Keine mutierenden Operationen bei RECOVERY_REQUIRED (zentral erzwingt,nur recovery_safe: session.ping, session.status, telemetry.read).
+    Keine stillen Retries nach Hang/Panic/Crash/unexpected state.
+    Kein generisches Kernel-Call-RPC (CALL 0x.../PATCH_KERNEL_ADDRESS verboten).
+    Kein beliebiges Kernel-Write-RPC — nur registrierte Primitive.
+    Firmware-Adressen ausschließlich über Profile; Experimente ohne rohe RVAs.
+    Resource Cleanup fail-closed: FREED nur nachweislich; Unsicherheit →UNCERTAIN + console_dirty → RECOVERY_REQUIRED.
+    Hang + unsicherer Resource State ⇒ RECOVERY_REQUIRED (konsoleweit).
+    Evidence niemals erfinden; kein „PASS" ohne realen Run; Hash-Bindung istPflicht (v0.1 §47).
+    Exploit-Ausführung nur nach Safety Gates + Precondition-Checks; keineautomatische Ausführung aus Scanner-Ergebnissen.
+    Mock-Hang-Test-Hook ist kein RPC-Element und erzeugt nie eine Response.
+
+FREEZE-STATUS.md
+PS4RF Freeze Status
+
+STATUS:FREEZE PATCH APPLIEDREAL GATE EXECUTION PENDINGTAG NOT CREATED
+
+    Die Gate-Suite (G1–G8) wurde in der Erstellungsumgebung NICHT ausgeführt(keine Python/pytest/git-Ausführung verfügbar).
+    Der Tag PS4RF-CORE-1.0-MOCK-READY existiert NICHT und wird ausschließlichdurch tools/freeze/run_gate_suite.py nach einem real grünen Lauf gesetzt.
+    Angewendete finale Fixes: Fix A (submit↔poison), Fix B (exception-safecancel completion), available_tokens-Test-API, korrigierter Tag-Name,bereinigter Sync-Cleanup (B12), gemeinsamer MockHangReleased-Typ (§6),B1–B14 aus der Freeze-Runde.
+
+CHANGELOG.md
+Changelog
+
+    v0.1: Spec (70 Abschnitte) — Architektur, Capability, Profile, Evidence.
+    v0.2: Design-Entscheidungen (Agent-Format, Reverse-TCP, IR, SAMURF-Split).
+    v0.3: Schemas Runde 1; K1–K9 (dotted Capabilities, Availability×Assurance,Transcript, JCS/RFC 8785, Budget, RECOVERY_REQUIRED); Metasploit-Spec;OrbisProbe-Extractor.
+    v0.4: N1–N5 (unabhängige Achsen, HKDF/AEAD, Safe-Number-Policy,MSF-Redaction); Lieferung 2 (exploit/surface/candidate, Pydantic, Tests).
+    v0.5: C1–C6 (observed_seq, Nonce lokal, rekursives Budget, Registry-Checks,TypeAdapter, MSF-Metadaten); Skeleton + Mock + Round Trip.
+    v0.6: R1–R12 (Scope/Context-Enforcement, VerificationEvidence, echteNegotiation, zentrale Recovery-Dispatch, Worker-Pool, Barrier, Framing,RPC-Budget, Parity, kanonisches U64).
+    v0.7: V1–V14 (Evidence-Binding, BOOT-Semantik, Rollen, Poison, Gate,Request-Registry, agentseitiges Budget, Hang-Hook, Scope-Stores).
+    v0.8: F1–F20 (PROVEN-Ceiling, max_inflight, Lifecycle, Limits aus ACK,Handshake-Limit, Frame-Semantik, Direction-FSM, Budget-Abort, Freeze-Gates).
+    Freeze-Patch: B1–B14 + Fix A (submit↔poison race), Fix B (exception-safecancellation), available_tokens, Tag PS4RF-CORE-1.0-MOCK-READY, B12-Cleanup,gemeinsamer MockHangReleased-Typ.
+    Handoff: Dokumentation, Pre-Flight, Export-Builder, Manifest. NICHT getaggt.
+
+2. tools/preflight.py (vollständig)
+python
+ 
+  
+ 
+ 
+FAILS: list[str] = []
+CHECKS = 0
+SKIP_DIRS = {".git", "venv", ".venv", "__pycache__", ".pytest_cache", "dist"}
+
+def check(cond: bool, msg: str) -> None:
+    global CHECKS
+    CHECKS += 1
+    if not cond:
+        FAILS.append(msg)
+
+def read(p: Path) -> str:
+    return p.read_text(encoding="utf-8", errors="replace")
+
+def py_files() -> list[Path]:
+    return [p for p in ROOT.rglob("*.py") if not SKIP_DIRS & set(p.parts)]
+
+def main() -> int:
+    # 1) Python Version
+    check(sys.version_info >= (3, 12),
+          f"Python >= 3.12 erforderlich, gefunden {sys.version.split()[0]}")
+    # 2) Dependencies
+    for mod in ("pydantic", "rfc8785", "cryptography", "yaml", "jsonschema", "pytest"):
+        try:
+            __import__(mod)
+        except Exception:
+            FAILS.append(f"Dependency fehlt oder defekt: {mod}")
+    # 3) Schemas vorhanden und parsebar
+    for name in ("common", "capability", "rpc", "evidence", "experiment",
+                 "profile", "exploit", "surface", "candidate"):
+        p = ROOT / "schemas" / f"{name}.schema.json"
+        if not p.exists():
+            FAILS.append(f"Schema fehlt: {p}"); continue
+        try:
+            json.loads(read(p))
+        except json.JSONDecodeError as e:
+            FAILS.append(f"Schema invalid: {p}: {e}")
+    # 4) Freeze-Code-Konsistenz
+    pool = ROOT / "core" / "rpc" / "pool.py"
+    if pool.exists():
+        src = read(pool)
+        check(src.count("def submit(") == 1,
+              "core/rpc/pool.py: genau eine submit()-Definition erwartet")
+        check("if False else" not in src, "pool.py: alte Semaphore-Interna-Zeile noch aktiv")
+        check("def available_tokens" in src, "pool.py: available_tokens Test-API fehlt")
+    else:
+        FAILS.append("core/rpc/pool.py fehlt")
+    all_py = "\n".join(read(p) for p in py_files())
+    check("_tokens._value" not in all_py, "private Semaphore-Internals im Code/Tests")
+    check("PS4RF CORE" not in all_py, "ungültiger Tag-Name 'PS4RF CORE' (Leerzeichen)")
+    check("capability_grants_from_runs" not in all_py,
+          "alte capability_grants_from_runs Implementierung noch vorhanden")
+    hang = [str(p) for p in py_files() if "class MockHangReleased" in read(p)]
+    check(hang == [str(ROOT / "core" / "rpc" / "hang.py")],
+          f"MockHangReleased exakt einmal in core/rpc/hang.py, gefunden: {hang}")
+    mock_src = "\n".join(read(p) for p in (ROOT / "mock").rglob("*.py")) \
+        if (ROOT / "mock").exists() else ""
+    check('_make_sync_cleanup(""' not in mock_src, "Sync-Cleanup mit leerem Ref")
+    check("host_handshake" in mock_src and "agent_handshake(" in mock_src,
+          "Mock-Agent nutzt nicht die AGENT-Rolle (agent_handshake)")
+    # 5) Gate Runner
+    runner = ROOT / "tools" / "freeze" / "run_gate_suite.py"
+    if runner.exists():
+        rsrc = read(runner)
+        check('TAG = "PS4RF-CORE-1.0-MOCK-READY"' in rsrc, "Runner: falscher Tag-Name")
+        check('"git", "tag", TAG' in rsrc, "Runner setzt Tag nicht programmatisch")
+    else:
+        FAILS.append("tools/freeze/run_gate_suite.py fehlt")
+    # 6) Capability-Katalog: nur dotted Namespaces
+    cat = ROOT / "core" / "capabilities" / "catalog.json"
+    if cat.exists():
+        try:
+            data = json.loads(read(cat))
+            names = data if isinstance(data, list) else data.get("capabilities", [])
+            pat = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$")
+            bad = [n for n in names if not pat.match(str(n))]
+            check(not bad, f"undotted Capability-Namen im Katalog: {bad}")
+        except json.JSONDecodeError as e:
+            FAILS.append(f"catalog.json invalid: {e}")
+    else:
+        FAILS.append("core/capabilities/catalog.json fehlt")
+    # 7) Operation Registry importierbar
+    sys.path.insert(0, str(ROOT))
+    try:
+        from core.rpc.registry import default_registry  # noqa: F401
+        reg = default_registry()
+        check(reg.has("session.ping") and reg.has("mock.hang"),
+              "Registry: Pflicht-Ops fehlen")
+    except Exception as e:
+        FAILS.append(f"Registry nicht importierbar: {type(e).__name__}: {e}")
+    # 8) Profile-Verzeichnisse
+    for fw in ("fw900", "fw1352"):
+        check((ROOT / "profiles" / fw).is_dir(), f"profiles/{fw} fehlt")
+    # Report
+    print(f"PS4RF Pre-Flight: {CHECKS} Checks, {len(FAILS)} Fehler")
+    for f in FAILS:
+        print(f"  FAIL: {f}")
+    print("PRE-FLIGHT: PASS (statisch)" if not FAILS else "PRE-FLIGHT: FAIL")
+    return 0 if not FAILS else 1
+
+if __name__ == "__main__":
+    sys.exit(main())
+ 
+ 
+3. tools/export/build_export.py (vollständig — erzeugt ZIP/TAR/Hashes/Manifest)
+python
+ 
+  
+ 
+ 
+        json.dumps(manifest, indent=2), encoding="utf-8")
+    # 4) Archive (Root-Prefix PS4RF/)
+    zip_path = DIST / "ps4rf-core-1.0-mock-ready-candidate.zip"
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+        z.write(DIST / "SHA256SUMS", f"{PREFIX}/SHA256SUMS")
+        z.write(DIST / "EXPORT-MANIFEST.json", f"{PREFIX}/EXPORT-MANIFEST.json")
+        for rel, p, _h, _s in entries:
+            z.write(p, f"{PREFIX}/{rel}")
+    tar_path = DIST / "ps4rf-core-1.0-mock-ready-candidate.tar.gz"
+    with tarfile.open(tar_path, "w:gz") as t:
+        t.add(DIST / "SHA256SUMS", arcname=f"{PREFIX}/SHA256SUMS")
+        t.add(DIST / "EXPORT-MANIFEST.json", arcname=f"{PREFIX}/EXPORT-MANIFEST.json")
+        for rel, p, _h, _s in entries:
+            t.add(p, arcname=f"{PREFIX}/{rel}")
+    # 5) Report
+    print("\n=== PS4RF EXPORT (CANDIDATE) ===")
+    print(f"Dateien:          {len(entries)}")
+    print(f"ZIP:              {zip_path.name}")
+    print(f"ZIP SHA256:       {sha256_file(zip_path)}")
+    print(f"TAR SHA256:       {sha256_file(tar_path)}")
+    print(f"Manifest:         {DIST / 'EXPORT-MANIFEST.json'}")
+    print("Status: FREEZE_PATCH_APPLIED_NOT_TESTED — NICHT getaggt, NICHT getestet.")
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())
+ 
+ 
+4. .gitignore
+text
+ 
+  
+ 
+ 
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+.env
+credentials*
+*.key
+*.session
+secrets/
+.idea/
+.vscode/
+ 
+ 
+5. Fehlende / Stub-Komponenten (ehrliche Liste)
+text
+ 
+  
+ 
+ 
+STUB:      tools/metasploit/adapter.py, provider.py, mock/msfrpcd_mock.py (nur redact.py FINAL)
+BLOCKED:   OrbisProbe Adapter (echter Code ausstehend — Extractor vorhanden)
+BLOCKED:   Echter ps4rfd (P4), Kernel-Code, Payloads (explizit ausgeschlossen)
+PLANNED:   Ghidra/Rizin/angr/AFL++/Unicorn/Scapy/TShark/mitmproxy/boofuzz Adapter
+PLACEHOLDER: profiles/fw900, profiles/fw1352 (leere Bundles — P5)
+ZU VERIFIZIEREN: datamodel-codegen-Modelle gegen Schemas (erster pytest-Lauf)
+ZU BEFÜLLEN: docs/SOURCE-MANIFEST.md (Datei→Lieferungsrunde; Grundlage:
+             Assemblierungsmanifest aus der Freeze-Antwort §3)
+ 
+ 
+6. Ausführungskette (Hermes, Umgebung mit Python 3.12/pytest/git)
+bash
+ 
+  
+ 
+ 
+git add -A && git commit -m "PS4RF handoff: docs, preflight, export builder"
+python tools/preflight.py          # muss PASS liefern
+python tools/export/build_export.py   # erzeugt dist/: ZIP, TAR, SHA256SUMS, Manifest
+python tools/freeze/run_gate_suite.py # P0: nur dieser Lauf darf den Tag setzen
+ 
+ 
+7. Was hier nicht geliefert werden kann — und der finale Status
+
+Echte Werte für Export ZIP / TAR / deren SHA256 / Dateianzahl / Pre-Flight-Ergebnis entstehen erst im Builder-Lauf (§3) — hier nicht erfindbar. Der Report-Platzhalter wird vom Builder mit echten Werten gefüllt; Anzahl Dateien folgt aus EXPORT-MANIFEST.json.file_count.
+text
+ 
+  
+ 
+ 
+PS4RF HANDOFF PACKAGE READY
+FREEZE PATCH APPLIED
+REAL G1–G8 EXECUTION PENDING
+PS4RF-CORE-1.0-MOCK-READY TAG NOT YET CREATED
+ 
+ 
+
+STOP. Keine OrbisProbe-Implementierung, kein Metasploit-Adapter, kein echter PS4-Agent, kein Kernel-Code, keine Payloads — Hermes übernimmt ab diesem Punkt.

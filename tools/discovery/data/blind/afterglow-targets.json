@@ -1,0 +1,22 @@
+{
+  "schema": "ps4rf.discovery.blind-targets/1",
+  "family": "afterglow",
+  "note": "Extracted from the pinned afterglow-web sources AFTER the 13.52 scan was frozen (see frozen_scan_hash in sprint1-report.json). Nothing here was visible to any detector: no rule keys on kqueue, kevent, knote, fd clone or afterglow naming, and the scanner's subsystem map is only an entry-inventory label. The blind test therefore asks a narrow, falsifiable question: does the generic rule set reach the subsystem at all without being told which subsystem matters?",
+  "extraction": {
+    "source": "afterglow-web@acf25a831725f0d44fcb64725d4ce35acbba8f9d",
+    "citations": [
+      "afterglow.js:41 -- syscall table used by the exploit: getuid 24, kqueue 362, kevent 363, mmap 477, thr_self 432",
+      "afterglow.js:456 -- const q = sc(S.kqueue).i32 (one queue for the whole attempt)",
+      "afterglow.js:466 -- sc(S.kevent, q, ev, 1, 0, 0, 0) arms a unit; the free unit is consumed only when a clone is freed",
+      "afterglow.js:1416-1418 -- 'exit1() also runs knote_fdclose() for every descriptor, and that does not go through fo_close' / 'kqueue_close takes the note array length from ...'"
+    ]
+  },
+  "subsystems": ["kqueue", "vfs", "devfs"],
+  "entries": ["sysent[362]", "sysent[363]", "sysent[477]", "sysent[24]"],
+  "anchors": {
+    "k_jmp_rsi_1352": "0x4d6d0",
+    "anchor_1352": "0xe6c60",
+    "swap_rbp_1352": "0xa80c98"
+  },
+  "expected_shape": "A generic UAF/ownership rule should be able to fire inside the kqueue handler set or its depth-1 callees, because the knote lifecycle is a slot-array lifecycle like the aio one. If nothing fires there while the same rules fire elsewhere, the rule set is aio-shaped and the blind test has failed."
+}

@@ -1,0 +1,13 @@
+{
+  "input": {
+    "sha256": "dfb355acb8fa8a80e5e1e12d381e648999882aa943ad417789418731638b802b",
+    "size": 32
+  },
+  "minimized": {
+    "sha256": "c4986c5d7f9e0497ca09e07bd99975d4172d4484268c3bf7bec83b3e5e04e5ef",
+    "size": 23
+  },
+  "preserved_signature": true,
+  "signature": "0x41414141",
+  "tool": "afl-tmin"
+}

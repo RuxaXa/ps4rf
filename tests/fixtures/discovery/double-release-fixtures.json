@@ -1,0 +1,80 @@
+{
+  "base_rva": "0x1000",
+  "case_notes": {
+    "fixture_d2_base_rebound": "NO_CLAIM: byte-identical slot labels, but the base register is rebound on every path",
+    "fixture_d2_caller_saved_base": "NO_CLAIM: the base register is caller-saved, so the release call itself may clobber it",
+    "fixture_d2_conditional_pair": "both releases on one arm: conditional is not a refusal, the arm frees twice",
+    "fixture_d2_field_positive": "two loads of one untouched object's field with no reset in between",
+    "fixture_d2_field_reset": "NO_CLAIM: the field is reset to NULL after the first release",
+    "fixture_d2_loop_carried": "NO_CLAIM: the aio_multi_delete shape -- two sites inside a loop, the register is reloaded per iteration, so each iteration releases a different object",
+    "fixture_d2_refcount_guarded": "NO_CLAIM: both sites run only when the reference count reached zero, which no single path can observe twice",
+    "fixture_d2_register_positive": "two releases of one callee-saved register, never rewritten between them",
+    "fixture_d2_register_rebound_all_paths": "NO_CLAIM: the same register label holds a different object on every path to the second release"
+  },
+  "cases": {
+    "fixture_d2_base_rebound": "NO_CLAIM",
+    "fixture_d2_caller_saved_base": "NO_CLAIM",
+    "fixture_d2_conditional_pair": "DOUBLE_RELEASE",
+    "fixture_d2_field_positive": "DOUBLE_RELEASE",
+    "fixture_d2_field_reset": "NO_CLAIM",
+    "fixture_d2_loop_carried": "NO_CLAIM",
+    "fixture_d2_refcount_guarded": "NO_CLAIM",
+    "fixture_d2_register_positive": "DOUBLE_RELEASE",
+    "fixture_d2_register_rebound_all_paths": "NO_CLAIM"
+  },
+  "image_hex": "c34889f8c3534889fb4889dfe8efffffff4889dfe8e7ffffff5bc3534889fb4889dfe8d9ffffff4885f674054889f3eb034889d34889dfe8c4ffffff5bc3534889fb488b7b10e8b5ffffff4885f6740190488b7b10e8a6ffffff5bc3534889fb488b7b10e897ffffff48c7431000000000488b7b10e886ffffff5bc3534889fb488b7b10e877ffffff4885f674054889f3eb034889d3488b7b10e861ffffff5bc34889f8488b7810e853ffffff488b7810e84affffffc353415441554989fc4531ed4b8b1cec4885db741f4d85ed750a4889dfe828ffffffeb084889dfe81effffff49ffc54939d572d8415d415c5bc3534889fbb9fffffffff00fc14b2883f90175084889dfe8f5feffffb9fffffffff00fc14b2883f90175084889dfe8defeffff5bc3534889fb4885f674104889dfe8cbfeffff4889dfe8c3feffff5bc3",
+  "image_sha256": "f318310b874820b5feb0517fc660d7ecc21f0511f2dff882f8b78a3e76587cdb",
+  "roots": {
+    "alloc": "0x1001",
+    "free": "0x1000"
+  },
+  "schema": "ps4rf.discovery.double-release-fixtures/1",
+  "source": "double-release-fixtures.S",
+  "source_sha256": "de6d2707b190364d57de4d4dead5ed7be0762848a22a49b836bc29be811c0527",
+  "symbols": {
+    "d2_alloc": {
+      "rva": "0x1001",
+      "size": "0x4"
+    },
+    "d2_free": {
+      "rva": "0x1000",
+      "size": "0x1"
+    },
+    "fixture_d2_base_rebound": {
+      "rva": "0x107c",
+      "size": "0x25"
+    },
+    "fixture_d2_caller_saved_base": {
+      "rva": "0x10a1",
+      "size": "0x16"
+    },
+    "fixture_d2_conditional_pair": {
+      "rva": "0x1124",
+      "size": "0x1b"
+    },
+    "fixture_d2_field_positive": {
+      "rva": "0x103e",
+      "size": "0x1e"
+    },
+    "fixture_d2_field_reset": {
+      "rva": "0x105c",
+      "size": "0x20"
+    },
+    "fixture_d2_loop_carried": {
+      "rva": "0x10b7",
+      "size": "0x39"
+    },
+    "fixture_d2_refcount_guarded": {
+      "rva": "0x10f0",
+      "size": "0x34"
+    },
+    "fixture_d2_register_positive": {
+      "rva": "0x1005",
+      "size": "0x16"
+    },
+    "fixture_d2_register_rebound_all_paths": {
+      "rva": "0x101b",
+      "size": "0x23"
+    }
+  }
+}

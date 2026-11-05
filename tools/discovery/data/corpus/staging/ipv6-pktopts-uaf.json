@@ -1,0 +1,88 @@
+{
+  "id": "ipv6-pktopts-uaf",
+  "name": "IPv6 IPV6_2292PKTOPTIONS setsockopt race — ip6_pktopts use-after-free (CVE-2020-7457)",
+  "role": "training",
+  "burned_reason": "",
+  "platform": [
+    "ps4",
+    "ps5"
+  ],
+  "bug_class": "UAF",
+  "subsystem": "network/ipv6",
+  "root_cause": {
+    "summary": "Setting IPV6_2292PKTOPTIONS on an IPv6 socket installs a heap-allocated `struct ip6_pktopts` reachable from the socket. The set handler consumed and replaced that object (ip6_setpktopt) without synchronization that the free path also respected, so two racing calls could free the ip6_pktopts while the other thread was still parsing or copying it — a use-after-free. The structure carries raw pointers (ip6po_pktinfo), so reclaiming the freed chunk with controlled data turns the stale reference into an attacker-chosen pointer dereference, which is the step from UAF to arbitrary kernel read/write.",
+    "primitive": "race-induced use-after-free of struct ip6_pktopts → overlapping reallocation → controlled ip6po_pktinfo pointer → arbitrary kernel read/write (the PS5 port reports the write as constrained: bytes 0x10–0x14 must be zero or a valid interface)",
+    "trigger": "concurrent setsockopt(IPV6_2292PKTOPTIONS) calls on IPv6 sockets; reachable from the WebKit sandbox on PS4 and from a BD-J chain on PS5",
+    "consequence": "kernel memory corruption leading to privilege escalation; on PS4 it is the kernel stage of the 6.72 chain, on PS5 the public port gets read/write and uid 0 but not code execution because kernel .text is execute-only"
+  },
+  "discovery_approach": {
+    "summary": "TheFlow reported the defect to PlayStation on 2020-03-21 with a PoC that escalates on FreeBSD 9 and FreeBSD 12, and disclosed it on 2020-07-06. FreeBSD independently received the same defect via syzkaller and fixed it on 2020-04-02. Because the same code shipped in the PS5, he filed a second report for PS5 on 2022-01-04 (resolved 2022-03-31) and chained it with a BD-J exploit.",
+    "signals": [
+      "setsockopt handler that frees or replaces a heap object reachable from another thread without holding a lock across the whole replace",
+      "struct copied from a user blob that contains raw kernel pointers (ip6po_pktinfo) and is dereferenced later",
+      "allocate / assign / free-old sequence under M_NOWAIT with no lock assertion on the replaced pointer",
+      "two syscall paths touching the same socket field with no common lock",
+      "same function carries a public FreeBSD CVE (CVE-2020-7457)"
+    ],
+    "blind_usable": false
+  },
+  "firmware": {
+    "affected": [
+      "5.50",
+      "6.51",
+      "6.72",
+      "7.02",
+      "3.00–4.51 (PS5)"
+    ],
+    "fixed_in": "PS4 7.50; PS5 not public (report resolved 2022-03-31, public port supports up to 4.51)",
+    "differences": [
+      "PS4 7.50: the race was closed. PlayStation told the reporter the fix shipped in 7.50 and the reporter confirmed the PoC no longer worked; the concrete change is not public — inference from FreeBSD r359565 for the same CVE is that the pktopts set/replace path was serialised.",
+      "PS4 7.00–7.55: the community exploit matrix lists a different IPv6 memory-safety class ('IPv6 Double Free') for this range instead of the UAF, i.e. the pktopts lifetime handling changed without becoming uniformly safe. No public root cause for that second class was found.",
+      "PS5: the same code shipped in the new console (reported 2022-01-04, resolved 2022-03-31); the fix version is not public, but the public PS5 port stops at 4.51."
+    ]
+  },
+  "patch_evidence": {
+    "available": true,
+    "what": "Vendor statement in the PS4 report that the issue was patched in system software 7.50, confirmed by the reporter's retest; plus FreeBSD advisory SA-20:20 naming the same CVE and the missing synchronization, corrected 2020-04-02 (r359565).",
+    "limits": "no PS4/PS5 diff or firmware bytes; the exact locking change on Orbis is not public."
+  },
+  "sources": [
+    {
+      "url": "https://hackerone.com/reports/826026",
+      "supports": "missing locks in IPV6_2292PKTOPTIONS, ip6_pktopts freed while ip6_setpktopt handles it, ip6po_pktinfo hijack to arbitrary R/W, reachable from the WebKit sandbox, still unpatched at 7.02, fixed in 7.50 and verified by the reporter",
+      "kind": "advisory"
+    },
+    {
+      "url": "https://hackerone.com/reports/1441103",
+      "supports": "PS5 is vulnerable to the same report; used with a BD-J chain; resolved 2022-03-31",
+      "kind": "advisory"
+    },
+    {
+      "url": "https://security.freebsd.org/advisories/FreeBSD-SA-20:20.ipv6.asc",
+      "supports": "same CVE-2020-7457 upstream: the set handler was missing synchronization so racing accesses could modify freed memory; credits syzkaller and Andy Nguyen; corrected 2020-04-02",
+      "kind": "advisory"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/Cryptogenic/PS5-IPV6-Kernel-Exploit/master/README.md",
+      "supports": "PS5 port based on TheFlow's IPv6 UAF (report 1441103), supported firmwares 3.00–4.51, stage 1 'trigger the initial UAF on ip6_pktopts', XOM prevents code execution",
+      "kind": "repo"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/sleirsgoevy/ps4jb/master/README.md",
+      "supports": "the PS4 6.72 full chain uses TheFlow's kernel exploit, credited as HackerOne report 826026",
+      "kind": "repo"
+    },
+    {
+      "url": "https://consolemods.org/wiki/PS4:Exploit_Chart",
+      "supports": "community firmware matrix: 'IPV6 UaF' for 5.50–6.51 and 'IPV6 Double Free' for 7.00–7.55",
+      "kind": "writeup"
+    }
+  ],
+  "confidence": "high",
+  "gaps": [
+    "The exact Orbis fix (which lock, which function) is not public; the FreeBSD change is only an analogue.",
+    "PS5 fix firmware is unknown; 4.51 is the last version the public port claims.",
+    "The 'IPv6 Double Free' class listed for PS4 7.00–7.55 has no public writeup, so its relation to this fix is unknown.",
+    "The PS4 chain's heap-layout and reliability details are in code, not in a public writeup, and were not reconstructed here."
+  ]
+}

@@ -1,0 +1,130 @@
+{
+  "id": "pppwn-sppp-lcp-rcr",
+  "name": "PPPwn — sppp(4) LCP/IPCP Configure-Request option-length heap overflow (CVE-2006-4304 regression)",
+  "role": "training",
+  "burned_reason": "",
+  "platform": [
+    "ps4",
+    "ps5"
+  ],
+  "bug_class": "HEAP_OVERFLOW",
+  "subsystem": "network/ppp",
+  "root_cause": {
+    "summary": "The PPP control-protocol input path (sppp_cp_input) clamps the option area to the length field of the PPP header and hands it to the per-protocol Configure-Request handler. sppp_lcp_RCR and sppp_ipcp_RCR then walk the TLV list with `for (rlen = 0; len > 1 && p[1]; len -= p[1], p += p[1])`, using the attacker-supplied option-length byte p[1] as both the copy size (`bcopy(p, r, p[1])`) and the cursor stride, with no check that p[1] >= 2 or p[1] <= len. The destination is a fresh M_TEMP allocation sized from that same header length field (the report quotes `malloc(len < 6 ? 6 : len, M_TEMP, M_NOWAIT)` in the IPCP handler; the LCP twin carries the same copy/stride pattern) rather than from the option's own length, so an option that declares more bytes than remain in the buffer is copied past the end of the allocation. rlen is incremented by the same unchecked length and passed to sppp_cp_send, so the over-read bytes are also reflected back to the sender in the Configure-Reject.",
+    "primitive": "linear kernel heap overflow with attacker-chosen length and content, paired with an over-read reflected in the CONF_REJ",
+    "trigger": "unauthenticated LCP Configure-Request from a rogue PPPoE server while the console negotiates a PPPoE connection",
+    "consequence": "corruption of the adjacent M_TEMP allocation; in PPPwn a sprayed in6_llentry is overwritten and its linkage fields are pointed back into pppoe_softc, so the kernel's neighbour-solicitation path emits console memory back to the attacker; PPPwn reads the pppoe_softc_list pointer out of that neighbour-solicitation source-link-layer option, derives the KASLR slide, and uses a ROP chain to install a UD handler and map RWX memory for the stage-2 payload."
+  },
+  "discovery_approach": {
+    "summary": "Rediscovery of a 2006 FreeBSD advisory bug in the FreeBSD-derived Orbis kernel: the reporter states the console is 'for some reason' still vulnerable to CVE-2006-4304 and analyses the inherited sppp(4) code. The report was filed with PlayStation's HackerOne program on 2023-09-22 and disclosed 2024-04-25; the weaponised exploit was published as PPPwn in April 2024 with one symbol-offset table per firmware group. The reporter said exploitation details would be given in a TyphoonCon talk, so how the code was located (audit, fuzzing, FreeBSD version diffing) is not in the public record.",
+    "signals": [
+      "TLV parse loop that uses an attacker-controlled length byte as both the copy size and the cursor stride (`len -= p[1], p += p[1]`) with no `p[1] >= 2` / `len >= p[1]` guard",
+      "allocation size derived from a different field than the copy size (`malloc(len ? : len)` from the header length, `bcopy(p, r, p[1])` from the option length)",
+      "bcopy from packet memory into a heap cursor, inside a loop bounded by attacker data",
+      "return length rlen accumulated from the same unchecked field and handed to a send routine (turns the overflow into an info leak)",
+      "source file inherited verbatim from 2006-era FreeBSD sys/net/if_spppsubr.c, whose CVE is public",
+      "the same loop appears repeatedly across the LCP/IPCP/IPv6CP handlers (the 2006 patch rewrites twelve copies), so one rule can flag the whole family"
+    ],
+    "blind_usable": false
+  },
+  "firmware": {
+    "affected": [
+      "7.00",
+      "7.01",
+      "7.02",
+      "7.50",
+      "7.51",
+      "7.55",
+      "8.00",
+      "8.01",
+      "8.03",
+      "8.50",
+      "8.52",
+      "9.00",
+      "9.03",
+      "9.04",
+      "9.50",
+      "9.51",
+      "9.60",
+      "10.00",
+      "10.01",
+      "10.50",
+      "10.70",
+      "10.71",
+      "11.00",
+      "1.00–8.20 (PS5, author statement)"
+    ],
+    "fixed_in": "after 11.00 — not publicly documented; PPPwn has no offsets for any later firmware and community exploit charts stop listing PPPwn at 11.00",
+    "differences": [
+      "7.00 → 11.00: no change to the vulnerable parse is visible in the public record; only kernel symbol addresses move, which is why PPPwn carries a separate offset class per firmware group (700_702, 750_755, 800_803, 850_852, 900, 903_904, 950_960, 1000_1001, 1050_1071, 1100).",
+      "after 11.00: the exploit's firmware table ends and no public source states what Sony changed. Inference only — the sole documented fix for this exact pattern is FreeBSD's 2006 guard (`len >= 2 && p[1] >= 2 && len >= p[1]`); a fork that merged that patch is immune, but whether the PS4 build merged it is not public.",
+      "PS5: the author states PS5 up to 8.20 was vulnerable to the same CVE, but the public PPPwn repository ships PS4 payloads and PS4 offset tables only."
+    ]
+  },
+  "patch_evidence": {
+    "available": false,
+    "what": "No vendor changelog, diff or binary comparison. The only public patch artefact for this code is FreeBSD's 2006 fix, whose added guard is published and rewrites twelve option loops in sys/net/if_spppsubr.c; PlayStation's own change is undocumented.",
+    "limits": "no firmware bytes stored or compared; cannot confirm which PS4 firmware first ships a fixed sppp(4), nor that the console fix matches FreeBSD's."
+  },
+  "sources": [
+    {
+      "url": "https://hackerone.com/reports/2177925",
+      "supports": "unchecked option length used as copy size and stride; heap overwrite and overread in sppp_lcp_RCR / sppp_ipcp_RCR; malloc size influenced via the LCP header; PS4/PS5 impact statement",
+      "kind": "advisory"
+    },
+    {
+      "url": "https://hackerone.com/reports/2177925.json",
+      "supports": "report metadata: submitted 2023-09-22, disclosed 2024-04-25",
+      "kind": "advisory"
+    },
+    {
+      "url": "https://github.com/TheOfficialFloW/PPPwn",
+      "supports": "PPPwn is a PoC for CVE-2006-4304 'up to FW 11.00'; full supported-firmware list; stage 0–4 run log",
+      "kind": "repo"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/TheOfficialFloW/PPPwn/master/pppwn.py",
+      "supports": "weaponisation: ICMPv6 heap grooming, `len=TARGET_SIZE+4` malicious LCP CONF_REQ carrying the fake lle, pppoe_softc leak via sc_ac_cookie, kaslr_offset from pppoe_softc_list, per-firmware offset classes in main()",
+      "kind": "repo"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/TheOfficialFloW/PPPwn/master/stage1/stage1.c",
+      "supports": "confirms which object was corrupted: repairs of the in6_llentry list links and of the nd6_ns_output side effects on pppoe_softc_list",
+      "kind": "repo"
+    },
+    {
+      "url": "https://www.freebsd.org/security/advisories/FreeBSD-SA-06:18.ppp.asc",
+      "supports": "original 2006 advisory: sppp(4) fails to validate LCP option lengths, data read/written beyond the kernel buffer, CVE-2006-4304, announced 2006-08-23",
+      "kind": "advisory"
+    },
+    {
+      "url": "https://security.freebsd.org/patches/SA-06:18/ppp.patch",
+      "supports": "the exact upstream fix: twelve loops rewritten to `len >= 2 && p[1] >= 2 && len >= p[1]`",
+      "kind": "advisory"
+    },
+    {
+      "url": "https://x.com/theflow0/status/1783620012994945437",
+      "supports": "author statement that PS4 (up to 11.00) and PS5 (up to 8.20) were vulnerable to CVE-2006-4304",
+      "kind": "writeup"
+    },
+    {
+      "url": "https://consolemods.org/wiki/PS4:Exploit_Chart",
+      "supports": "community firmware matrix: PPPwn listed for 7.00–11.00, '11.00 firmware is the last version that supports the PPPwn exploit'",
+      "kind": "writeup"
+    },
+    {
+      "url": "https://ironpeak.be/blog/pppwned/",
+      "supports": "secondary narrative of the bug class, the unchecked loop and the FreeBSD guard; used only for context, not for version claims",
+      "kind": "writeup"
+    }
+  ],
+  "confidence": "high",
+  "gaps": [
+    "Role: families/families.json already lists a 'pppwn' family; if rules were derived from that entry, flip this to burned before it is used for anything but training.",
+    "Which firmware first ships a fixed sppp(4) is unknown; Sony's public changelogs contain no driver-level detail.",
+    "No public statement that the PS4 fix is FreeBSD's guard — that equivalence is inference from the shared source file.",
+    "How the bug was located (audit, fuzzing, version diffing) is not public; the author deferred exploitation detail to a conference talk.",
+    "The PS5 claim rests on one author statement; the public repo contains no PS5 payload or offset table.",
+    "FreeBSD's SA-06:18.ppp advisory file prints 'FreeBSD-SA-06:08.ppp' in its own header while the advisory index and URL use 06:18 — cite by URL."
+  ]
+}

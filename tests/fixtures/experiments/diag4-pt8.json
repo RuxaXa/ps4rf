@@ -1,0 +1,36 @@
+{
+  "name": "diag4-pt8",
+  "profile": "fw1352",
+  "version": 1,
+  "provenance": {
+    "source": "W18b measurement-path diagnosis step recipe (PT slot 315, 8 B)",
+    "source_file": "own1-recipe-v2.json",
+    "source_sha256": "ebb963e99e81d7c31168085d3e691b0dd21f6103a4ec9c4676b8a535734e39c9",
+    "note": "diagnosis only, not an oracle recipe; OWN-1 trigger is not part of any step"
+  },
+  "limits": {
+    "max_entries": 16,
+    "max_entry_len": 4096,
+    "max_disp": 4096
+  },
+  "entries": [
+    {
+      "i": 0,
+      "name": "PTSLOT_ROOT",
+      "type": "RVA_READ",
+      "rva": "0x23D4558",
+      "length": 8,
+      "role": "authority"
+    },
+    {
+      "i": 1,
+      "name": "PT_AT315_8",
+      "type": "FOLLOW_ONCE",
+      "root_index": 0,
+      "index_source": "idx_ptslot",
+      "max_index": 378,
+      "length": 8,
+      "role": "level1 slot 315, 8 B"
+    }
+  ]
+}

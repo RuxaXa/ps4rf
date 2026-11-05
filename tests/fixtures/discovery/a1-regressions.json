@@ -1,0 +1,46 @@
+{
+ "base_rva": "0x1000",
+ "image_hex": "c3f0ff4f2883f810e8f3ffffffc3f0ff4f28837f28017505e8e3ffffffc3f0ff4f2883f801e8d6ffffffc38947108b4720c34889c7e8c6ffffffc34889c3e8bdffffffc3488b034889cfe8b1ffffffc3488b03488d7810e8a4ffffffc3",
+ "image_sha256": "67e46eda904d79e239e6bdb8298522c35e473526442c02c98299f5d46f21e051",
+ "schema": "ps4rf.discovery.a1-regressions/1",
+ "source": "a1-regressions.S",
+ "source_sha256": "6f0af4fd65fe0aa8da404aec7c48a63d300aab3f3252666ec497465710afd06a",
+ "symbols": {
+  "guard_equal_one": {
+   "rva": "0x100e",
+   "size": "0x10"
+  },
+  "guard_no_branch": {
+   "rva": "0x101e",
+   "size": "0xd"
+  },
+  "guard_unrelated_cmp": {
+   "rva": "0x1001",
+   "size": "0xd"
+  },
+  "own_fdrop_like": {
+   "rva": "0x1000",
+   "size": "0x1"
+  },
+  "pass_by_lea": {
+   "rva": "0x1050",
+   "size": "0xd"
+  },
+  "pass_in_arg": {
+   "rva": "0x1032",
+   "size": "0x9"
+  },
+  "pass_in_nonarg": {
+   "rva": "0x103b",
+   "size": "0x9"
+  },
+  "pass_other_object": {
+   "rva": "0x1044",
+   "size": "0xc"
+  },
+  "store_vs_load": {
+   "rva": "0x102b",
+   "size": "0x7"
+  }
+ }
+}

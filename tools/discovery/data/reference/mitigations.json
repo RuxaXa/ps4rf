@@ -1,0 +1,154 @@
+[
+  {
+    "id": "ps4-kaslr",
+    "feature": "PS4: kernel ASLR (kASLR)",
+    "first_firmware_seen": "2.xx",
+    "evidence": "S1 Specter (hardwear.io USA 2023), slide bullets: 'No Address Space Layout Randomization (ASLR) at launch' / 'Enabled in 2.xx'. S8 qwertyoruiopz 4.05 writeup: 'kernel ASLR (kASLR) is now enabled past 1.76.' S5 CTurt (1.76 era): 'there is no kernel ASLR, these function addresses are always the same across reboots' (kernel text near 0xffffffff824...).",
+    "confidence": "high",
+    "notes": "The exact 2.xx version is NOT established. '1.76 and below' is the last state with no kASLR proven; '2.xx' is the transition window. Do not collapse to a single version without a new observation. Absence of kASLR at 1.76 is independently corroborated by CTurt's fixed kernel addresses."
+  },
+  {
+    "id": "ps4-smep",
+    "feature": "PS4: supervisor-mode execution prevention (SMEP)",
+    "first_firmware_seen": null,
+    "evidence": "ABSENT. S10 TheFloW, HackerOne #1379975 (tested on 9.00): 'Kernel exploitation becomes trivial as there is no SMEP and one can simply jump to user with a corrupted function pointer.' S1 Specter: 'No Supervisor Mode Access/Execution Prevention (SMAP/SMEP) for its lifespan' and 'Userland memory access from ring0 is allowed.'",
+    "confidence": "high",
+    "notes": "first_firmware_seen is null because the feature never appears in any public source. Coverage is bounded: Specter's talk is July 2023 (PS4 fw ~10.5x), so 'lifespan' safely covers <=10.71; 11.00-14.00 is UNKNOWN, not 'absent'. Treat a PS4 image with SMEP-enforcing code as anomalous and re-check the lineage."
+  },
+  {
+    "id": "ps4-smap",
+    "feature": "PS4: supervisor-mode access prevention (SMAP), hardware or equivalent",
+    "first_firmware_seen": null,
+    "evidence": "ABSENT (hardware). S8 qwertyoruiopz 4.05 writeup: 'the PS4 does not have Supervisor-Mode-Access-Prevention (SMAP)'. S1 Specter: 'No ... SMAP/SMEP for its lifespan'. S9 Cryptogenic notes a *software* stand-in added later, tracked separately as ps4-stack-check.",
+    "confidence": "high",
+    "notes": "null = never in public sources. Distinguish from ps4-stack-check: the 5.0x scheduler check is a software approximation, not CR4.SMAP. Do not model PS4 as having SMAP."
+  },
+  {
+    "id": "ps4-ktext-wp",
+    "feature": "PS4: kernel .text write protection via CR0.WP",
+    "first_firmware_seen": "<=4.05",
+    "evidence": "S8 qwertyoruiopz 4.05: 'We have to disable the write protection on the kernel .text before we can make any patches ... the WP bit at bit 16' (mov cr0 gadget). S9 Cryptogenic 5.05: same 'Disabling Write Protection ... flip the write-protection bit at bit 16' step.",
+    "confidence": "high",
+    "notes": "Present at 4.05 and 5.05; introduction firmware unknown (no test published between 1.76 and 4.05). This is CR0.WP, i.e. ring-0 writes to read-only PTEs fault; it is not SMEP and does not stop execution of user pages."
+  },
+  {
+    "id": "ps4-userland-rwx",
+    "feature": "PS4: userland RWX mapping blocked; JIT via paired RW/RX aliases",
+    "first_firmware_seen": "<=1.76",
+    "evidence": "S5 CTurt: 'there is no way to directly map a RWX virtual page ... sys_jitshm_create and sys_jitshm_alias ... map the first handle as RX, and the alias as RW'; executing a syscall instruction from JIT memory faults. S8 4.05: 'Calling sys_mmap() with the execute flag will succeed; however any attempt to actually execute this memory as code will result in an access violation.'",
+    "confidence": "high",
+    "notes": "Design property present at 1.76 and still enforced at 4.05. Later firmware not separately checked; no source reports it being relaxed."
+  },
+  {
+    "id": "ps4-browser-jit-withdrawn",
+    "feature": "PS4: browser JIT access withdrawn",
+    "first_firmware_seen": "2.00",
+    "evidence": "S18 psdevwiki Internet_Browser: 'JIT: not supported since PS4 System Software 2.00'. S1 Specter: 'JIT memory was accessible to browser due to logic bug until 2.xx FW' and 'Didn't even have to ROP < 2.xx'.",
+    "confidence": "high",
+    "notes": "Two independent sources agree on the 2.00 boundary. Relevant to the userland chain era: browser bugs before 2.00 could reach JIT memory directly; after 2.00 a ROP stage is required."
+  },
+  {
+    "id": "ps4-stack-check",
+    "feature": "PS4: scheduler stack-pointer check against userland addresses ('poor man's SMAP')",
+    "first_firmware_seen": "5.0x",
+    "evidence": "S9 Cryptogenic, PS4 5.05 BPF writeup: 'At some point in 5.0x, it seems Sony added some mitigation into the scheduler to check the stack pointer against userland addresses when running kernel context, similar to the increasingly common Supervisor Mode Access Prevention (SMAP) mitigation ... a simple stack pivot ... into userland memory will crash the kernel.'",
+    "confidence": "high",
+    "notes": "Author hedges the exact version ('at some point in 5.0x'). This is a software check in the scheduler, not CR4.SMAP. It is the reason 5.05 chains use kernel-memory kROP instead of userland stack pivots. Exact first version NOT established."
+  },
+  {
+    "id": "ps4-attack-surface-6xx",
+    "feature": "PS4: attack-surface reduction (driver removal, syscall permission tightening)",
+    "first_firmware_seen": "6.xx",
+    "evidence": "S1 Specter, slide bullets: 'Steadily been improving on both PS4 and by extension PS5' / '6.xx firmwares made huge leaps' / 'Various drivers like USB were removed and syscall permission checking was tightened up'.",
+    "confidence": "medium",
+    "notes": "Single source, range only ('6.xx'); no exact version and no specific driver list. Useful as an era marker, not as a precise mitigation fingerprint."
+  },
+  {
+    "id": "ps4-custom-syscall-block",
+    "feature": "PS4: custom syscall block, no legacy syscalls",
+    "first_firmware_seen": "1.00",
+    "evidence": "S1 Specter, slide bullets: '~ 150 custom syscalls added' / 'No legacy syscalls'. S8 qwertyoruiopz: 'On 1.76, there were 85 custom system calls. On 4.05 ... 120 custom system calls. Sony has also removed system call 0.'",
+    "confidence": "high",
+    "notes": "Counts grow with firmware (85 at 1.76 -> 120 at 4.05), so the custom-syscall count is an era fingerprint, not a constant. Stock FreeBSD maxima for comparison: 545 (stable/9) and 551 (stable/11), verified in S25."
+  },
+  {
+    "id": "ps5-kaslr",
+    "feature": "PS5: kernel ASLR",
+    "first_firmware_seen": "1.00",
+    "evidence": "S1 Specter: 'ASLR and SMAP/SMEP have been enforced since launch.' S11 psdevwiki PS5/Kernel lists the kernel feature set. S21 records kASLR leaks being required for real chains ('a kernel exploit is required to defeat kASLR').",
+    "confidence": "high",
+    "notes": "Launch firmware 1.00 (PS5 released 2020-11). No public source reports a gap or change afterwards."
+  },
+  {
+    "id": "ps5-smep-smap",
+    "feature": "PS5: SMEP + SMAP",
+    "first_firmware_seen": "1.00",
+    "evidence": "S1 Specter: 'ASLR and SMAP/SMEP have been enforced since launch'; 'No SMAP -> objects can be faked in userspace' is stated as a *PS4* property only. S12 ChendoChap mitigation table lists SMEP and SMAP as kernel mitigations ('SMEP will prevent supervisor mode from executing user-space code', SMAP 'extends protection to reads and writes'). S11 lists 'smap' and 'smep' in the PS5 kernel feature list.",
+    "confidence": "high",
+    "notes": "Three independent sources. Consequence for the analyser: a PS5 image should not contain ring-0 paths that dereference user pointers blindly; a PS4-style 'fake object in userland' chain cannot port."
+  },
+  {
+    "id": "ps5-kcfi",
+    "feature": "PS5: clang forward-edge control-flow integrity (kCFI)",
+    "first_firmware_seen": "1.00",
+    "evidence": "S1 Specter: 'Kernel also has software Control Flow Integrity (CFI) ... Bypassable post-R/W on earlier kernels - CFI enforce variable was in data segment and writable - This was fixed sometime in 3.xx kernels.' S12 ChendoChap: PS5 virtual calls are verified ('clang-based CFI'), breaking the PS4 vtable-smash strategy.",
+    "confidence": "high",
+    "notes": "Forward-edge only; no shadow stack, so backward-edge (ROP) remains viable (S12). The enforce-variable fix is dated only to 'sometime in 3.xx' - treat 3.00-3.21 as uncertain."
+  },
+  {
+    "id": "ps5-xom-xotext",
+    "feature": "PS5: eXecute-Only Memory (XOM / XOTEXT, R^X) in userland and kernel",
+    "first_firmware_seen": "1.00",
+    "evidence": "S1 Specter: 'eXecute-Only Memory (XOM) / xotext mitigate ROP ability ... XOM is enforced both in userspace and kernel.' S20 Byepervisor: 'System contains hardware-enforced eXecute-Only Memory (XOM), aka XOTEXT - Attempting to read XOTEXT pages results in a fault - XOTEXT is used in userland (games, apps, libraries) and kernel - These mitigations are enforced by the hypervisor.' S21: kernel .text cannot be written 'because of the XOM protection'.",
+    "confidence": "high",
+    "notes": "This is the single biggest static-analysis obstacle: kernel .text is not readable at ring 0. Kernel text permissions are enforced in nested page tables, so flipping the guest PTE bit has no effect (S20)."
+  },
+  {
+    "id": "ps5-hypervisor",
+    "feature": "PS5: AMD SVM hypervisor (in-kernel at 1.00-2.70, isolated from 3.00)",
+    "first_firmware_seen": "1.00",
+    "evidence": "S20 Byepervisor timeline, slide lines: '1.00 FW / In-kernel hypervisor, first iteration', '3.00 FW / Isolated hypervisor, v2', '5.00 FW / Lots of newer stuff, no known exploits'. S1 Specter: x86 FreeBSD kernel runs as guest; CR0/CR4 writes filtered, EFER NDA/xotext masked, GMET prevents executing user pages in kernel context even if SMEP is bypassed; hypervisor embedded in the kernel on lower firmware, loaded separately later.",
+    "confidence": "high",
+    "notes": "Two talks by the same researcher, consistent. For an image: an embedded HV in 1.00-2.70 vs a separately loaded HV from 3.00 is itself a firmware-era discriminator. PS4 has no hypervisor."
+  },
+  {
+    "id": "ps5-umip",
+    "feature": "PS5: UMIP (user-mode instruction prevention: SGDT/SIDT/SLDT/SMSW/STR)",
+    "first_firmware_seen": "1.00",
+    "evidence": "S11 psdevwiki PS5/Kernel feature list: 'nx bit, smap, smep, umip, nda/xotext (EFER bit 16?)'.",
+    "confidence": "medium",
+    "notes": "Single community-wiki source, no per-version statement and no second source. Listed because UMIP is the only documented GDT/IDT-related protection on either platform. It does NOT protect the IDT from kernel R/W: IDT hijacking remains a working PS5 technique (S20)."
+  },
+  {
+    "id": "ps5-kdata-wp",
+    "feature": "PS5: hypervisor-enforced kernel .data write protection",
+    "first_firmware_seen": "6.00",
+    "evidence": "S21 psdevwiki PS5/Vulnerabilities, 'Kernel .data section write protection (SMAP) bypass via GPU DMA copy': 'Since PS5 System Software version 6.00, attempting to write to kernel .data section results in a kernel panic, as a consequence of Hypervisor protection. However, there exists a workaround as the GPU can write to kernel .data via DMA.'",
+    "confidence": "medium",
+    "notes": "Single source (community wiki) but very specific and dated. Note the workaround: GPU DMA still reaches kernel .data, so this is not a complete write barrier - it breaks CPU-side writes only. 'Maybe since PS5 FW 10.60' the DMA workaround is patched (same source)."
+  },
+  {
+    "id": "ps5-bdjb-requires-kexploit",
+    "feature": "PS5: BD-J sandbox escape requires a kernel exploit",
+    "first_firmware_seen": "6.00",
+    "evidence": "S21 psdevwiki PS5/Vulnerabilities, 'FW >= 6.00 - BD-J native code execution via sandbox escape requires kernel exploitation': 'On PS5 System Software 6.00 and above, in order to escape the BD-J sandbox, a kernel exploit is required.'",
+    "confidence": "medium",
+    "notes": "Attack-surface change, not a CPU mitigation. Changes the required chain shape for 6.00+: usermode-only BD-J escapes no longer reach native code."
+  },
+  {
+    "id": "ps5-usermode-syscall-block",
+    "feature": "PS5: syscall and libkernel access blocked from main usermode applications",
+    "first_firmware_seen": "8.00",
+    "evidence": "S21 psdevwiki PS5/Vulnerabilities, 'FW >= 8.00 - Syscalls and libkernel blocked from main usermode applications': 'Since PS5 System Software version 8.00 ... Sony blocked syscall and libkernel access from the main contenders such as BD-J, WebKit, PS2emu and probably more else all usermode applications.'",
+    "confidence": "medium",
+    "notes": "The same page carries a contradicting editor note ('Is this true? ... Lua exploits and Y2JB have no issue with this so maybe there is a workaround'), so treat as reported-but-disputed. Do not build a hard gate on it."
+  },
+  {
+    "id": "ps5-cr0wp-xom-bypass",
+    "feature": "PS5: CR0.WP / XOM bypass technique closed",
+    "first_firmware_seen": "5.00",
+    "evidence": "S21 psdevwiki PS5/Vulnerabilities, 'CR0.WP and XOM bypass': credits 'sleirsgoevy for proposing it in a PS4 kernel exploit since System Software version 6.51' and 'Specter for adapting it to PS5'; 'Patched: Maybe since PS5 FW 5.00.'",
+    "confidence": "low",
+    "notes": "Both the 'first seen' and the 'patched' values are hedged by the source ('maybe'). Recorded for completeness only; do not use as an era boundary. The PS4-side reference to 'System Software version 6.51' is ambiguous (technique used from 6.51, or mitigation added at 6.51) and is not used elsewhere in this corpus."
+  }
+]

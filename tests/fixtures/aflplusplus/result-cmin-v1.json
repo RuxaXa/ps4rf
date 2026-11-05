@@ -1,0 +1,43 @@
+{
+  "corpus": {
+    "entries": [
+      {
+        "name": "seed0.bin",
+        "sha256": "fc700fd55e6347e711ea0586b240e7b69815ec943a4001fe268c8f46a76cbc5a",
+        "size": 8
+      },
+      {
+        "name": "seed1.bin",
+        "sha256": "4c5a96b8d68b0ae95b2a1a3498fcb841c900c5568939f33efc9e609d8bbfa3a6",
+        "size": 17
+      },
+      {
+        "name": "seed2.bin",
+        "sha256": "232d53dafea1606ef639e78ea5f3d3e6d7a85724281d412c5f4b83865f1d6401",
+        "size": 8
+      },
+      {
+        "name": "seed3.bin",
+        "sha256": "ea4d707227097746bd4c1892311964b576148ac7f5dfb95f9710b860a47a5c21",
+        "size": 8
+      }
+    ],
+    "total": 4
+  },
+  "coverage_total": 8,
+  "dropped": [
+    {
+      "name": "seed1.bin",
+      "reason": "duplicate coverage"
+    },
+    {
+      "name": "seed3.bin",
+      "reason": "no new coverage"
+    }
+  ],
+  "kept": [
+    "seed0.bin",
+    "seed2.bin"
+  ],
+  "tool": "afl-cmin"
+}

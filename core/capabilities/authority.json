@@ -1,0 +1,3 @@
+{
+  "note": "Runtime authority implemented in core.models.capability.default_authority; Hermes should normalize this into data-driven production form."
+}

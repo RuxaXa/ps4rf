@@ -1,0 +1,68 @@
+{
+  "id": "umtx-shm-registry-refcount",
+  "name": "umtx_shm_unref_reg_locked double drop of the registry reference (CVE-2024-43102)",
+  "role": "training",
+  "burned_reason": "",
+  "platform": [
+    "ps5"
+  ],
+  "bug_class": "REFCOUNT",
+  "subsystem": "kernel/umtx (UMTX_OP_SHM)",
+  "root_cause": {
+    "summary": "umtx_shm_unref_reg_locked() unconditionally dropped the reference that ties a umtx_shm_reg to the global registry (USHMF_LINKED). Callers that hold umtx_shm_lock end to end are safe, but umtx_shm() releases the lock between umtx_shm_find_reg() and umtx_shm_unref_reg(true). Two threads issuing _umtx_op(UMTX_OP_SHM | UMTX_SHM_DESTROY) on the same registration can therefore both pass find_reg() and both drop the single registry reference, so the refcount reaches zero while another caller still holds a pointer and the umtx_shm_reg is freed underneath it.",
+    "primitive": "double decrement of a reference count, premature free of umtx_shm_reg, use-after-free",
+    "trigger": "two threads racing _umtx_op with UMTX_OP_SHM and the UMTX_SHM_DESTROY sub-request on the same process-shared mutex registration",
+    "consequence": "kernel panic, or use-after-free leading to arbitrary kernel read/write (the public PS5 jailbreak chains use it for exactly that)"
+  },
+  "discovery_approach": {
+    "summary": "Rebecca Cran filed a crash report on 2023-05-07; Synacktiv analysed the refcount handling and FreeBSD published SA-24:14 / CVE-2024-43102 with a fix on 2024-09-04. A separate write-up circulated on 2024-09-06, and PS5 ports appeared within weeks: fail0verflow built a FreeBSD-11 VM PoC and a C++ PS5 version, flatz produced the Java BD-J implementation, and Specter chained it with PSFree for PS5 1.00-5.50.",
+    "signals": [
+      "a helper that drops a refcount unconditionally while one caller drops the lock before calling it",
+      "the registry link flag (USHMF_LINKED) being cleared by one thread while another still holds the object",
+      "two paths that both call unref(force=true) on the same object after a lookup",
+      "a lock window between lookup and unref in the caller"
+    ],
+    "blind_usable": false
+  },
+  "firmware": {
+    "affected": [
+      "7.61"
+    ],
+    "fixed_in": "8.00",
+    "differences": [
+      "the upstream fix replaces the force flag with a linked_ref parameter: only the caller that actually holds the registry reference drops it, so the object leaves umtx_shm_registry[] once and the double drop between find_reg() and unref_reg(true) is gone",
+      "PS5 8.00 is the first firmware the dev wiki lists as fixed; the FreeBSD correction is dated 2024-09-04. The fetched sources do not show the PS5 patch itself, so whether Sony took the same shape is unknown"
+    ]
+  },
+  "patch_evidence": {
+    "available": true,
+    "what": "FreeBSD-SA-24:14.umtx and commit 62f40433ab47 ('umtx: shm: Fix use-after-free due to multiple drops of the registry reference') publish the full kern_umtx.c diff and a commit message that explains the lock drop between find_reg() and unref_reg(true)",
+    "limits": "this is the FreeBSD 11-era shared ancestor of the PS5 code, not the PS5 binary; the Sony backport is not public and no firmware bytes are stored here"
+  },
+  "sources": [
+    {
+      "url": "https://www.freebsd.org/security/advisories/FreeBSD-SA-24:14.umtx.asc",
+      "supports": "concurrent UMTX_SHM_DESTROY removals decrease the mapping's reference count too many times and free it too early; impact is panic or use-after-free including code execution; CVE-2024-43102; corrected 2024-09-04",
+      "kind": "advisory"
+    },
+    {
+      "url": "https://github.com/freebsd/freebsd-src/commit/62f40433ab47ad4a9694a22a0313d57661502ca1",
+      "supports": "the mechanism and the fix: unref_reg_locked() unconditionally dropped the registry reference tied to USHMF_LINKED, umtx_shm() drops the lock between find_reg() and unref_reg(true), and the patch replaces force with linked_ref so the registry reference is dropped only when held",
+      "kind": "repo"
+    },
+    {
+      "url": "https://www.psdevwiki.com/ps5/Vulnerabilities",
+      "supports": "PS5 affected through 7.61 and fixed since 8.00; the fix description (decrement only if the object is still in the global array / USHMF_REG_LINKED); the list of PS5 implementations",
+      "kind": "writeup",
+      "verified_via": "wayback",
+      "snapshot": "20260709162809"
+    }
+  ],
+  "confidence": "high",
+  "gaps": [
+    "PS4 exposure is not documented in the fetched sources; the PS4 wiki has no umtx entry, so this entry records PS5 only",
+    "the PS5 affected range lower bound is unknown (the wiki section title gives only '<= 7.61')",
+    "the exact PS5 8.00 change is not public; the FreeBSD fix is the shared ancestor, not proof of the console backport",
+    "the wiki's claim that the fix keys on USHMF_REG_LINKED is a paraphrase of the upstream commit, not an observation of PS5 code"
+  ]
+}

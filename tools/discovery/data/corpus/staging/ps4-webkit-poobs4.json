@@ -1,0 +1,102 @@
+{
+  "id": "ps4-webkit-poobs4",
+  "name": "pOOBs4 - WebKit userland to exFAT up-case table overflow",
+  "role": "training",
+  "burned_reason": "",
+  "platform": [
+    "ps4"
+  ],
+  "bug_class": "HEAP_OVERFLOW",
+  "subsystem": "kernel/fs/exfat (entry userland/browser-webkit)",
+  "root_cause": {
+    "summary": "UVFAT_readupcasetable() reads a 64-bit dataLength from the exFAT up-case table entry, computes a sector-rounded table size in 64-bit arithmetic, and passes it to sceFatfsCreateHeapVl(), whose size argument is a 32-bit int. A dataLength above 4 GiB truncates the allocation (for example 0x100000200 becomes 0x200) while UVFAT_ReadDevice keeps reading dataLength bytes into the buffer, producing a linear heap overflow of attacker-controlled table data in sector-size multiples.",
+    "primitive": "64-bit to 32-bit truncation at the allocator boundary, followed by a linear heap overflow of attacker-controlled file content",
+    "trigger": "insert a crafted exFAT USB image when the WebKit stage prompts for it",
+    "consequence": "kernel heap corruption; with heap shaping the public exploit reaches kernel ROP and kernel patching"
+  },
+  "discovery_approach": {
+    "summary": "The exFAT truncation was found by TheFloW and reported on 2021-09-15 (HackerOne #1340942, disclosed 2022-09-21). After 9.03 shipped, zecoxao diffed the 9.00 and 9.03 kernels and advised the scene to exploit it; ChendoChap, Znullptr and Specter released pOOBs4 on 2021-12-13. pOOBs4's userland stage is sleirsgoevy's bad_hoist 9.00 WebKit exploit, modified to gain ROP; the kernel stage waits for the user to insert the crafted USB image.",
+    "signals": [
+      "UVFAT_readupcasetable computes a 64-bit size and passes it to a callee whose prototype declares a 32-bit int size",
+      "UVFAT_ReadDevice advances the destination pointer by sector size for dataLength bytes without a bound derived from the allocation",
+      "no upper-bound check on the up-case table length",
+      "the pOOBs4 split between webkit.js (userland) and kexploit.js (kernel) shows the two entry stages"
+    ],
+    "blind_usable": false
+  },
+  "firmware": {
+    "affected": [
+      "1.01-9.00"
+    ],
+    "fixed_in": "9.03 (PS4) / 4.50 (PS5)",
+    "differences": [
+      "9.03 adds `if (table_len >> 0x20 == 0)` before sceFatfsCreateHeapVl, so a table length above 4 GiB is rejected instead of silently truncated (PS4 wiki).",
+      "The block-size field moves from fileSystem+0x104 in 1.01-9.00 to fileSystem+0x4c in 9.03-13.50, a structure-layout change that accompanies the fix (PS4 wiki)."
+    ]
+  },
+  "patch_evidence": {
+    "available": true,
+    "what": "the HackerOne report gives the vulnerable C body and the truncation example; the PS4 dev wiki quotes the pre-9.03 and 9.03+ pseudo-code with the added upper-32-bit check",
+    "limits": "the wiki pseudo-code is a transcription, not a vendor patch; no firmware bytes are stored here"
+  },
+  "sources": [
+    {
+      "url": "https://hackerone.com/reports/1340942",
+      "supports": "64-bit dataLength/size truncated by the 32-bit sceFatfsCreateHeapVl argument; the 0x100000200 -> 0x200 example; sector-multiple overflow; USB exFAT trigger; kernel code execution impact",
+      "kind": "advisory"
+    },
+    {
+      "url": "https://github.com/ChendoChap/pOOBs4",
+      "supports": "9.00 kernel exploit; bug found by diffing 9.00 and 9.03; requires a modified exFAT USB image; credits sleirsgoevy's 9.00 WebKit exploit; fixed in 9.03; bug predates 1.00",
+      "kind": "repo"
+    },
+    {
+      "url": "https://www.psdevwiki.com/ps4/Vulnerabilities",
+      "supports": "CVE-2022-3349 mapping, affected 1.01-9.00, fixed 9.03 / PS5 4.50, and the before/after UVFAT_readupcasetable pseudo-code with the table_len >> 0x20 check",
+      "kind": "writeup"
+    },
+    {
+      "url": "https://github.com/sleirsgoevy/bad_hoist",
+      "supports": "the PS4 WebKit bad_hoist implementation, loaded from the PS4 web browser, which is the userland stage used for 9.00",
+      "kind": "repo"
+    },
+    {
+      "url": "https://github.com/ChendoChap/PS5-Webkit-Execution",
+      "supports": "states that the Project Zero report was actually CVE-2021-30889 (not CVE-2021-30858) and that the PoC was modified to gain ROP on 9.00 for pOOBs4, documenting the naming conflict",
+      "kind": "repo"
+    }
+  ],
+  "confidence": "high",
+  "gaps": [
+    "The WebKit CVE naming is inconsistent: ConsoleMods says CVE-2021-30858, while ChendoChap's PS5 writeup says the Project Zero report was actually CVE-2021-30889; both readings are recorded, not resolved.",
+    "The exact 9.00 WebKit bug and its offsets are not documented in the pOOBs4 repository.",
+    "The PS5 4.50 fix comes from the wiki; no public PS5 exploitation strategy for this bug was fetched."
+  ],
+  "entry_chain": [
+    {
+      "stage": "PS4 browser loads the exploit page; sleirsgoevy's bad_hoist WebKit exploit gives arbitrary read/write and ROP in the browser process",
+      "image_visible": "the WebKit/userland binaries are outside the kernel image; the kernel image shows the syscall table used by the ROP bridge",
+      "runtime_only": "the exact WebKit bug/offsets and the browser process state"
+    },
+    {
+      "stage": "The page prompts the user and waits while the USB device is inserted",
+      "image_visible": "the pOOBs4 index.html/webkit.js flow is in the repository; no kernel-image signal",
+      "runtime_only": "the timing of the insertion relative to the mount attempt"
+    },
+    {
+      "stage": "The kernel exFAT handler parses the crafted up-case table and truncates the 64-bit size to 32 bits",
+      "image_visible": "UVFAT_readupcasetable, the 64-bit arithmetic and the 32-bit sceFatfsCreateHeapVl argument are in the kernel image",
+      "runtime_only": "the actual dataLength, sector size and heap layout"
+    },
+    {
+      "stage": "UVFAT_ReadDevice overflows the undersized buffer with attacker-controlled table data",
+      "image_visible": "the copy loop and the allocation are in the kernel image",
+      "runtime_only": "which adjacent object is reclaimed and how the heap is shaped"
+    },
+    {
+      "stage": "Kernel ROP/patching from the corrupted heap",
+      "image_visible": "the kernel image contains the ROP gadgets and the patch targets",
+      "runtime_only": "the KASLR slide, gadget addresses and the final patch sequence"
+    }
+  ]
+}

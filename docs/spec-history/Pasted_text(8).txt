@@ -1,0 +1,977 @@
+PS4RF v0.8 — Freeze Blockers B1–B14
+
+Kein v0.9, keine neuen Features. Nur die 14 benannten Blocker. Danach Tag oder Testversagen.
+§1 B1+B2+B3 — BoundedPool und Worker-Lifecycle (ersetzen v0.8 §6 vollständig)
+python
+ 
+  
+ 
+ 
+"""B1: kein Lock-in-Lock. B2: Lifecycle über äußeres finally.
+        self._threads = [threading.Thread(target=self._worker,
+                                          name=f"ps4rf-worker-{i}", daemon=False)
+                         for i in range(size)]
+        for t in self._threads:
+            t.start()
+
+    @property
+    def poisoned(self) -> bool:
+        with self._lock:
+            return self._poisoned
+
+    def submit(self, rid: str, op: str, fn) -> str:
+        with self._lock:
+            if self._poisoned:
+                return "POISONED"
+        # B1: ausschließlich öffentliche API, kein Semaphore-Interna-Zugriff
+        if not self._tokens.acquire(blocking=False):
+            return "TOO_MANY_INFLIGHT"
+        with self._lock:
+            self._tasks[rid] = {"state": TaskState.QUEUED, "op": op}
+        self._queue.put((rid, op, fn))
+        return "OK"
+
+    def _finalize(self, rid: str) -> bool:
+        """Idempotent. NUR aufrufen, wenn self._lock NICHT gehalten wird (B1)."""
+        with self._lock:
+            if self._tasks.pop(rid, None) is not None:
+                self._tokens.release()
+                return True
+            return False
+
+    def finish(self, rid: str) -> None:
+        self._finalize(rid)                              # Worker-finally (B2)
+
+    def poison(self, reason: str) -> tuple[list[dict], list[str]]:
+        with self._lock:
+            self._poisoned = True
+            in_flight = [{"request_id": rid, "operation": t["op"],
+                          "status": "IN_FLIGHT_AT_RECOVERY"}
+                         for rid, t in self._tasks.items()
+                         if t["state"] is TaskState.RUNNING]
+            queued = [rid for rid, t in self._tasks.items()
+                      if t["state"] is TaskState.QUEUED]
+            for rid in queued:
+                self._tasks[rid]["state"] = TaskState.CANCELED_AT_RECOVERY
+            return in_flight, queued
+
+    def _worker(self) -> None:
+        while True:
+            item = self._queue.get()
+            try:                                         # B3: task_done IMMER
+                if item is self.SENTINEL:
+                    return
+                rid, op, fn = item
+                with self._lock:                         # Entscheidung UNTER Lock
+                    task = self._tasks.get(rid)
+                    if task is None:
+                        continue                         # bereits finalisiert
+                    canceled = task["state"] is TaskState.CANCELED_AT_RECOVERY
+                    if not canceled:
+                        task["state"] = TaskState.RUNNING
+                # B1: Lock FREIGEBEN vor finalize — kein _finalize() im with-Block
+                if canceled:
+                    if self._finalize(rid) and self._on_canceled:
+                        self._on_canceled(rid, op)
+                    continue
+                try:
+                    fn(rid, op)
+                except BaseException as e:               # B2/B11 Fail-Safe:
+                    # Worker-Thread darf NIE sterben (Thread-Leak)
+                    self._on_worker_crash = getattr(self, "_on_worker_crash", None)
+                    if self._on_worker_crash:
+                        self._on_worker_crash(rid, op, type(e).__name__)
+            finally:
+                self._queue.task_done()
+
+    def has_pending(self) -> bool:
+        with self._lock:
+            return bool(self._tasks)
+
+    def shutdown(self, cancel_queued: bool = True,
+                 wait_running: bool = False,
+                 cancel_cb: Optional[Callable[[str, str], None]] = None) -> None:
+        if cancel_queued:
+            while True:                                  # Drain inkl. task_done (B3)
+                try:
+                    item = self._queue.get_nowait()
+                except queue.Empty:
+                    break
+                try:
+                    if item is self.SENTINEL:
+                        continue
+                    rid, op, _fn = item
+                    if self._finalize(rid) and cancel_cb:
+                        cancel_cb(rid, op)
+                finally:
+                    self._queue.task_done()
+        for _ in self._threads:
+            self._queue.put(self.SENTINEL)
+        if wait_running:
+            for t in self._threads:
+                t.join(timeout=5.0)
+ 
+ 
+
+B2 — Agent-Worker-Pfad mit äußerem finally:
+python
+ 
+  
+ 
+ 
+    def _worker_run(self, rid: str, op: str, req: dict) -> None:
+        suppress_response = False
+        resp = None                                       # B2: immer definiert
+        try:
+            try:
+                resp = self.dispatch(rid, op, req.get("arguments", {}))
+            except MockHangReleased:                      # F8/B8(v0.7)
+                self._evidence.append({"request_id": rid, "operation": op,
+                                       "result": "HANG", "response": "NO_RESPONSE"})
+                suppress_response = True
+            except BudgetExceeded as e:                   # F17
+                self._abort_on_budget(rid, str(e))
+                suppress_response = True
+            except Exception as e:
+                if self._pool.poisoned or self._aborted:
+                    self._evidence.append({"request_id": rid, "operation": op,
+                                           "result": "UNEXPECTED_AT_POISON",
+                                           "exception": type(e).__name__})
+                    suppress_response = True              # Evidence only
+                else:
+                    resp = {"status": "ERROR", "error": {
+                        "code": "INTERNAL_ERROR", "message": type(e).__name__}}
+            if not suppress_response:
+                self._respond(rid, op, resp)
+        finally:                                          # B2: JEDER Pfad
+            self._pool.finish(rid)                        # Token exakt einmal
+            self._reqs.complete(rid)
+ 
+ 
+
+Regressionen B2: hang release → kein Response und kein pending RID; budget abort → kein pending RID; exception during dispatch → kein pending RID; poison during operation (_respond bricht ab) → kein pending RID. Invariante: _finalize ist idempotent, complete ebenfalls — Doppelaufruf unmöglich schädlich.
+§2 B4 — Gate bleibt manuell
+python
+ 
+  
+ 
+ 
+    def arrive(self, participant_id: str) -> int:
+        with self._cond:
+            if self._destroyed: raise GateDestroyed()
+            if participant_id in self._participants:
+                raise ResourceStateInvalid("duplicate participant arrival")
+            self._participants.add(participant_id)
+            self._cond.notify_all()        # nur für status-Poller
+            return len(self._participants)  # B4: KEIN auto-release
+    # Einzige Freigabe: sync.gate.release → release() → _released=True.
+    # "Recovery" als Warte-Ende manifestiert sich über destroy() durch
+    # Sync-Cleanup → waiter sehen RESOURCE_DESTROYED (kein neuer Zustand).
+ 
+ 
+
+Barrier bleibt automatisches Rendezvous (auto-open bei eindeutigen expected-participants) — definitorischer Unterschied Barrier/Gate ist damit im Code sichtbar.
+
+TOCTOU-Regression (fest im Test): A: CHECK; arrive("A"); wait() — hängt. B: pollt status.arrived_count == 1, MUTATE, asserted A steht weiterhin, release(). Erst jetzt wait() von A kehrt mit RELEASED zurück, USE.
+§3 B5+B6 — Handshake-Rollen endgültig
+
+Rollenzuordnung (normativ, unabh. von TCP connect/accept):
+text
+ 
+  
+ 
+ 
+ps4rfd / MockAgent = AGENT:  send HELLO → recv HELLO_ACK → send AUTH → recv AUTH_ACK
+ps4rfctl / Host    = HOST:   recv HELLO → send HELLO_ACK → recv AUTH → send AUTH_ACK
+ 
+ 
+python
+ 
+  
+ 
+ 
+# Umbenennung in handshake.py:
+def agent_handshake(ep, secret, agent_hello) -> tuple[HandshakeKeys, dict]:
+    """AGENT-Rolle. Identisch für Agent-als-TCP-Client und Agent-als-TCP-Server."""
+def host_handshake(ep, secret, host_hello_ack) -> tuple[HandshakeKeys, dict]:
+    """HOST-Rolle. host_hello_ack = ACK-Inhalt inkl. limits (Host entscheidet)."""
+ 
+ 
+
+MockAgent (korrigiert — v0.8 hatte fälschlich die HOST-Rolle):
+python
+ 
+  
+ 
+ 
+        agent_hello = self._build_agent_hello()           # AGENT-seitig gebaut
+        keys, host_hello_ack = agent_handshake(ep, self.secret, agent_hello)
+        limits = host_hello_ack["limits"]                 # B6: aus authentisiertem ACK
+        self._limits = limits                             # KEIN DEFAULT_LIMITS
+ 
+ 
+
+Host-CLI:
+python
+ 
+  
+ 
+ 
+        keys, agent_hello = host_handshake(ep, secret, host_hello_ack)
+        limits = host_hello_ack["limits"]                 # dasselbe Objekt
+ 
+ 
+
+MockAgent._build_hello_ack und DEFAULT_LIMITS werden entfernt (Host-Verhalten im Agent war die Rollenverletzung). Die Limits baut der Host (Test-Harness/ps4rfctl); beide Seiten arbeiten nach dem Handshake exakt auf dem authentisierten host_hello_ack["limits"]-Objekt. Transcript bleibt SHA256(JCS(agent_hello) || JCS(host_hello_ack)).
+
+Tests: Agent-als-TCP-Client und Agent-als-TCP-Server (socketpair-Stubs + echte Sockets im Integrationstest) → Agent sendet semantisch HELLO, Host HELLO_ACK, identischer transcript_hash; test_mock_agent_uses_agent_handshake_role / test_host_uses_host_handshake_role prüfen die Funktionswahl direkt.
+§4 B7+B8 — Verification Fixtures und provider_type-Binding
+
+B8 — StoredEvidence erweitert:
+python
+ 
+  
+ 
+ 
+class StoredEvidence(StrictModel):
+    ...
+    provider_type: ProviderType = ProviderType.EXPLOIT   # B8: authority-relevant
+    ...
+_STORED_FIELDS = ("run_id", "operation", "outcome", "capability", "provider",
+                  "provider_type", "profile_sha256", "context", "scope",
+                  "session_id", "boot_id", "expected", "observed")
+# _content_matches prüft provider_type mit — derselbe Evidence-Inhalt kann
+# nicht nachträglich unter anderer Provider-Klasse interpretiert werden.
+ 
+ 
+
+B7 — Userland-Fixture konsistent + Negativ-Test:
+python
+ 
+  
+ 
+ 
+def test_f1_userland_observed_then_verified_becomes_proven():
+    store = InMemoryEvidenceStore()
+    st = store.put(_stored(capability="userland.exec",
+                           operation="verify.userland.exec",
+                           provider="exploit.webkit_x",           # B7: konsistent
+                           run_id=VERIFY, evidence_ref=EvidenceRef(run_id=VERIFY)))
+    m = _Manifest(); m.name = "exploit.webkit_x"
+    m.provides = [CapabilityGrant(capability="userland.exec",
+                                  verify_operation="verify.userland.exec")]
+    rec = grant_from_verification(
+        _verification(capability="userland.exec", operation="verify.userland.exec",
+                      provider="exploit.webkit_x",                # B7
+                      evidence_sha256=st.canonical_sha256),
+        "userland.exec", m, TRIGGER, default_authority(),
+        default_registry(), store, CapabilityIntake("SES-A", "BOOT-1"))
+    assert rec.assurance is Assurance.PROVEN
+
+def test_provider_binding_userland_fixture():                     # B7 Negativ
+    store = InMemoryEvidenceStore()
+    st = store.put(_stored(provider="exploit.kernel_xyz"))        # Evidence anderes Exploit
+    with pytest.raises(VerificationRejection) as e:
+        grant_from_verification(
+            _verification(evidence_sha256=st.canonical_sha256),
+            CAP, _Manifest(), TRIGGER, default_authority(),      # Manifest webkit... kernel_xyz
+            default_registry(), store, CapabilityIntake("SES-A", "BOOT-1"))
+    assert e.value.reason == "PROVIDER_MISMATCH"
+
+def test_provider_type_evidence_binding():                        # B8
+    store = InMemoryEvidenceStore()
+    st = store.put(_stored(provider_type=ProviderType.RUNTIME_PROBE))
+    with pytest.raises(VerificationRejection) as e:
+        grant_from_verification(
+            _verification(evidence_sha256=st.canonical_sha256,
+                          provider_type=ProviderType.EXPLOIT),    # behauptet anders
+            CAP, _Manifest(), TRIGGER, default_authority(),
+            default_registry(), store, CapabilityIntake("SES-A", "BOOT-1"))
+    assert e.value.reason == "EVIDENCE_CONTENT_MISMATCH"
+ 
+ 
+§5 B9 — Merge-Tests ohne invalide Records
+
+Unit-Tests auf synthetischen Resolution-Objekten:
+python
+ 
+  
+ 
+ 
+def _res(name, avail, assur, a_factor=AxisFactor.PROVIDER_AUTHORITY):
+    return Resolution(name, avail, assur,
+                      AxisResolution(avail.value, a_factor),
+                      AxisResolution(assur.value, AxisFactor.EVIDENCE_RANK))
+
+# Die fünf B4-Fälle (v0.8 §4) verwenden _res(...) statt Record-Bau:
+def test_f4_boot_available_session_unknown():
+    r = merge_boot_session(CAP, CTX, "BOOT-1", "SES-A",
+                           _res(CAP, Availability.AVAILABLE, Assurance.UNVERIFIED),
+                           _res(CAP, Availability.UNKNOWN, Assurance.UNVERIFIED,
+                                AxisFactor.NO_RECORD))
+    assert r.availability is Availability.AVAILABLE
+# ... (übrige vier analog, inkl. NO_RECORD-Session via _res mit NO_RECORD)
+ 
+ 
+
+Separater Integrationstest nur mit gültigen Records: PROVEN-BOOT-Record wird regulär erzeugt — grant_from_verification mit scope=Scope.BOOT, session_id=None, non-privileged userland.exec, Intake CapabilityIntake(None, "BOOT-1") (F1: non-privileged, EXPLOIT-Ceiling PROVEN → PROVEN, evidence gesetzt). SESSION-Seite via Probe-Record OBSERVED. Merge dann über echte resolve()-Ergebnisse. Keine FIRMWARE_PROFILE-mit-PROVEN-Fixtures mehr.
+§6 B10 — Frame Reject ohne Sequence-Verbrauch
+python
+ 
+  
+ 
+ 
+    def seal(self, message_type: str, plaintext: bytes) -> tuple[int, bytes]:
+        # B10: Limit VOR Sequence-Zuweisung und VOR Encryption
+        if len(plaintext) + TAG_LEN > self._max_frame_bytes:
+            raise FrameLimitExceeded(
+                f"plaintext {len(plaintext)} + tag {TAG_LEN} > "
+                f"max_frame_bytes {self._max_frame_bytes}")
+        if self._send > LAST_SEQ:
+            raise SequenceExhausted()
+        seq = self._send
+        ct = self._aead.encrypt(self._nonce(seq), plaintext,
+                                self._aad(seq, message_type))
+        self._send += 1
+        return seq, ct
+
+def test_oversized_send_does_not_consume_sequence():
+    s = _session(); a, b = _pair(s, max_frame_bytes=1024)
+    with pytest.raises(FrameLimitExceeded):
+        a.seal("REQUEST", b"x" * (1024 - 15))
+    seq, ct = a.seal("REQUEST", b"ok")               # seq == erwarteter Wert
+    assert seq == 0 and b.open("REQUEST", seq, ct) == b"ok"
+ 
+ 
+
+max_plaintext_frame_bytes = max_frame_bytes - TAG_LEN bleibt normativ; Budget zählt Plaintext (unverändert).
+§7 B11 — Request-Header-Härtung
+python
+ 
+  
+ 
+ 
+class RpcRequestHeader(StrictModel):
+    protocol_version: Literal[1]                      # B11
+    session_id: SessionId                             # typisiert (Pattern)
+    request_id: RequestId                             # ^REQ-[0-9a-f]{32}$ class RpcRequestBody(StrictModel):
+    operation: OperationName
+    arguments: dict = Field(default_factory=dict)     # B11: kein mutable default
+
+# Nach Parse, VOR Registry/Dispatch:
+        if req.header.session_id != self._session_id or \
+                req.header.protocol_version != self._protocol_version:
+            raise ProtocolError("request header session/protocol mismatch")
+ 
+ 
+
+Tests: test_request_header_wrong_session_rejected, test_request_header_wrong_protocol_rejected — beide → PROTOCOL_ERROR, sauberer Close, kein Dispatch.
+§8 B12 — Sync-Registry-Cleanup atomar
+python
+ 
+  
+ 
+ 
+    def _make_sync_cleanup(self, ref: str, registry: dict, obj) -> Callable[[], bool]:
+        """B12: Registry-Eintrag UND Objekt atomar entfernen/wecken."""
+        def cleanup() -> bool:
+            with self._agent_lock:
+                registry.pop(ref, None)
+                obj.destroy()                          # Waiter → DESTROYED
+                return True
+        return cleanup
+
+        if op_name == "sync.gate.create":
+            gate = Gate(int(args["parties"]))
+            ref = self.resources.acquire("gate", cleanup=self._make_sync_cleanup(
+                "", self._gates, gate))                # ref erst danach bekannt:
+            # → acquire liefert ref, Callback wird mit ref gebunden:
+            self.resources.attach_cleanup(ref, self._make_sync_cleanup(ref, self._gates, gate))
+            with self._agent_lock:
+                self._gates[ref] = gate
+            return {"status": "OK", "result": {"gate": ref}}
+# Nach Cleanup: jede Op auf dem Ref → RESOURCE_STATE_INVALID
+# (Registry-Eintrag weg, kein stale destroyed object zugreifbar).
+ 
+ 
+
+ResourceManager.attach_cleanup(ref, cb) ist keine neue Capability, sondern die schon durch F10 geforderte Callback-Anbindung, jetzt auch nachträglich setzbar für Ref-gebundene Objekte. Test test_sync_cleanup_removes_registry_entry: destroy über Session-Cleanup → _gates leer → sync.gate.status auf Ref → RESOURCE_STATE_INVALID.
+§9 B13 — Freeze-Test-Matrix
+Test
+	
+Erwartung
+	
+Ort
+test_pool_cancel_no_recursive_lock_deadlock	canceled Task finalisiert unter join(timeout=2), kein Hang	test_pool.py
+test_every_worker_exit_releases_token	nach N Submissions (erfolgreich/exception/hang-release/cancel) Semaphore-Wert == max	test_pool.py
+test_every_worker_exit_completes_request_id	_reqs leer nach denselben Pfaden	test_pool.py
+test_queue_unfinished_tasks_zero_after_shutdown	queue.unfinished_tasks == 0 inkl. Sentinel- und Drain-Pfad	test_pool.py
+test_gate_does_not_auto_release_on_expected	expected erreicht → wait(timeout) → TIMEOUT, status.released False	test_gate.py
+test_gate_only_release_opens_waiters	erst release() → RELEASED	test_gate.py
+test_mock_agent_uses_agent_handshake_role	Mock ruft agent_handshake	test_handshake_roles.py
+test_host_uses_host_handshake_role	CLI ruft host_handshake	test_handshake_roles.py
+test_provider_binding_userland_fixture	§4	test_verification.py
+test_provider_type_evidence_binding	§4	test_verification.py
+test_oversized_send_does_not_consume_sequence	§6	test_framing.py
+test_request_header_wrong_session_rejected	§7	test_framing.py
+test_request_header_wrong_protocol_rejected	§7	test_framing.py
+test_sync_cleanup_removes_registry_entry	§8	test_sync.py
+TOCTOU-Gate-Regression B4	A bleibt bis release stehen	test_gate.py
+ 
+ 
+§10 B14 — Freeze-Entscheidung
+text
+ 
+  
+ 
+ 
+Wenn G1–G8 (v0.8) UND alle B13-Tests grün sind:
+
+    git tag PS4RF CORE 1.0-MOCK-READY
+
+Danach: Core eingefroren. Keine weitere Architekturreview-Runde — auch
+keine "kurzen Verbesserungen". Änderungen nur noch als Reaktion auf einen
+echten Integrationsbefund, je Befund ein Changelog-Eintrag mit Referenz.
+
+Unmittelbar danach, ohne weitere Core-Arbeit:
+  1. OrbisProbe Inventory   (Code weiterhin ausstehend — drei Wege aus v0.3 §10:
+     Dateien einfügen / Archiv liefern / Extraktor tools/inventory/
+     extract_orbisprobe_inventory.py lokal ausführen und Draft zurückspielen)
+  2. OrbisProbe Mapping
+  3. OrbisProbe Adapter gegen Mock
+  4. Metasploit Adapter gegen Mock msfrpcd
+  5. Ghidra / 6. Rizin / 7. angr / 8. AFL++ Adapter
+
+Weiterhin: kein echter PS4 Agent, kein Kernel Code, keine Payloads.
+ 
+ 
+Status
+
+B1–B12 sind als Code-Deltas vollständig ausgearbeitet und konsistent mit dem Freeze-Auftrag (keine neuen Features; attach_cleanup ist Mechanismus-Komplettierung von F10). Offene Punkte, die die Freeze-Suite beim ersten Lauf entscheiden muss: (1) Das Drain-Rennen zwischen shutdown()-Drain und Worker-Dequeue bleibt bewusst über die _finalize-Idempotenz + task_done-Accounting gelöst — test_queue_unfinished_tasks_zero_after_shutdown ist der harte Beweis; (2) MockHangReleased-Exception-Typ muss aus einem Modul kommen, das dispatch und _worker_run gemeinsam importieren, damit der except-Pfad garantiert greift. Wenn die Suite grün ist, wird getaggt und OrbisProbe Inventory ist der nächste Arbeitsauftrag — dafür brauche ich den OrbisProbe-Code über einen der drei Wege aus v0.3 §10.
+    
+     
+ 
+  
+ 
+v0.8 Architektur ist akzeptiert.
+
+Kein v0.9 und keine neuen Features.
+
+Vor dem Tag PS4RF CORE 1.0-MOCK-READY nur noch folgende Freeze Blocker korrigieren.
+
+1. BoundedPool Deadlock entfernen
+
+Aktuell ruft `_worker()` innerhalb:
+
+with self._lock:
+
+`_finalize()`
+
+auf, das denselben nicht reentranten Lock erneut nimmt.
+
+Das deadlockt.
+
+Canceled Entscheidung unter Lock treffen, Lock verlassen und erst danach `_finalize()` aufrufen.
+
+Beispielsemantik:
+
+with lock:
+    state = ...
+
+if canceled:
+    finalized = _finalize(...)
+    if finalized:
+        on_canceled(...)
+    continue
+
+Kein interner Aufruf einer Lock nehmenden Methode während derselbe Lock gehalten wird.
+
+Die aktuelle Token Acquire Zeile ebenfalls vereinfachen.
+
+Nicht:
+
+if not self._tokens._semaphore.acquire(...) if False else ...
+
+sondern ausschließlich öffentliche API:
+
+if not self._tokens.acquire(blocking=False):
+    return TOO_MANY_INFLIGHT
+
+2. Worker Lifecycle wirklich mit äußerem finally absichern
+
+Aktuell verlassen:
+
+MockHangReleased
+BudgetExceeded
+UNEXPECTED_AT_POISON
+
+den Worker per return bevor:
+
+pool.finish(rid)
+reqs.complete(rid)
+
+erreicht wird.
+
+Neue Struktur:
+
+def _worker_run(...):
+    suppress_response = False
+    try:
+        try:
+            resp = dispatch(...)
+        except MockHangReleased:
+            evidence HANG/NO_RESPONSE
+            suppress_response = True
+        except BudgetExceeded:
+            abort_on_budget(...)
+            suppress_response = True
+        except Exception:
+            ...
+        if not suppress_response:
+            respond(...)
+    finally:
+        pool.finish(rid)
+        reqs.complete(rid)
+
+Token und Request ID werden auf JEDEM Pfad exakt einmal finalisiert.
+
+Regressionen:
+
+hang release → kein Response, aber kein pending RID
+budget abort → kein pending RID
+exception during dispatch → kein pending RID
+poison during operation → kein pending RID.
+
+3. Queue Accounting sauber machen
+
+Für jeden erfolgreichen queue.get():
+
+queue.task_done()
+
+exakt einmal, inklusive:
+
+normal task
+canceled task
+bereits finalisierter task
+sentinel.
+
+Am besten:
+
+item = queue.get()
+try:
+    ...
+finally:
+    queue.task_done()
+
+Damit bleibt ein zukünftiges queue.join() korrekt und Shutdown Tests sind deterministisch.
+
+4. Gate bleibt manuell
+
+Gate.arrive() darf NIEMALS release setzen.
+
+Entfernen:
+
+if len(participants) >= expected:
+    self._released = True
+    notify_all()
+
+arrive():
+
+nur participant registrieren
+notify für status waiter
+return arrived_count
+
+wait():
+
+wartet ausschließlich auf:
+
+explicit release
+destroy
+timeout
+recovery
+
+Nur:
+
+sync.gate.release
+
+setzt `_released=True`.
+
+Barrier darf weiterhin automatisch öffnen, wenn alle eindeutigen Participants angekommen sind.
+
+Das ist der definitorische Unterschied:
+
+Barrier = automatic rendezvous
+Gate = manual research window
+
+TOCTOU Regression:
+
+Lane A:
+CHECK
+gate.arrive("A")
+gate.wait()
+
+assert A steht weiterhin
+
+Lane B:
+wartet bis status.arrived_count == 1
+MUTATE
+
+assert A steht weiterhin
+
+B:
+gate.release()
+
+erst jetzt:
+A → USE.
+
+5. Handshake Rollen endgültig korrigieren
+
+Semantische Rolle:
+
+ps4rfd / MockAgent = AGENT
+
+Agent:
+send HELLO
+receive HELLO_ACK
+send AUTH
+receive AUTH_ACK
+
+ps4rfctl / Host = HOST
+
+Host:
+receive HELLO
+send HELLO_ACK
+receive AUTH
+send AUTH_ACK
+
+Das gilt unabhängig davon, wer TCP connect() ausführt.
+
+Daher MockAgent verwendet:
+
+agent_handshake(...)
+
+Host CLI verwendet:
+
+host_handshake(...)
+
+Nicht umgekehrt.
+
+Variablennamen ebenfalls ändern, damit dieser Fehler später nicht zurückkommt:
+
+agent_hello
+host_hello_ack
+
+statt generischem accept/hello wo möglich.
+
+Tests:
+
+Agent als TCP Client
+Agent als TCP Server
+
+beide:
+Agent sendet semantisch HELLO
+Host sendet semantisch HELLO_ACK
+gleicher Transcript.
+
+6. Authenticated Limits bei richtiger Rolle
+
+Da HELLO_ACK vom HOST stammt:
+
+Host entscheidet Limits.
+
+MockAgent erhält die Limits aus dem verifizierten HELLO_ACK Ergebnis seines agent_handshake().
+
+Host CLI besitzt dieselben Limits aus dem von ihm erzeugten und authentisierten ACK.
+
+Runtime Limits müssen exakt dieses Objekt sein.
+
+Kein DEFAULT_LIMITS nach Handshake.
+
+7. F1 Test Fixtures korrigieren
+
+Userland Test:
+
+Manifest:
+exploit.webkit_x
+
+Dann müssen ebenfalls gesetzt sein:
+
+StoredEvidence.provider = exploit.webkit_x
+VerificationEvidence.provider = exploit.webkit_x
+
+Sonst muss Provider Binding korrekt mit PROVIDER_MISMATCH ablehnen.
+
+Zusätzlicher Test:
+
+Manifest exploit.webkit_x
+Evidence exploit.kernel_xyz
+→ PROVIDER_MISMATCH.
+
+8. provider_type ebenfalls an Evidence binden
+
+VerificationEvidence.provider_type ist Authority relevant.
+
+Daher muss StoredEvidence ebenfalls provider_type enthalten.
+
+_content_matches muss auch prüfen:
+
+stored.provider_type == verification.provider_type
+
+Sonst könnte derselbe Evidence Inhalt nachträglich unter einer anderen Provider Klasse interpretiert werden.
+
+Provider Binding umfasst damit:
+
+provider
+provider_type.
+
+Regression:
+
+StoredEvidence provider_type=RUNTIME_PROBE
+Verification behauptet EXPLOIT
+→ EVIDENCE_CONTENT_MISMATCH.
+
+9. F4 Merge Tests keine invaliden Capability Records bauen lassen
+
+Der gezeigte Test erzeugt BOOT/FIRMWARE_PROFILE teilweise mit Assurance.PROVEN.
+
+Das ist semantisch kein gültiger Produktionsrecord, wenn Firmware Profile nur UNVERIFIED Authority besitzen, und PROVEN benötigt Evidence.
+
+Für reine merge_boot_session Unit Tests synthetische `Resolution` Objekte verwenden.
+
+Separater Integrationstest benutzt ausschließlich Records, die durch reale Authority Regeln und Validatoren gültig sind.
+
+Keine invaliden Fixtures nur um max(PROVEN, OBSERVED) zu testen.
+
+10. Frame Reject darf Sequence nicht verbrauchen
+
+F15 sollte Senderlimit VOR Sequence Increment und möglichst VOR AEAD Encryption prüfen:
+
+if len(plaintext) + TAG_LEN > max_frame_bytes:
+    raise FrameLimitExceeded
+
+Danach erst:
+
+seq = self._send
+encrypt
+self._send += 1
+
+Ein lokal verworfenes oversized Frame darf den Channel nicht desynchronisieren.
+
+Regression:
+
+send oversized → reject
+send gültiges Frame danach
+→ seq bleibt vorheriger erwarteter Wert und Roundtrip funktioniert.
+
+11. RPC Request Header härten
+
+RpcRequestHeader:
+
+protocol_version = Literal[1]
+session_id = typisierter SessionId
+request_id = typisierter RequestId Pattern
+
+Nach Parse zusätzlich:
+
+header.session_id == active_session_id
+
+header.protocol_version == negotiated_protocol_version
+
+sonst PROTOCOL_ERROR.
+
+`arguments`:
+
+Field(default_factory=dict)
+
+statt mutable `{}` Default.
+
+12. Sync Resource Cleanup vollständig
+
+Wenn ResourceManager ein Gate oder Barrier zerstört:
+
+nicht nur gate.destroy()
+
+sondern auch Registry Mapping entfernen:
+
+_gates.pop(ref)
+_barriers.pop(ref)
+
+am besten über Cleanup Callback, der beides atomar erledigt.
+
+Nach Cleanup:
+
+erneute Operation auf Ref
+→ RESOURCE_STATE_INVALID
+
+nicht Zugriff auf ein stale destroyed object.
+
+13. Freeze Tests ergänzen
+
+Pflicht zusätzlich zu F19:
+
+test_pool_cancel_no_recursive_lock_deadlock
+test_every_worker_exit_releases_token
+test_every_worker_exit_completes_request_id
+test_queue_unfinished_tasks_zero_after_shutdown
+
+test_gate_does_not_auto_release_on_expected
+test_gate_only_release_opens_waiters
+
+test_mock_agent_uses_agent_handshake_role
+test_host_uses_host_handshake_role
+
+test_provider_binding_userland_fixture
+test_provider_type_evidence_binding
+
+test_oversized_send_does_not_consume_sequence
+
+test_request_header_wrong_session_rejected
+test_request_header_wrong_protocol_rejected
+
+test_sync_cleanup_removes_registry_entry.
+
+14. Freeze Entscheidung
+
+Wenn alle bisherigen G1 bis G8 plus diese Tests grün sind:
+
+TAG:
+
+PS4RF CORE 1.0-MOCK-READY
+
+Danach Core einfrieren.
+
+Keine weitere hypothetische Architekturreview Runde.
+
+Nächster Schritt unmittelbar:
+
+OrbisProbe Inventory
+→ Mapping
+→ Adapter gegen Mock.
+
+Danach Metasploit und Tool Adapter. 
+ 
+Show full message
+ 
+ 
+  
+   
+ 
+Thought Process 
+ 
+ 
+PS4RF v0.8 — Freeze-Blocker: Hinweis + zweiter Prüfpass
+
+Hinweis vorab: Diese Nachricht ist identisch mit der vorherigen — B1–B14 sind bereits vollständig ausgearbeitet (meine vorherige Antwort). Statt alles erneut auszuliefern: hier der konsolidierte Status plus die Ergebnisse eines zweiten Selbstprüfpasses über den gelieferten Code. Der Prüfpass hat zwei echte Fehler gefunden, die vor dem Tag korrigiert werden müssen.
+1. Blocker-Status B1–B14
+Blocker
+	
+Status
+	
+Ort (vorherige Antwort)
+B1 Deadlock / Token-API	geliefert	§1 (_finalize nur außerhalb des Locks)
+B2 äußerer finally	geliefert	§1 (_worker_run)
+B3 task_done exakt einmal	geliefert	§1 (Worker + Drain)
+B4 Gate manuell	geliefert	§2
+B5/B6 Handshake-Rollen + Limits	geliefert	§3 (Mock nutzt agent_handshake)
+B7/B8 Provider/provider_type-Binding	geliefert	§4
+B9 Merge-Tests ohne invalide Records	geliefert	§5 (synthetische Resolution)
+B10 Sequence-Verbrauch bei Reject	geliefert	§6
+B11 Header-Härtung	geliefert	§7
+B12 Sync-Cleanup + Registry	geliefert	§8
+B13 Tests / B14 Tag	geliefert	§9/§10
+ 
+ 
+2. Selbstprüfpass — zwei echte Fixes
+Fix A (freeze-relevant): submit↔poison Race in submit()
+
+Die v0.8-Fassung prüft _poisoned unter einem ersten Lock, acquiriert dann den Token und registriert erst unter einem zweiten Lock. Ein poison() zwischen Check und Registrierung ließe einen nach dem Poison eingereichten Request als QUEUED registrieren — er würde ausgeführt, obwohl V5 verlangt: keine neuen mutierenden Requests nach Poison. Korrektur: Re-Check unter dem Registrierungs-Lock.
+python
+ 
+  
+ 
+ 
+def submit(self, rid: str, op: str, fn) -> str:
+    # B1: ausschließlich öffentliche Semaphore-API
+    if not self._tokens.acquire(blocking=False):
+        return "TOO_MANY_INFLIGHT"
+    with self._lock:
+        if self._poisoned:                    # FIX A: Re-Check schließt das Rennen
+            self._tokens.release()            # Token zurück, kein Leak
+            return "POISONED"
+        self._tasks[rid] = {"state": TaskState.QUEUED, "op": op}
+    self._queue.put((rid, op, fn))
+    return "OK"
+ 
+ 
+
+Damit ist das Fenster geschlossen: Registrierung vor Poison → poison() markiert CANCELED_AT_RECOVERY; Registrierung nach Poison → hier abgelehnt. Kein dritter Fall.
+python
+ 
+  
+ 
+ 
+def test_submit_after_poison_rejected_no_token_leak():
+    pool = BoundedPool(size=2, max_inflight=4)
+    pool.poison("test")
+    assert pool.submit("REQ-" + "0" * 32, "memory.alloc", lambda r, o: None) == "POISONED"
+    assert pool._tokens._value == 4              # kein Token-Verlust (BoundedSemaphore-Wert)
+ 
+ 
+Fix B (freeze-relevant): canceled Requests müssen ihre RIDs abschließen
+
+B7 verlangt „keine Request ID darf nach Session Ende künstlich pending bleiben". Im v0.8-Code schließt der Agent-Pfad (_worker_run.finally) nur selbst ausgeführte Requests ab; für canceled Tasks (Poison-Dequeue und Shutdown-Drain) übernimmt das der on_canceled/cancel_cb-Callback — der muss die RID in jedem Fall abschließen, auch wenn der Transport tot ist:
+python
+ 
+  
+ 
+ 
+def _on_canceled(self, rid: str, op: str) -> None:
+    """FIX B: RID wird IMMER abgeschlossen; Response nur bei intaktem Transport."""
+    if not self._transport_dead:
+        self._respond_now(rid, op,
+                          {"status": "ERROR",
+                           "error": {"code": "SESSION_RECOVERY_REQUIRED"}})
+    self._reqs.complete(rid)                     # Evidence-Fall: nur complete()
+# shutdown(..., cancel_cb=self._on_canceled) nutzt denselben Pfad.
+ 
+ 
+
+test_every_worker_exit_completes_request_id deckt damit alle Pfade: normal, Exception, Hang-Release, Poison-Cancel, Shutdown-Cancel.
+3. Klärungen (keine Codefehler, aber für den Tag bindend)
+
+    Signatur bestätigt: grant_from_verification(verification, capability, exploit_manifest, trigger_run_id, authority, registry, evidence_store, intake) — authority ist Pflichtparameter (F1-Ceiling). Die v0.7-Signatur ohne authority ist damit ersetzt.
+    Pool-Größe: READY.max_parallel_tasks = min(host_hello_ack["limits"]["max_parallel_tasks"], MockAgent.AGENT_CAP). Runtime-Konfiguration leitet sich ausschließlich aus dem authentisierten ACK-Objekt ab (B6); DEFAULT_LIMITS existiert nach dem Handshake nicht mehr. Der Test test_authenticated_limits_eq_runtime_limits prüft die Ableitung aus dem ACK (effektiv ≤ ACK-Wert), nicht Objektidentität nach Clamp.
+    attach_cleanup-Ordnung (B12): acquire(ref) → attach_cleanup(ref, cb) → Registrierung in _gates unter agent_lock → erst dann Rückgabe des Refs aus dem Dispatch. Das kurze Fenster ist unkritisch, weil das Ref vor der Registrierung für niemanden sichtbar ist. Als Regression gehört test_sync_cleanup_removes_registry_entry fest in die Gate-Suite.
+
+4. Konsolidiertes Freeze-Gate
+text
+ 
+  
+ 
+ 
+TAG PS4RF CORE 1.0-MOCK-READY nur wenn ALLES grün:
+
+G1  pytest vollständig grün  (v0.5–v0.8 Suite)
+G2  Mock Round Trip grün     (YAML→IR→Safe→Budget→JCS→SHA256→Negotiation→Run→Evidence→Hash)
+G3  Recovery/Hang grün       (echter Hang→Client-Timeout, kein BYE; Poison; UNCERTAIN-Cleanup;
+                             RECOVERY_REQUIRED überlebt Reconnect)
+G4  Concurrency Stress grün  (1000 alloc/free, 1000 arrivals, create/destroy while wait,
+                             duplicate release + F19/B13-Matrix + Fix A/Fix B Tests)
+G5  TOCTOU Gate grün         (A bleibt bis release stehen; participants-eindeutig;
+                             DESTROYED ≠ Success; kein auto-release)
+G6  Verification Binding grün (F1–F3 + B7/B8: Ceiling, provider, provider_type,
+                             evidence_ref.run_id == run_id, Re-Hash über Inhalt)
+G7  Framing/Fuzz grün        (F14/F15 inkl. Sequence-Erhalt B10, Direction-FSM F16,
+                             malformed/dup IDs, Header-Mismatch B11)
+G8  RPC Budget beidseitig grün (F17 abort atomar, Session+Experiment-Level)
+
+Nach dem Tag: Core eingefroren. Änderungen nur noch bei echtem
+Integrationsbefund, je Befund ein Changelog-Eintrag mit Referenz.
+Keine weitere hypothetische Architekturreview-Runde.
+ 
+ 
+5. Nächster Schritt
+
+Unmittelbar nach dem Tag: OrbisProbe Inventory → Mapping → Adapter gegen Mock. Dafür steht der OrbisProbe-Code weiterhin aus — einer der drei Wege aus v0.3 §10: relevante Dateien direkt einfügen, Repo als Archiv/Textdump liefern, oder den statischen Extraktor (tools/inventory/extract_orbisprobe_inventory.py) lokal ausführen und den Draft zurückspielen. Ohne echten Code erzeuge ich kein inventiertes Inventar.
+
+Weiterhin ausgeschlossen: echter PS4 Agent Code, Kernel Code, Payloads; Metasploit und Tool-Adapter folgen nach OrbisProbe.

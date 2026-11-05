@@ -1,0 +1,85 @@
+{
+  "id": "lapse-aio-multi-delete",
+  "name": "Lapse - aio_multi_delete() multi-request branch double free",
+  "role": "burned",
+  "burned_reason": "families/families.json describes the lapse family; the detector rules and the checked-in references were derived with this family in view, so it can only serve as a regression control, never as a blind case",
+  "platform": [
+    "ps4",
+    "ps5"
+  ],
+  "bug_class": "DOUBLE_FREE",
+  "subsystem": "kernel/sceaio (aio_multi_delete)",
+  "root_cause": {
+    "summary": "_aio_multi_delete() resolves the submitted id to a struct aio_object while holding the table's read lock (id_rlock). On the branch taken when ao_rem_ids != 1 it decrements obj->ao_rem_ids, calls free_queue_entry(obj->ao_entries[req_idx]) and only afterwards clears the slot to NULL, all without upgrading to the table's write lock. Two threads that enter the same branch concurrently with the same id both read the same ao_rem_ids and the same entry pointer, so both call free_queue_entry() on the same struct aio_entry (an M_AIO_REQS2 allocation in the 0x80 malloc zone) and both drop the same ar2_file reference, producing a double free of the entry and a double fdrop of the embedded file.",
+    "primitive": "double free of a 0x80-byte malloc-zone object (struct aio_entry, M_AIO_REQS2) with a double fdrop of the embedded struct file",
+    "trigger": "two threads call aio_multi_delete(id, 1, ...) on the same SceKernelAioSubmitId after aio_multi_wait() has completed, where the id was created by aio_submit_cmd() with SCE_KERNEL_AIO_CMD_MULTI and at least two requests; the window is widened by parking one thread inside the fdrop/soclose path while the other deletes the same id",
+    "consequence": "kernel heap double free; after reclaim, the same chunk is referenced by two owners, which the public exploit turns into aliased sockets and kernel read/write"
+  },
+  "discovery_approach": {
+    "summary": "Anonymous PS4 kernel dumps of 12.02 (last vulnerable release) and 12.50 (first fixed release) were shared for diffing in April 2025, and the locking difference in aio_multi_delete was identified. An anonymous researcher ('abc') wrote a standalone double-free PoC between 2024-12-08 and 2025-01-11, disclosed it on 2025-04-22 and released a full exploit that patches the kernel on 2025-05-08. Public ports then chained the same bug with PSFree, mast1c0re, Artemis and BD-JB3 entry points.",
+    "signals": [
+      "read lock held across a write to obj->ao_rem_ids and a free of obj->ao_entries[req_idx], while the sibling branch takes the write lock",
+      "table slot set to NULL only after free_queue_entry(), leaving a freed pointer reachable from a concurrent lookup",
+      "free_queue_entry() performs fdrop(), a potentially sleeping call, before free(), extending the window while the read lock is held",
+      "the same entry pointer is reachable from two concurrent id lookups with no per-entry ownership flag"
+    ],
+    "blind_usable": false
+  },
+  "firmware": {
+    "affected": [
+      "5.00",
+      "6.72",
+      "7.55",
+      "9.00",
+      "11.00",
+      "12.02"
+    ],
+    "fixed_in": "12.50",
+    "differences": [
+      "the affected range is 5.00 through 12.02 inclusive; the PS4 dev wiki states the SceAIO syscalls are unimplemented before 5.00 and the port lists stop at 12.02, with Lapse reported incompatible from 12.50 onward",
+      "PS5: affected 1.00-10.01 and fixed in 10.20 according to the port's vulnerability-scope table and the dev wiki",
+      "the published defect is the missing write lock on the rem_ids != 1 path; the inferred fix is a lock-discipline change serialising the decrement and the free - no public 12.50 diff or vendor advisory naming the added lock was fetched"
+    ]
+  },
+  "patch_evidence": {
+    "available": false,
+    "what": "only release-range statements: the PS4 dev wiki and port tables record 12.50 (PS4) and 10.20 (PS5) as fixed versions, and the shared code comment marks the missing wlock as the bug",
+    "limits": "no patch diff, no vendor advisory and no fixed-version decompilation were found or fetched; the exact locking change is inferred, not observed"
+  },
+  "sources": [
+    {
+      "url": "https://www.psdevwiki.com/ps4/Vulnerabilities",
+      "supports": "affected 5.00-12.02, fixed 12.50 / PS5 10.20, the id_rlock / missing-wlock code summary, the two-thread PoC, and the credit timeline including the 12.02/12.50 dump diff",
+      "kind": "writeup",
+      "verified_via": "wayback",
+      "snapshot": "20260710164118"
+    },
+    {
+      "url": "https://github.com/Al-Azif/psfree-lapse",
+      "supports": "Lapse is the kernel stage of the chain and its vulnerability-scope table lists PS4 1.01-12.02 and PS5 1.00-10.01",
+      "kind": "repo"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/Al-Azif/psfree-lapse/main/src/lapse.mjs",
+      "supports": "verbatim bug summary (id_rlock, missing wlock, free_queue_entry, slot NULLed after free), race widening by parking a thread in soclose()/thr_suspend_ucontext, and the comment that the win is a double free on the 0x80 malloc zone",
+      "kind": "repo"
+    },
+    {
+      "url": "https://blog.gistre.epita.fr/posts/marco.chan-witzel-2026-07-13-lapse-the-aio-kernel-exploit-behind-the-ps5-jailbreak/",
+      "supports": "two-thread interleaving of the race, the read-lock versus missing-write-lock explanation, and the PS5 10.20 fix statement (secondary, educational source)",
+      "kind": "writeup"
+    },
+    {
+      "url": "https://pastebin.com/aPZ28Afu",
+      "supports": "standalone trigger PoC text: MULTI flag required, wait-then-race structure, and the ESRCH error-equality win condition",
+      "kind": "writeup"
+    }
+  ],
+  "confidence": "high",
+  "gaps": [
+    "the exact 12.50 change is not public in the sources fetched; the write-lock fix is inferred from the documented defect",
+    "Al-Azif's scope table starts at 1.01 while the dev wiki says the AIO syscalls do not exist before 5.00; the lower bound is therefore inconsistent between public sources",
+    "the PS5 10.20 lower/upper bounds come from the same port table and were not independently confirmed",
+    "exploitation constants (zone sizes, reclaim objects, socket option choices) are summarised only at the level the public source states"
+  ]
+}

@@ -1,0 +1,70 @@
+{
+ "architecture": "x86-64",
+ "entries": [
+  {
+   "file_offset": 8192,
+   "hash_scope": "full",
+   "kind": "section",
+   "path": ".text",
+   "permissions": "r-x",
+   "sha256": "982d9e3eb996f559e633f4d194def3761d909f5a3b647d1a851fead67c32c9d1",
+   "size": 8192
+  },
+  {
+   "file_offset": 20480,
+   "hash_scope": "full",
+   "kind": "section",
+   "path": ".rodata",
+   "permissions": "r--",
+   "sha256": "1c8a5b3333e1bcf674ff14ca9e62454ba7699b94fc3c5bdcf444e3644df38e7c",
+   "size": 2048
+  },
+  {
+   "file_offset": 22528,
+   "hash_scope": "full",
+   "kind": "section",
+   "path": ".data",
+   "permissions": "rw-",
+   "sha256": "3a6eb0790f39ac87c94f3856b2dd2c5d110e6811602261a9a923d3bb23adc8b7",
+   "size": 1024
+  },
+  {
+   "file_offset": 23552,
+   "hash_scope": "full",
+   "kind": "section",
+   "path": ".text.hot",
+   "permissions": "r-x",
+   "sha256": "579156879a8c62d9c08e221eceb36f54d9431b90b25abd9950d2d21a263277c8",
+   "size": 1024
+  },
+  {
+   "file_offset": 24576,
+   "hash_scope": "full",
+   "kind": "section",
+   "path": ".sig",
+   "permissions": "r--",
+   "sha256": "7e44519b590f8c2a2275cb9ac54c0108e2091ecabfc35ed92e3959a36f4929a7",
+   "size": 64
+  },
+  {
+   "file_offset": 25600,
+   "hash_scope": "full",
+   "kind": "section",
+   "path": ".legacy",
+   "permissions": "r-x",
+   "sha256": "2b459e417322cab875545f7c0ee8cb62f9a5a667c79de2f9c1e585aef6744464",
+   "size": 256
+  }
+ ],
+ "fixture": true,
+ "kind": "elf",
+ "manifest_entries": {},
+ "module": "fixture-image.elf",
+ "notes": [
+  "W6 fixture section inventory: offsets are file offsets, not addresses",
+  "fixture facts are capped at WEAK confidence by the harness"
+ ],
+ "path": "tests/fixtures/differential/section-inventory-before.json",
+ "schema": "ps4rf.differential.inventory.v1",
+ "size": 32768
+}

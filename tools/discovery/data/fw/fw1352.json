@@ -1,0 +1,67 @@
+{
+  "firmware": "13.52",
+  "role": "primary",
+  "image": {
+    "path": "/home/hermes/audits/playstation-ps4/fw1352-ps4b-20260920/kernel-dump/kernel.bin",
+    "sha256": "cf157ffdbae872a20bbb9a46c8518b53d96c1ed75d4e73878466a295d92eca35",
+    "base": "0xffffffffd00d0000",
+    "size": "0x2a00000",
+    "purity": "NOT_PRISTINE",
+    "purity_evidence": "26 kpatch sites of the GoldHEN/afterglow technique are already written into this image; sysent[11] carries the patched triple (narg=2, sy_call=kbase+0x4d6d0, thrcnt=1). Byte comparisons at a kpatch site can therefore not distinguish 'original' from 'patched' -- every finding that lands on one of the recorded sites must say so."
+  },
+  "tables": {
+    "sysent": {
+      "rva": "0x1102b70",
+      "stride": 48,
+      "narg_offset": 0,
+      "sy_call_offset": 8,
+      "thrcnt_offset": 44,
+      "entries_checked": 700,
+      "source": "adri22235/ps4-13xx-research README (SYSENT = 0x01102B70, FW 13.00-14.00 stable) + phase16 P1 independent resolution"
+    },
+    "cdevsw": {
+      "rva": "0x1aec0b0",
+      "source": "ps4-kernel-hunt-20261101 report (cdevsw base, VA 0xffffffffd1bbc0b0, hid entry at +0x38)",
+      "record_fields": {
+        "name_ptr": 8,
+        "open": 16,
+        "close": 32,
+        "read": 40,
+        "ioctl": 56
+      }
+    },
+    "prison0_slot": {
+      "rva": "0x111fa18",
+      "source": "raw13 ps4_offsets.js k_prison0 slot convention, phase16 P1 chain check"
+    }
+  },
+  "gadgets": {
+    "kbase_from_lstar": "0x1c0",
+    "jmp_qword_rsi": {
+      "rva": "0x4d6d0",
+      "bytes": "ff26",
+      "source": "PSFree kpatch/900.c (kbase+0x4c7ad on 9.00) and afterglow FIRMWARE k_jmp_rsi; on 13.52 the same gadget is sysent[11].sy_call"
+    }
+  },
+  "anchors": {
+    "malloc": "0x9520",
+    "free": "0x96e0",
+    "printf": "0x2e0510",
+    "sx_xlock": "0x378a80",
+    "mtx_lock": "0x378d30",
+    "fdrop_release": "0xc28d0"
+  },
+  "anchor_provenance": {
+    "malloc": "Ghidra inventory name",
+    "free": "Ghidra inventory name; 2211 direct call sites in the image",
+    "printf": "variadic-log shape (saves rsi/rdx/rcx/r8/r9, movabs 0x3000000008), 8917 direct call sites; translated from 9.00 0xb7a30 by exact structural match",
+    "sx_xlock": "Ghidra inventory name",
+    "mtx_lock": "Ghidra inventory name",
+    "fdrop_release": "Ghidra inventory name"
+  },
+  "inventory": {
+    "hint": "/home/hermes/ps4-r2-pipeline/db/ps4r2-final.db",
+    "kind": "sqlite:functions(addr,size,name)",
+    "note": "external artefact, hash-pinned by the sprint evidence pack; the engine never writes to it"
+  }
+}

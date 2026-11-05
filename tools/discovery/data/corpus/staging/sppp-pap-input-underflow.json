@@ -1,0 +1,68 @@
+{
+  "id": "sppp-pap-input-underflow",
+  "name": "sppp(4) PAP authenticate-request length underflow — kernel heap over-read with an ACK/NAK oracle",
+  "role": "training",
+  "burned_reason": "",
+  "platform": [
+    "ps4",
+    "ps5"
+  ],
+  "bug_class": "OOB_READ",
+  "subsystem": "network/ppp",
+  "root_cause": {
+    "summary": "sppp_pap_input first clamps the message length to the PAP header's length field (`if (len > ntohs(h->len)) len = ntohs(h->len);`) and then validates the credential fields with `if (name_len > len - 6 || (passwd_len = passwd[-1]) > len - 6 - name_len)`. len is a signed int and the compared lengths are byte-derived values, so a declared header length between 0 and 5 makes `len - 6` negative and every name/password length up to 255 passes the check. The later `memcmp(name, sp->hisauth.name, name_len)` and the secret comparison therefore read up to 255 bytes past the end of the received mbuf. Because the reply code differs (PAP ACK vs NAK) depending on the comparison result, each crafted request reports one bit about adjacent kernel memory.",
+    "primitive": "out-of-bounds heap read in kernel context (up to 255 bytes) with a one-bit comparison oracle",
+    "trigger": "PAP authenticate-request whose header declares a length below 6, sent by the PPPoE peer after LCP/IPCP negotiation",
+    "consequence": "kernel memory disclosure usable as a pointer/KASLR leak; no write primitive in the reported form"
+  },
+  "discovery_approach": {
+    "summary": "Reported together with the LCP/IPCP overflow in the same HackerOne report (2023-09-22) as an independent second defect in the same inherited driver. The reporter notes that NetBSD and OpenBSD are still affected and that FreeBSD deprecated the protocol entirely, which explains why no upstream fix existed to inherit.",
+    "signals": [
+      "signed subtraction on an attacker-derived length (`len - 6`) used as an upper bound, with no `len >= 6` precondition",
+      "memcmp length taken directly from an attacker-controlled byte against a fixed-size credential buffer",
+      "reply code branches on the comparison outcome (ACK vs NAK) — an oracle-shaped control flow",
+      "same 2006-era sys/net/if_spppsubr.c lineage as the adjacent overflow"
+    ],
+    "blind_usable": false
+  },
+  "firmware": {
+    "affected": [
+      "11.00"
+    ],
+    "fixed_in": "unknown — no public statement; the report never says whether this second issue was remediated",
+    "differences": [
+      "No firmware-level statement exists. The only known change in this file is FreeBSD's 2006 rewrite of the Configure-Request loops, which leaves sppp_pap_input untouched (the published patch has 24 hunks and none in the PAP path), so no upstream fix mechanism can be projected onto the console.",
+      "7.00–11.00: the same driver is present across the span PPPwn supports with per-firmware offsets, but the PAP path was not retested version by version in any public source."
+    ]
+  },
+  "patch_evidence": {
+    "available": false,
+    "what": "None published. The sibling bug's 2006 FreeBSD patch was checked and contains no PAP hunk, so there is no patch artefact to compare against.",
+    "limits": "no firmware bytes; cannot tell whether Sony's sppp fix covered this path at all."
+  },
+  "sources": [
+    {
+      "url": "https://hackerone.com/reports/2177925",
+      "supports": "the full PAP code excerpt, the negative `len - 6` bypass, the OOB memcmp, the ACK/NAK oracle and the KASLR-leak impact; note that NetBSD/OpenBSD remain affected",
+      "kind": "advisory"
+    },
+    {
+      "url": "https://security.freebsd.org/patches/SA-06:18/ppp.patch",
+      "supports": "the 2006 fix touches only the option-parsing loops (24 hunks), not sppp_pap_input",
+      "kind": "advisory"
+    },
+    {
+      "url": "https://github.com/TheOfficialFloW/PPPwn",
+      "supports": "the firmware span over which the same sppp(4) driver is exercised (7.00–11.00)",
+      "kind": "repo"
+    }
+  ],
+  "confidence": "medium",
+  "gaps": [
+    "Affected range is inferred from the shared driver, not from a per-version test; only the 11.00-era code is quoted in the report.",
+    "No fix version and no confirmation that Sony patched this path.",
+    "PS5 presence is covered only by the report's blanket PS4/PS5 impact statement; nothing PAP-specific was found.",
+    "The oracle claim is the reporter's; no public PoC or measured leak was found.",
+    "Which mbuf/heap object the over-read crosses on Orbis is not public."
+  ]
+}

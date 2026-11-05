@@ -1,0 +1,146 @@
+{
+  "compatibility": {
+    "compatible": false,
+    "reason": "linPEAS assumptions do not apply to PS4/OrbisOS (FreeBSD-derived console target): linPEAS output about it is not evidence about OrbisOS, and PS4-specific checks must be implemented natively later via PS4RF surface/experiment modules."
+  },
+  "findings": [
+    {
+      "category": "kernel_os",
+      "classification": "OBSERVATION",
+      "line": 8,
+      "requires_verification": true,
+      "text": "hostname: ps4-fixture-console"
+    },
+    {
+      "category": "kernel_os",
+      "classification": "OBSERVATION",
+      "line": 9,
+      "requires_verification": true,
+      "text": "uname -a: FreeBSD ps4-fixture-console 9.0-RELEASE-p12 FreeBSD 9.0-RELEASE-p12 #1 r284361: aarch64"
+    },
+    {
+      "category": "kernel_os",
+      "classification": "OBSERVATION",
+      "line": 10,
+      "requires_verification": true,
+      "text": "model: PS4-family console (SYNTHETIC fixture)"
+    },
+    {
+      "category": "kernel_os",
+      "classification": "OBSERVATION",
+      "line": 11,
+      "requires_verification": true,
+      "text": "Orbis OS: FreeBSD-derived console OS (SYNTHETIC fixture)"
+    },
+    {
+      "category": "filesystem",
+      "classification": "OBSERVATION",
+      "line": 14,
+      "requires_verification": true,
+      "text": "writable directory: /data/self (fixture)"
+    },
+    {
+      "category": "filesystem",
+      "classification": "OBSERVATION",
+      "line": 15,
+      "requires_verification": true,
+      "text": "world-writable file: /data/app0/tmp.sock (mode 0777, fixture)"
+    },
+    {
+      "category": "mounts",
+      "classification": "OBSERVATION",
+      "line": 18,
+      "requires_verification": true,
+      "text": "ufs on / (rw, fixture)"
+    },
+    {
+      "category": "mounts",
+      "classification": "OBSERVATION",
+      "line": 19,
+      "requires_verification": true,
+      "text": "devfs on /dev (fixture)"
+    },
+    {
+      "category": "mounts",
+      "classification": "OBSERVATION",
+      "line": 20,
+      "requires_verification": true,
+      "text": "/dev/md0 on /system (ro, fixture)"
+    },
+    {
+      "category": "permissions",
+      "classification": "OBSERVATION",
+      "line": 23,
+      "requires_verification": true,
+      "text": "directory owned by console user: /user (fixture)"
+    },
+    {
+      "category": "permissions",
+      "classification": "OBSERVATION",
+      "line": 24,
+      "requires_verification": true,
+      "text": "world-writable directory: /data/tmp (fixture)"
+    },
+    {
+      "category": "services",
+      "classification": "OBSERVATION",
+      "line": 27,
+      "requires_verification": true,
+      "text": "system daemon with elevated context observed (SYNTHETIC fixture, not a real console sample)"
+    },
+    {
+      "category": "services",
+      "classification": "OBSERVATION",
+      "line": 28,
+      "requires_verification": true,
+      "text": "background daemon observed (fixture)"
+    },
+    {
+      "category": "sockets",
+      "classification": "OBSERVATION",
+      "line": 31,
+      "requires_verification": true,
+      "text": "tcp 127.0.0.1:2222 LISTEN (fixture)"
+    },
+    {
+      "category": "sockets",
+      "classification": "OBSERVATION",
+      "line": 32,
+      "requires_verification": true,
+      "text": "unix socket /data/app0/control.sock (fixture)"
+    },
+    {
+      "category": "credentials",
+      "classification": "OBSERVATION",
+      "line": 35,
+      "requires_verification": true,
+      "text": "/user/app/.netrc: credential-like directives observed (values never copied)"
+    },
+    {
+      "category": "interesting_binaries",
+      "classification": "OBSERVATION",
+      "line": 38,
+      "requires_verification": true,
+      "text": "/usr/bin/console-tool present (SYNTHETIC fixture name)"
+    },
+    {
+      "category": "interesting_binaries",
+      "classification": "OBSERVATION",
+      "line": 39,
+      "requires_verification": true,
+      "text": "/data/self/bootstrap present (SYNTHETIC fixture)"
+    }
+  ],
+  "scan_sha256": "b9ded18bdc3757718a0b71f0cbe038cdb071dc52c57734dcc9a2f8737d4d84d5",
+  "scanner": {
+    "synthetic": true,
+    "tool": "linPEAS",
+    "version": "20231115-mock"
+  },
+  "target": {
+    "hostname": "ps4-fixture-console",
+    "kernel": "FreeBSD ps4-fixture-console 9.0-RELEASE-p12 FreeBSD 9.0-RELEASE-p12 #1 r284361: aarch64",
+    "os": "FREEBSD_ORBISOS",
+    "release": null
+  }
+}

@@ -1,0 +1,1035 @@
+PS4RF v0.6 — Architekturhärtung R1–R12
+0. Korrektur-Matrix
+#
+	
+Vorgabe
+	
+Umsetzung
+R1	Scope/Context-Enforcement in resolve, Session-Bindung, Reboot-Invalidierung	§1
+R2	PROVEN nur aus VerificationEvidence, nie aus Run-IDs konstruiert	§2
+R3	Negotiation über effective_grant(), Context aus authentisiertem HELLO	§3, §9
+R4	RECOVERY_REQUIRED zentral über OperationSpec.recovery_safe	§3
+R5	mock.hang unbeantwortet, Client-Timeout, kein BYE	§4
+R6	Resource Manager mit cleanup_attempted/result/recoverable/console_dirty	§4
+R7	Concurrent In-Flight RPC, Worker Pool, sync.barrier.*, serverseitiges Parallel-Limit	§5
+R8	Framing-Limits vor Allokation, unbekannter msg_type, Fail-Close	§6
+R9	Kumulatives RPC-Budget (Req+Resp), max_frame_bytes, global_ms-Check	§7
+R10	Schema/Pydantic-Parity, Enums statt str	§8
+R11	Kanonische Hex-Darstellung fixed-width lowercase	§9
+ 
+ 
+
+Schema-Deltas v1.2 → v1.3 (brechend, dokumentiert): capability_record += boot_id (Pflicht), session_id (Pflicht bei SESSION); hello += context ist bereits Pflicht, neu boot_id (hex32) und max_parallel_tasks (optional); ready += context, max_parallel_tasks; resource_ref/resource_decl += barrier; u64_hex/address → fixed-width (R11); error_code += BARRIER_TIMEOUT, FRAME_LIMIT_EXCEEDED, VERIFICATION_REJECTED.
+1. R1 — Capability Resolution: Scope/Context/Session enforcement
+1.1 core/models/capability.py — geänderte und neue Teile
+python
+ 
+  
+ 
+ 
+
+def resolve(name: str, scope: Scope, context: TargetExecutionContext,
+            records: Sequence[CapabilityRecord], authority: AuthorityTable,
+            manual: Optional[ManualOverride] = None,
+            *, session_id: Optional[str] = None,
+            boot_id: Optional[str] = None) -> Resolution:
+    """R1: Nur Records mit EXAKT name/scope/context (+ session_id bei SESSION,
+    + boot_id) nehmen teil. Gemischte Records werden ausgeschlossen und
+    auditiert (fail-closed wäre alternative Policy; Filter+Audit ist hier
+    gewählt, damit Negotiation pro Context sauber iterieren kann)."""
+    if scope is Scope.SESSION and not session_id:
+        raise ValueError("resolve(SESSION) benötigt session_id")
+    if boot_id is None:
+        raise ValueError("resolve benötigt boot_id")
+
+    participants: list[tuple[int, CapabilityRecord, ProviderRule]] = []
+    excluded: list[ExcludedRecord] = []
+    for i, rec in enumerate(records):
+        if rec.name != name:
+            excluded.append(ExcludedRecord(i, "NAME_MISMATCH")); continue
+        if rec.scope is not scope:
+            excluded.append(ExcludedRecord(i, "SCOPE_MISMATCH")); continue
+        if rec.context is not context:
+            excluded.append(ExcludedRecord(i, "CONTEXT_MISMATCH")); continue
+        if scope is Scope.SESSION and rec.session_id != session_id:
+            excluded.append(ExcludedRecord(i, "SESSION_MISMATCH")); continue
+        if rec.boot_id != boot_id:
+            excluded.append(ExcludedRecord(i, "BOOT_MISMATCH")); continue
+        if rec.observed_seq is None:
+            raise ValueError(f"Record {i} nicht durch CapabilityIntake ingestiert")
+        rule = authority.rule_for(name, rec.provider_type, rec.provider)
+        if rule is not None:
+            participants.append((i, rec, rule))
+        # Records ohne Authority-Regel: weiter ignoriert (AUTHORITY_INVALID, geloggt)
+
+    seqs = [r.observed_seq for _, r, _ in participants]
+    if len(set(seqs)) != len(seqs):
+        raise ValueError("Integrity: doppelte observed_seq unter Teilnehmern "
+                         "(Intake-Verstoß)")
+
+    # --- Availability (v0.5-Logik, jetzt über gefilterte Teilnehmer) ---
+    if manual is not None and manual.availability is not None:
+        availability = manual.availability
+        a_res = AxisResolution(availability.value, AxisFactor.MANUAL_OVERRIDE,
+                               detail=manual.detail)
+    else:
+        elig = [(i, r, ru) for i, r, ru in participants if ru.availability_write]
+        if not elig:
+            availability = Availability.UNKNOWN
+            a_res = AxisResolution("UNKNOWN", AxisFactor.NO_RECORD)
+        else:
+            top = max(ru.availability_rank for _, _, ru in elig)
+            tier = sorted([(i, r, ru) for i, r, ru in elig
+                           if ru.availability_rank == top],
+                          key=lambda t: t[1].observed_seq)   # seq, nie provider-Zeit
+            i, r, _ = tier[-1]
+            factor = (AxisFactor.PROVIDER_AUTHORITY if len(tier) == 1
+                      else AxisFactor.RUNTIME_RECENCY)
+            availability = r.availability
+            a_res = AxisResolution(availability.value, factor, i)
+
+    # --- Assurance (v0.5-Logik unverändert, Teilnehmer gefiltert) ---
+    best_rank, best = -1, None
+    for i, r, ru in participants:
+        eff = _clamp(r.assurance, ru.max_assurance)
+        if ASSURANCE_RANK[eff] > best_rank:
+            best_rank, best = ASSURANCE_RANK[eff], (i, r, eff)
+    manual_assur = None
+    if manual is not None and manual.assurance is not None:
+        if manual.assurance is Assurance.PROVEN and (
+                manual.evidence is None or manual.verified_by is None):
+            raise ValueError("MANUAL darf PROVEN nur mit evidence + verified_by setzen")
+        op_rule = authority.rule_for(name, ProviderType.OPERATOR, "manual")
+        manual_assur = _clamp(manual.assurance,
+                              op_rule.max_assurance if op_rule else Assurance.OBSERVED)
+    if manual_assur is not None and ASSURANCE_RANK[manual_assur] >= best_rank:
+        assurance = manual_assur
+        s_res = AxisResolution(assurance.value, AxisFactor.MANUAL_OVERRIDE)
+    elif best is None:
+        assurance = Assurance.UNVERIFIED
+        s_res = AxisResolution("UNVERIFIED", AxisFactor.NO_RECORD)
+    else:
+        same = sorted([(i, r, _clamp(r.assurance, ru.max_assurance))
+                       for i, r, ru in participants
+                       if ASSURANCE_RANK[_clamp(r.assurance, ru.max_assurance)] == best_rank],
+                      key=lambda t: t[1].observed_seq)
+        i, r, eff = same[-1]
+        factor = (AxisFactor.RECENCY if len(same) > 1 else
+                  AxisFactor.AUTHORITY_CEILING if eff is not r.assurance
+                  else AxisFactor.EVIDENCE_RANK)
+        assurance = eff
+        s_res = AxisResolution(assurance.value, factor, i)
+
+    return Resolution(name, availability, assurance, a_res, s_res,
+                      tuple(excluded))
+
+def expire_after_reboot(records: Sequence[CapabilityRecord]
+                        ) -> tuple[list[CapabilityRecord], list[CapabilityRecord]]:
+    """R1: Nach Reboot verfallen alle SESSION-Records sowie BOOT-Records mit
+    expires_on_reboot=True. Rückgabe: (verbleibend, entfernt)."""
+    kept = [r for r in records
+            if r.scope is Scope.BOOT and not r.expires_on_reboot]
+    removed = [r for r in records if r not in kept]
+    return kept, removed
+ 
+ 
+1.2 R1-Tests (Auszug, ergänzt tests/test_capability_resolution.py)
+python
+ 
+  
+ 
+ 
+def _boot_rec(name, avail, assur, ptype, provider, seq, expires=True):
+    return CapabilityRecord(
+        name=name, availability=avail, assurance=assur,
+        context=TargetExecutionContext.JAILBROKEN_PROCESS,
+        provider=provider, provider_type=ptype, scope=Scope.BOOT,
+        boot_id="BOOT-1", expires_on_reboot=expires,
+        evidence=EvidenceRef(**EVID) if assur is Assurance.PROVEN else None,
+        verified_by=VerifiedBy(**_verify()) if assur is Assurance.PROVEN else None,
+        observed_seq=seq, observed_at=T0)
+
+def test_r1_mixed_context_no_conflict():
+    """Gleiche Capability, anderer Context → kein Konflikt, ausgeschlossen+auditiert."""
+    a = rec(CAP, Availability.AVAILABLE, Assurance.OBSERVED,
+            ProviderType.EXPLOIT, "exploit.a", 1)
+    b = rec(CAP, Availability.UNAVAILABLE, Assurance.OBSERVED,
+            ProviderType.RUNTIME_PROBE, "probe.runtime", 2,
+            ctx=TargetExecutionContext.BROWSER)
+    r = resolve(CAP, Scope.SESSION, TargetExecutionContext.JAILBROKEN_PROCESS,
+                [a, b], AUTH, session_id="SES-A", boot_id="BOOT-1")
+    assert r.availability is Availability.AVAILABLE          # b nahm nicht teil
+    assert r.excluded[0].reason == "CONTEXT_MISMATCH"
+
+def test_r1_mixed_session_no_conflict():
+    """Gleiche observed_seq aus zwei Sessions → niemals vergleichbar."""
+    a = rec(CAP, Availability.AVAILABLE, Assurance.OBSERVED,
+            ProviderType.EXPLOIT, "exploit.a", 5)            # via Intake SES-A
+    b = rec(CAP, Availability.UNAVAILABLE, Assurance.OBSERVED,
+            ProviderType.RUNTIME_PROBE, "probe.runtime", 5)  # via Intake SES-B
+    for r_ in (a, b):
+        object.__setattr__ = None  # Platzhalter; echte Zuweisung unten
+    a = a.model_copy(update={"session_id": "SES-A"})
+    b = b.model_copy(update={"session_id": "SES-B"})
+    r = resolve(CAP, Scope.SESSION, TargetExecutionContext.JAILBROKEN_PROCESS,
+                [a, b], AUTH, session_id="SES-A", boot_id="BOOT-1")
+    assert r.availability is Availability.AVAILABLE
+    assert r.excluded[0].reason == "SESSION_MISMATCH"
+
+def test_r1_duplicate_seq_same_session_integrity_error():
+    intake = CapabilityIntake("SES-A", "BOOT-1")
+    r1 = intake.ingest(CapabilityRecord(
+        name=CAP, availability=Availability.AVAILABLE, assurance=Assurance.OBSERVED,
+        context=TargetExecutionContext.JAILBROKEN_PROCESS, provider="exploit.a",
+        provider_type=ProviderType.EXPLOIT))
+    # Zweiter Intake für dieselbe Session (Konfigurationsfehler) mit gleichem seq:
+    forged = r1.model_copy()
+    with pytest.raises(ValueError):
+        resolve(CAP, Scope.SESSION, TargetExecutionContext.JAILBROKEN_PROCESS,
+                [r1, forged], AUTH, session_id="SES-A", boot_id="BOOT-1")
+
+def test_r1_reboot_invalidates_volatile():
+    records = [
+        rec(CAP, Availability.AVAILABLE, Assurance.OBSERVED,
+            ProviderType.EXPLOIT, "exploit.a", 1),                    # SESSION
+        _boot_rec("userland.exec", Availability.AVAILABLE, Assurance.OBSERVED,
+                  ProviderType.BOOTSTRAP, "bootstrap.x", 1, expires=True),
+        _boot_rec("kernel.read", Availability.AVAILABLE, Assurance.UNVERIFIED,
+                  ProviderType.FIRMWARE_PROFILE, "profile.fw1352", 2, expires=False),
+    ]
+    kept, removed = expire_after_reboot(records)
+    assert [r.name for r in kept] == ["kernel.read"]                  # nur persistenter BOOT-Record
+    assert len(removed) == 2
+
+def test_r1_session_scope_requires_binding():
+    with pytest.raises(ValueError):
+        resolve(CAP, Scope.SESSION, TargetExecutionContext.JAILBROKEN_PROCESS,
+                [], AUTH, boot_id="BOOT-1")                           # session_id fehlt
+ 
+ 
+2. R2 — VerificationEvidence: PROVEN nur aus gespeichertem Beweis
+2.1 core/models/verification.py (neu)
+python
+ 
+  
+ 
+ 
+from dataclasses import dataclass
+from enum import Enum
+from typing import Optional, Protocol
+from pydantic import model_validator
+from .capability import CapabilityIntake, CapabilityRecord, Scope, VerifiedBy
+from .common import (CapabilityName, OperationName, ProviderType, RunId, Sha256,
+                     StrictModel, TargetExecutionContext)
+
+class VerificationOutcome(str, Enum):
+    PASS = "PASS"; FAIL = "FAIL"; ERROR = "ERROR"; TIMEOUT = "TIMEOUT"
+
+class VerificationEvidence(StrictModel):
+    verification_run_id: RunId
+    operation: OperationName          # enforce verify.* unten
+    outcome: VerificationOutcome
+    capability: CapabilityName
+    provider: str                     # Exploit-Identität
+    provider_type: ProviderType = ProviderType.EXPLOIT
+    profile_sha256: Sha256            # Target/Profil-Binding
+    context: TargetExecutionContext
+    scope: Scope
+    session_id: Optional[str] = None
+    boot_id: str
+    expected: str
+    observed: str
+    evidence_sha256: Sha256           # Hash im Evidence Store
+
+    @model_validator(mode="after")
+    def _verify_namespace(self):
+        if not self.operation.startswith("verify."):
+            raise ValueError("verification.operation muss verify.* sein")
+        if self.scope is Scope.SESSION and not self.session_id:
+            raise ValueError("SESSION-Verifikation benötigt session_id")
+        return self
+
+class EvidenceStore(Protocol):
+    def hash_is_valid(self, sha256: str) -> bool: ...
+
+@dataclass(frozen=True)
+class VerificationRejection(Exception):
+    reason: str    # REGISTRY_UNKNOWN | CAPABILITY_MISMATCH | OPERATION_MISMATCH |
+                   # OUTCOME_NOT_PASS | RUN_NOT_SEPARATE | PROFILE_MISMATCH |
+                   # EVIDENCE_HASH_INVALID
+    detail: str = ""
+
+def grant_from_verification(verification: VerificationEvidence,
+                            capability: CapabilityName,
+                            manifest_provides: list,       # list[CapabilityGrant]
+                            trigger_run_id: RunId,
+                            expected_profile_sha256: Sha256,
+                            registry,                       # OperationRegistry
+                            evidence_store: EvidenceStore,
+                            intake: CapabilityIntake) -> CapabilityRecord:
+    """R2: PROVEN nur wenn ALLE Prüfungen bestehen. PRIVILEGIERT zusätzlich:
+    verification_run_id != trigger_run_id."""
+    from .common import PRIVILEGED_NAMESPACES, Assurance, Availability
+
+    grant = next((g for g in manifest_provides if g.capability == capability), None)
+    if grant is None:
+        raise VerificationRejection("CAPABILITY_MISMATCH",
+                                    f"{capability} nicht in manifest.provides")
+    if not registry.has(verification.operation) or \
+            registry.spec(verification.operation).name.split(".")[0] != "verify":
+        raise VerificationRejection("REGISTRY_UNKNOWN", verification.operation)
+    if verification.capability != capability:
+        raise VerificationRejection("CAPABILITY_MISMATCH",
+                                    f"{verification.capability} != {capability}")
+    if grant.verify_operation is None or \
+            verification.operation != grant.verify_operation:
+        raise VerificationRejection("OPERATION_MISMATCH",
+                                    f"{verification.operation} != {grant.verify_operation}")
+    if verification.outcome is not VerificationOutcome.PASS:
+        raise VerificationRejection("OUTCOME_NOT_PASS", verification.outcome.value)
+    privileged = capability.split(".")[0] in PRIVILEGED_NAMESPACES
+    if privileged and verification.verification_run_id == trigger_run_id:
+        raise VerificationRejection("RUN_NOT_SEPARATE",
+                                    "Verifikationslauf == Trigger-Lauf (privilegiert)")
+    if verification.profile_sha256 != expected_profile_sha256:
+        raise VerificationRejection("PROFILE_MISMATCH", "Target/Profil-Binding")
+    if not evidence_store.hash_is_valid(verification.evidence_sha256):
+        raise VerificationRejection("EVIDENCE_HASH_INVALID", verification.evidence_sha256)
+
+    proven = privileged            # nicht-privilegierte: OBSERVED (kein verified_by nötig)
+    return intake.ingest(CapabilityRecord(
+        name=capability,
+        availability=Availability.AVAILABLE,
+        assurance=Assurance.PROVEN if proven else Assurance.OBSERVED,
+        context=verification.context,
+        provider=verification.provider,
+        provider_type=verification.provider_type,
+        scope=verification.scope,
+        session_id=verification.session_id,
+        boot_id=verification.boot_id,
+        evidence=None,             # wird vom Store-Intake mit EvidenceRef belegt
+        verified_by=VerifiedBy(operation=verification.operation,
+                               expected=verification.expected,
+                               observed=verification.observed,
+                               verification_run=verification.verification_run_id)
+                    if proven else None))
+ 
+ 
+
+Konsequenz: capability_grants_from_runs() aus v0.5 §4.2 wird gestrichen. Die CapabilityRecord._proven_requires_proof-Validierung bleibt die letzte Verteidigungslinie — auch ein Resolver kann syntaktisch ungültige PROVEN-Records nie legitimieren (kein model_copy-Pfad umgeht den Validator; update={"evidence": ..., "verified_by": ...} nur durch diese Funktion aus echten VerificationEvidence).
+2.2 R2-Tests (tests/test_verification.py)
+python
+ 
+  
+ 
+ 
+import pytest
+from core.models.capability import CapabilityIntake, Scope, TargetExecutionContext
+from core.models.common import Assurance, ProviderType
+from core.models.exploit import CapabilityGrant
+from core.models.verification import (VerificationEvidence, VerificationOutcome,
+                                      VerificationRejection, grant_from_verification)
+from core.rpc.registry import default_registry
+
+CAP, PROFILE = "kernel.exec", "a" * 64
+TRIGGER = "RUN-20250101T000000Z-DEADBEEF"
+VERIFY = "RUN-20250101T000100Z-CAFE0001"
+
+class GoodStore:
+    def hash_is_valid(self, sha): return sha == "b" * 64
+
+def _verification(**over):
+    base = dict(verification_run_id=VERIFY, operation="verify.kernel.exec",
+                outcome=VerificationOutcome.PASS, capability=CAP,
+                provider="exploit.kernel_xyz", provider_type=ProviderType.EXPLOIT,
+                profile_sha256=PROFILE, context=TargetExecutionContext.JAILBROKEN_PROCESS,
+                scope=Scope.SESSION, session_id="SES-A", boot_id="BOOT-1",
+                expected="sig", observed="sig", evidence_sha256="b" * 64)
+    base.update(over)
+    return VerificationEvidence(**base)
+
+def _grant():
+    return [CapabilityGrant(capability=CAP, verify_operation="verify.kernel.exec")]
+
+def _grant_via(verification, trigger=TRIGGER, profile=PROFILE, provides=None):
+    intake = CapabilityIntake("SES-A", "BOOT-1")
+    return grant_from_verification(
+        verification, CAP, provides or _grant(), trigger, profile,
+        default_registry(), GoodStore(), intake)
+
+def test_proven_from_valid_verification():
+    r = _grant_via(_verification())
+    assert r.assurance is Assurance.PROVEN
+    assert r.verified_by.operation == "verify.kernel.exec"
+    assert r.verified_by.verification_run == VERIFY
+
+def test_fake_verification_run_cannot_create_proven():        # gleicher Run
+    with pytest.raises(VerificationRejection) as e:
+        _grant_via(_verification(verification_run_id=TRIGGER))
+    assert e.value.reason == "RUN_NOT_SEPARATE"
+
+def test_failed_verify_cannot_create_proven():
+    with pytest.raises(VerificationRejection) as e:
+        _grant_via(_verification(outcome=VerificationOutcome.FAIL))
+    assert e.value.reason == "OUTCOME_NOT_PASS"
+
+def test_wrong_verify_operation_cannot_create_proven():
+    with pytest.raises(VerificationRejection) as e:
+        _grant_via(_verification(operation="verify.samu.access"))
+    assert e.value.reason == "OPERATION_MISMATCH"
+
+def test_wrong_profile_cannot_create_proven():
+    with pytest.raises(VerificationRejection) as e:
+        _grant_via(_verification(profile_sha256="c" * 64), profile="d" * 64)
+    assert e.value.reason == "PROFILE_MISMATCH"
+
+def test_invalid_evidence_hash_cannot_create_proven():
+    class BadStore:
+        def hash_is_valid(self, sha): return False
+    intake = CapabilityIntake("SES-A", "BOOT-1")
+    with pytest.raises(VerificationRejection) as e:
+        grant_from_verification(_verification(), CAP, _grant(), TRIGGER, PROFILE,
+                                default_registry(), BadStore(), intake)
+    assert e.value.reason == "EVIDENCE_HASH_INVALID"
+ 
+ 
+3. R3+R4 — OperationRegistry, zentrale Dispatch, echte Negotiation
+3.1 core/rpc/registry.py — erweitert
+python
+ 
+  
+ 
+ 
+@dataclass(frozen=True)
+class OperationSpec:
+    name: str
+    requires_capability: str | None = None
+    mutating: bool = True
+    recovery_safe: bool = False        # R4: explizit, nie abgeleitet aus mutating
+
+def default_registry() -> OperationRegistry:
+    r = OperationRegistry()
+    for n, cap in [("memory.alloc", "memory.alloc"), ("memory.free", "memory.free"),
+                   ("gpuvm.map", "gpuvm.map"), ("gpuvm.unmap", "gpuvm.unmap"),
+                   ("gpuvm.lookup", "gpuvm.lookup"),
+                   ("keymgr.claim", "keymgr.claim"), ("keymgr.release", "keymgr.release"),
+                   ("keymgr.snapshot", "keymgr.snapshot"), ("ccp.submit", "ccp.submit"),
+                   ("kernel.snapshot", "kernel.read"), ("kernel.read", "kernel.read"),
+                   ("kernel.dump.full", "kernel.dump.full")]:
+        r.register(OperationSpec(n, cap))
+    # R4: Recovery-Safe v1 — NUR diese drei:
+    for n in ("session.ping", "session.status", "telemetry.read"):
+        r.register(OperationSpec(n, None, mutating=False, recovery_safe=True))
+    # Sync-Primitiven (R7):
+    r.register(OperationSpec("sync.barrier.create"))
+    r.register(OperationSpec("sync.barrier.wait", mutating=False))
+    r.register(OperationSpec("sync.barrier.release", mutating=False))
+    r.register(OperationSpec("sync.barrier.destroy"))
+    r.register(OperationSpec("experiment.load"))
+    r.register(OperationSpec("mock.block"))
+    r.register(OperationSpec("mock.hang"))
+    r.register(OperationSpec("mock.leak"))
+    r.register(OperationSpec("mock.free_fail"))
+    for n in ("verify.userland.exec", "verify.kernel.read", "verify.kernel.exec",
+              "verify.kernel.copyout", "verify.samu.access"):
+        r.register(OperationSpec(n, None, mutating=False, recovery_safe=False))
+    return r
+ 
+ 
+3.2 Zentrale Dispatch-Regel (normativ)
+text
+ 
+  
+ 
+ 
+Vor JEDEM Handler-Aufruf, zentral, keine Ausnahmen:
+1. spec = registry.spec(op)          → fehlt: OPERATION_UNSUPPORTED
+2. if console_recovery and not spec.recovery_safe:
+       SESSION_RECOVERY_REQUIRED     → keine per-Op-Sonderchecks mehr
+3. if spec.requires_capability and spec.requires_capability not in granted:
+       CAPABILITY_MISSING
+granted = Menge der Namen mit effective_grant(...).granted == True
+ 
+ 
+3.3 Negotiation (R3) — im Mock
+python
+ 
+  
+ 
+ 
+def negotiate(self, hello_context: TargetExecutionContext) -> tuple[list[dict], list[dict]]:
+    """R3: Exakt effective_grant() je Capability. Kein availability-Shortcut,
+    kein HOMEBREW-Hardcode — Context kommt aus dem authentisierten HELLO."""
+    auth = default_authority()
+    granted, denied = [], []
+    ns_of = lambda name: name.split(".")[0]
+    for name in sorted({r.name for r in self.capabilities}):
+        recs = [r for r in self.capabilities if r.name == name]
+        if not recs:
+            continue
+        res = resolve(name, Scope.SESSION, hello_context, recs, auth,
+                      session_id=self._session_id, boot_id=self._boot_id)
+        req = Requirement(name, auth.min_assurance_for_grant.get(
+            ns_of(name), Assurance.UNVERIFIED))
+        d = effective_grant(req, res, hello_context, hello_context, auth,
+                            recovery_required=self.console_recovery)
+        entry = {"name": name, "availability": res.availability.value,
+                 "assurance": res.assurance.value}
+        (granted if d.granted else denied).append(
+            entry if d.granted else {"name": name, "reason": d.reason.value,
+                                     **entry})
+    return granted, denied
+ 
+ 
+
+Folge: seeded kernel.exec (AVAILABLE/OBSERVED, MOCK) → nicht granted (kernel.* verlangt PROVEN) — Test-Punkt „AVAILABLE+OBSERVED kernel.exec not granted" abgedeckt; memory.alloc/free (OBSERVED, min OBSERVED) → granted.
+4. R5+R6 — Resource Manager und realistischer Hang
+4.1 core/resources/manager.py (neu)
+python
+ 
+  
+ 
+ 
+"""R6: Nur nachweislich FREED Ressourcen verlassen den Manager."""
+from __future__ import annotations
+import os
+from dataclasses import dataclass, field
+from enum import Enum
+
+class CleanupResult(str, Enum):
+    FREED = "FREED"; FAILED = "CLEANUP_FAILED"; UNCERTAIN = "UNCERTAIN"
+
+@dataclass
+class ManagedResource:
+    ref: str
+    kind: str
+    recoverable: bool = True
+    force_cleanup_failure: bool = False
+    cleanup_attempted: bool = False
+    cleanup_result: CleanupResult | None = None
+
+@dataclass
+class CleanupReport:
+    state: str                                  # COMPLETE | PARTIAL | FAILED
+    resources: list[dict] = field(default_factory=list)
+    console_dirty: bool = False
+
+class ResourceManager:
+    def __init__(self) -> None:
+        self._held: dict[str, ManagedResource] = {}
+        self._leaked: dict[str, ManagedResource] = {}   # R6: Evidence bleibt erhalten
+
+    def acquire(self, kind: str, *, recoverable: bool = True,
+                force_cleanup_failure: bool = False) -> str:
+        ref = f"{kind}:{os.urandom(8).hex().upper()}"
+        self._held[ref] = ManagedResource(ref, kind, recoverable,
+                                          force_cleanup_failure)
+        return ref
+
+    def release(self, ref: str) -> bool:
+        r = self._held.get(ref)
+        if r is None:
+            return False
+        r.cleanup_attempted = True
+        if r.force_cleanup_failure or not r.recoverable:
+            r.cleanup_result = (CleanupResult.FAILED if r.recoverable
+                                else CleanupResult.UNCERTAIN)
+            self._leaked[ref] = self._held.pop(ref)
+            return False
+        r.cleanup_result = CleanupResult.FREED
+        del self._held[ref]                          # nur FREED verschwindet
+        return True
+
+    def cleanup_all(self) -> CleanupReport:
+        """R6: Cleanup-Versuch für alle gehaltenen Ressourcen.
+        FAILED/UNCERTAIN bleiben als Evidence erhalten (self._leaked);
+        jede nicht-FREED Ressource macht die Konsole dirty."""
+        for ref in list(self._held):
+            self.release(ref)
+        resources = [{"ref": r.ref, "kind": r.kind,
+                      "cleanup_attempted": r.cleanup_attempted,
+                      "cleanup_result": r.cleanup_result.value if r.cleanup_result
+                                        else "NOT_ATTEMPTED",
+                      "recoverable": r.recoverable}
+                     for r in self._leaked.values()]
+        dirty = bool(self._leaked)
+        return CleanupReport(
+            state="COMPLETE" if not dirty else "PARTIAL",
+            resources=resources, console_dirty=dirty)
+ 
+ 
+4.2 Hang-Modell (R5) — normativ
+text
+ 
+  
+ 
+ 
+mock.hang:
+  1. markiert intern: pending_recovery=True, console_dirty=True
+  2. blockiert den Worker dauerhaft (threading.Event().wait() ohne Timeout)
+     — KEIN Response-Frame, KEIN BYE
+  3. Agent nimmt danach keine weiteren Requests mehr zur Ausführung an
+     (realistisch: Konsole reagiert nicht)
+  4. Client Timeout läuft ab → Harness schließt Verbindung → Reader endet
+  5. Beim Verbindungsende: console_recovery = True (bleibt über Sessions)
+Neue Session: READY.session_state = RECOVERY_REQUIRED, mutating_allowed=false
+ 
+ 
+5. R7 — Concurrent In-Flight RPC, Worker Pool, Barriers
+
+Modell (normativ):
+text
+ 
+  
+ 
+ 
+Eine authentisierte Session besitzt mehrere Execution Lanes:
+- Reader-Thread: Frames empfangen, Länge validieren (R8), an Pool submitten
+- Bounded Worker Pool: size = min(HELLO.max_parallel_tasks (Client-Deckel),
+  Agent-Cap 8); Responses asynchron, korreliert über header.request_id
+- Send-Lock: Frames aus beliebigen Workern serialisieren sich nur auf dem Wire
+- Serverseitiges max_parallel_tasks = Pool-Größe → Enforcement durch Queuing
+ 
+ 
+
+Barrier-Primitive (Mock-Implementierung):
+python
+ 
+  
+ 
+ 
+# im MockAgent:
+def _barrier_create(self, args):
+    bid = "barrier:" + os.urandom(8).hex().upper()
+    self._barriers[bid] = {"parties": int(args["parties"]),
+                           "event": threading.Event(),
+                           "arrived": 0, "released": False}
+    return {"barrier": bid}
+
+def _barrier_wait(self, args):
+    b = self._barriers.get(args["barrier"])
+    if b is None:
+        return err("RESOURCE_STATE_INVALID")
+    b["arrived"] += 1
+    if b["arrived"] >= b["parties"]:
+        b["released"] = True
+        b["event"].set()
+        return {"arrived": True}
+    if not b["event"].wait(timeout_ms=args.get("timeout_ms", 5000) / 1000):
+        return err("BARRIER_TIMEOUT")
+    return {"arrived": True, "released": b["released"]}
+
+def _barrier_release(self, args):
+    b = self._barriers.get(args["barrier"])
+    if b is None:
+        return err("RESOURCE_STATE_INVALID")
+    b["released"] = True
+    b["event"].set()
+    return {}
+
+def _barrier_destroy(self, args):
+    b = self._barriers.pop(args["barrier"], None)
+    if b is None:
+        return err("RESOURCE_STATE_INVALID")
+    b["event"].set()                     # wartende werden entriegelt
+    return {}
+ 
+ 
+6. R8 — Framing (normativ + Code)
+python
+ 
+  
+ 
+ 
+def recv_frame(r, ch, max_frame_bytes: int):
+    """R8: Längenprüfung VOR jeder Allokation. Unbekannter msg_type und
+    jede Frame-Verletzung → ProtocolError → Session sofort schließen."""
+    hdr = _recv_exact(r, 13)                     # 4 len || 1 type || 8 seq
+    n = int.from_bytes(hdr[0:4], "big")
+    t_byte = hdr[4]
+    seq = int.from_bytes(hdr[5:13], "big")
+    if t_byte not in FRAME_TYPE_NAMES:
+        raise ProtocolError(f"unbekannter msg_type {t_byte}")
+    if n > max_frame_bytes:
+        raise ProtocolError(f"frame {n} > max_frame_bytes {max_frame_bytes}")
+    mtype = FRAME_TYPE_NAMES[t_byte]
+    return mtype, seq, ch.open(mtype, seq, _recv_exact(r, n))
+# Nonce bleibt ausschließlich lokal abgeleitet (C2); AAD ausschließlich build_aad.
+ 
+ 
+
+Fail-Close-Matrix: ReplayDetected | ProtocolError | SequenceExhausted | invalid frame → Verbindung schließen, State → CLOSED (oder RECOVERY_REQUIRED bei console_dirty), kein Antwortversuch.
+7. R9 — Budget präzisiert
+7.1 core/experiment/budget.py — Delta
+python
+ 
+  
+ 
+ 
+def check_budget(ir: dict, region_sizes: dict | None = None) -> dict:
+    computed = {
+        "max_expanded_steps": expanded_steps(ir["steps"]),
+        "max_parallel_tasks": peak_tasks(ir["steps"]),
+        "max_nesting_depth": nesting_depth(ir["steps"]),
+        "max_runtime_budget_ms": runtime_bound_ms(
+            ir["steps"], ir["timeouts"]["default_step_ms"]),
+        "max_snapshot_bytes": snapshot_bytes(ir["steps"], region_sizes),
+    }
+    declared = ir.get("budget", {})
+    timeouts = ir["timeouts"]
+    # R9: computed runtime bound muss AUCH <= timeouts.global_ms sein
+    if computed["max_runtime_budget_ms"] > timeouts["global_ms"]:
+        raise BudgetExceeded(
+            f"runtime_bound {computed['max_runtime_budget_ms']} > "
+            f"timeouts.global_ms {timeouts['global_ms']}")
+    # max_rpc_bytes: declared hard cap (kein Operation-Size-Modell) —
+    # Laufzeit-Enforcement kumulativ über RpcByteCounter (unten)
+    if "max_rpc_bytes" in declared and declared["max_rpc_bytes"] > CAPS["max_rpc_bytes"]:
+        raise BudgetExceeded("max_rpc_bytes über globalem Cap")
+    for k, cap in CAPS.items():
+        if k == "max_rpc_bytes":
+            continue
+        v = computed[k]
+        if v > cap or (k in declared and v > declared[k]):
+            raise BudgetExceeded(f"{k}: computed={v}, cap={cap}, "
+                                 f"declared={declared.get(k)}")
+    return computed
+ 
+ 
+7.2 core/experiment/rpc_budget.py (neu, Engine-seitig)
+python
+ 
+  
+ 
+ 
+"""R9: Kumulatives RPC-Budget über canonical PLAINTEXT bytes — Requests UND
+Responses/Events, für die gesamte Experiment-Session. max_frame_bytes ist
+ein separates Transportlimit pro Frame."""
+class RpcByteBudgetExceeded(BudgetExceeded): ...
+
+class RpcByteCounter:
+    def __init__(self, max_rpc_bytes: int, max_frame_bytes: int) -> None:
+        self.max_rpc_bytes = max_rpc_bytes
+        self.max_frame_bytes = max_frame_bytes
+        self.used = 0
+
+    def charge(self, plaintext: bytes, *, direction: str) -> int:
+        if len(plaintext) > self.max_frame_bytes:
+            raise RpcByteBudgetExceeded(
+                f"frame {len(plaintext)} > max_frame_bytes {self.max_frame_bytes}")
+        self.used += len(plaintext)
+        if self.used > self.max_rpc_bytes:
+            raise RpcByteBudgetExceeded(
+                f"rpc bytes {self.used} > max_rpc_bytes {self.max_rpc_bytes} "
+                f"(nach {direction})")
+        return self.used
+# Engine: charge() vor seal() (Request) und nach open() (Response/Event).
+# Bei BudgetExceeded: Experiment abbrechen, Cleanup-Policy anwenden,
+# Ergebnis BUDGET_EXCEEDED in Evidence.
+ 
+ 
+
+Budget-Tests ergänzt:
+python
+ 
+  
+ 
+ 
+def test_global_ms_below_computed_rejected():
+    ir = {"steps": [{"op": "REPEAT_BOUNDED", "count": 50,
+                     "body": [{"op": "SLEEP_BOUNDED", "ms": 100}]}],
+          "timeouts": {"default_step_ms": 100, "global_ms": 2000}}  # 5000 > 2000
+    with pytest.raises(BudgetExceeded):
+        check_budget(ir)
+ 
+ 
+8. R10 — Schema/Pydantic-Parität
+8.1 Enum-Härtung in core/models/candidate.py / surface.py (Delta)
+python
+ 
+  
+ 
+ 
+# candidate.py — ersetzt freie str-Felder:
+class CandidateSource(str, Enum):
+    FUZZING = "fuzzing"; DIFFING = "diffing"; MANUAL = "manual"
+    PATCH_DIFF = "patch_diff"; ORBISPROBE = "orbisprobe"; TRIAGE = "triage"
+
+class ChainStatus(str, Enum):
+    MISSING = "MISSING"; CANDIDATE = "CANDIDATE"
+    AVAILABLE = "AVAILABLE"; PROVEN = "PROVEN"
+
+# in CandidateRecord:  source: CandidateSource
+# in ChainLink:        status: ChainStatus
+
+# surface.py:
+class SurfaceDomain(str, Enum):
+    KERNEL = "kernel"; BROWSER = "browser"; MEDIA = "media"; NETWORK = "network"
+    USB = "usb"; BT = "bt"; FS = "fs"; IPC = "ipc"; GPU = "gpu"; PUP = "pup"
+    SECURE_SERVICE = "secure_service"; PACKAGE = "package"; SAVEGAME = "savegame"
+
+class Reachability(str, Enum):
+    PROVEN = "PROVEN"; PARTIAL = "PARTIAL"
+    UNPROVEN = "UNPROVEN"; NOT_REACHABLE = "NOT_REACHABLE"
+
+class AttackerControl(str, Enum):
+    NONE = "NONE"; PARTIAL = "PARTIAL"; FULL = "FULL"
+
+class TaintClass(str, Enum):
+    FIXED = "FIXED"; KERNEL_STATE = "KERNEL_STATE"
+    USER_CONTROLLED = "USER_CONTROLLED"; DERIVED_FROM_USER = "DERIVED_FROM_USER"
+    EXTERNAL = "EXTERNAL"; UNKNOWN = "UNKNOWN"
+
+# in SurfaceRecord: domain: SurfaceDomain, reachable: Reachability,
+#                   attacker_controlled: AttackerControl
+# in TaintEntry:    tclass: TaintClass
+ 
+ 
+8.2 tests/test_parity.py
+python
+ 
+  
+ 
+ 
+"""R10: JSON Schema UND Pydantic müssen jede ungültige Fixture ablehnen.
+Behavioral Validatoren ergänzen die Struktur, ersetzen sie nicht."""
+import jsonschema, pytest
+from pathlib import Path
+from core.models.candidate import CandidateRecord
+from core.models.surface import SurfaceRecord, TaintEntry
+
+S = Path("schemas")
+def _validate(schema_file, def_name, doc):
+    schema = json.loads((S / schema_file).read_text())
+    schema = {"$ref": f"#/$defs/{def_name}", "$defs": schema["$defs"]}
+    jsonschema.Draft202012Validator(schema).validate(doc)
+
+BAD = [
+    ("candidate.schema.json", "candidate_record", {"id": "K-001", "surface_id": "s",
+     "source": "made_up", "state": "BUG", "history": []}, CandidateRecord),
+    ("candidate.schema.json", "candidate_record", {"id": "K-001", "surface_id": "s",
+     "source": "manual", "state": "CHAINABLE", "chain_links": [
+         {"chain_id": "c", "position": 0, "status": "WEIRD"}],
+     "history": [{"state": "CHAINABLE", "at": "2025-01-01T00:00:00Z",
+                  "actor": "t"}]}, CandidateRecord),
+    ("surface.schema.json", "surface_record", {"id": "surface.kernel.x",
+     "domain": "warp_drive", "entrypoint": "e", "input": "i", "privilege": "p",
+     "reachable": "MAYBE", "attacker_controlled": "FULL"}, SurfaceRecord),
+    ("surface.schema.json", "surface_record", {"id": "surface.kernel.x",
+     "domain": "kernel", "entrypoint": "e", "input": "i", "privilege": "p",
+     "reachable": "PROVEN", "attacker_controlled": "SOME"}, SurfaceRecord),
+    ("surface.schema.json", "surface_record", {"id": "surface.kernel.x",
+     "domain": "kernel", "entrypoint": "e", "input": "i", "privilege": "p",
+     "reachable": "PROVEN", "attacker_controlled": "FULL"}, SurfaceRecord),
+    # PROVEN ohne reachability_chain: Pydantic-Validator muss zusätzlich lehnen
+]
+
+@pytest.mark.parametrize("schema_file,def_name,doc,model", BAD)
+def test_both_reject(schema_file, def_name, doc, model):
+    with pytest.raises(jsonschema.ValidationError):
+        _validate(schema_file, def_name, doc)
+    with pytest.raises(ValueError):
+        model.model_validate(doc)
+ 
+ 
+
+(Der fünfte Fall wird von beiden abgelehnt: JSON Schema allOf verlangt reachability_chain bei reachable=PROVEN; der Pydantic-Validator dito. TaintEntry mit tclass: "MAGIC" wird analog geprüft.)
+9. R11 — Kanonische Hex-Darstellung
+9.1 common-Delta (brechend für variable Breite)
+json
+ 
+  
+ 
+ 
+"u64_hex":        { "type": "string", "pattern": "^0x[0-9a-f]{16}$" },
+"address":        { "type": "string", "pattern": "^0x[0-9a-f]{16}$" },
+"address_kernel": { "type": "string", "pattern": "^0x[0-9a-f]{16}$" }
+ 
+ 
+9.2 core/canonical.py — Erweiterung
+python
+ 
+  
+ 
+ 
+import re as _re
+_HEX16 = _re.compile(r"^0x[0-9a-f]{16}$")
+
+def normalize_u64(value: str | int) -> str:
+    """R11: Kanonische Darstellung '0x' + exakt 16 lowercase Hexstellen.
+    Für Ingest-Pfade mit variabler Breite (Tooling-Importe); Schemas erzwingen
+    die kanonische Form bereits, variable Breite wird dort abgelehnt."""
+    v = int(value, 16) if isinstance(value, str) else int(value)
+    if isinstance(value, str) and not value.lower().startswith("0x"):
+        raise ValueError("u64 erwartet hexadezimal mit 0x-Präfix")
+    if not (0 <= v < 2**64):
+        raise ValueError(f"kein u64: {value!r}")
+    return f"0x{v:016x}"
+
+def is_canonical_u64(value: str) -> bool:
+    return bool(_HEX16.match(value))
+ 
+ 
+
+Test:
+python
+ 
+  
+ 
+ 
+def test_r11_canonical_u64_normalization():
+    assert normalize_u64("0xA") == normalize_u64("0x0a") == \
+           normalize_u64("0x000000000000000a") == "0x000000000000000a"
+    # Semantisch identische Werte → identischer Hash nach Normalisierung:
+    docs = [{"a": normalize_u64(x)} for x in ("0xA", "0x0a", "0x000000000000000a")]
+    assert len({canonical_sha256(d) for d in docs}) == 1
+    with pytest.raises(ValueError):
+        normalize_u64(2**64)
+    with pytest.raises(ValueError):
+        normalize_u64("-1")
+ 
+ 
+10. Mock ps4rfd — integrierte Architektur (kompakt)
+python
+ 
+  
+ 
+ 
+            ok = self.resources.release(args.get("ref", ""))
+            return ({"status": "OK", "result": {"freed": True}} if ok
+                    else err("RESOURCE_STATE_INVALID"))
+        if op_name == "mock.block":
+            threading.Event().wait(args.get("ms", 100) / 1000)
+            return {"status": "OK", "result": {}}
+        if op_name == "mock.hang":                                # R5
+            self._hung = True
+            self.console_recovery_pending = True
+            threading.Event().wait()          # blockiert Worker dauerhaft, KEIN Response
+        if op_name == "mock.leak":                                # R6
+            self.resources.acquire("mem", recoverable=False)
+            return {"status": "OK", "result": {"leaked": True}}
+        if op_name == "mock.free_fail":                           # R6
+            ref = self.resources.acquire("mem", force_cleanup_failure=True)
+            return {"status": "OK", "result": {"ref": ref}}
+        if op_name == "sync.barrier.create":
+            return {"status": "OK", "result": self._barrier_create(args)}
+        if op_name == "sync.barrier.wait":
+            return self._barrier_wait(args)
+        if op_name == "sync.barrier.release":
+            return {"status": "OK", "result": self._barrier_release(args)}
+        if op_name == "sync.barrier.destroy":
+            return {"status": "OK", "result": self._barrier_destroy(args)}
+        if op_name == "experiment.load":
+            return {"status": "OK", "result": {"accepted": args.get("ir_sha256")}}
+        return err("OPERATION_UNSUPPORTED")
+
+    # ---- Session-Loop (R7): Reader + Pool + Send-Lock ----
+    def _serve_locked(self, conn):
+        # Handshake wie v0.5 (HELLO/HELLO_ACK/AUTH/AUTH_ACK), zusätzlich:
+        self._boot_id = self.boot_id
+        self._session_id = sid
+        client_cap = int(hello.get("max_parallel_tasks", self.AGENT_CAP))
+        workers = max(1, min(client_cap, self.AGENT_CAP))          # R7 Enforcement
+        self.console_recovery = self.console_recovery or \
+                                getattr(self, "console_recovery_pending", False)
+        # R1: Session-Binding frisch ingestieren
+        intake = CapabilityIntake(self._session_id, self.boot_id)
+        self.capabilities = [intake.ingest(r.model_copy(
+            update={"scope": Scope.SESSION, "boot_id": self.boot_id}))
+            for r in self._base]
+        # R3: echte Negotiation, Context aus authentisiertem HELLO
+        granted, denied = self.negotiate(hello_context)
+        self._granted = {g["name"] for g in granted}
+        session_state = ("RECOVERY_REQUIRED" if self.console_recovery
+                         else "ACTIVE")                            # R4
+        _send_frame(conn, ch_out, "READY", {
+            "msg": "READY", "session_id": sid, "context": self.context.value,
+            "session_state": session_state,
+            "console_recovery": self.console_recovery,
+            "mutating_allowed": session_state == "ACTIVE",
+            "max_parallel_tasks": workers,
+            "capabilities": {"granted": granted, "denied": denied}})
+        pool = ThreadPoolExecutor(max_workers=workers)
+        try:
+            while True:
+                mtype, seq, pt = recv_frame(conn, ch_in, max_frame_bytes)   # R8
+                req = json.loads(pt)
+                rid = req.get("header", {}).get("request_id", "")
+                if self._hung:                                     # R5: keine Antworten mehr
+                    continue
+                def work(req=req, rid=rid):
+                    body = req.get("body", {})
+                    resp = self.dispatch(body.get("operation", ""),
+                                         body.get("arguments", {}))
+                    resp = {"header": {"in_reply_to": rid}, **resp}
+                    with self._send_lock:
+                        _send_frame(conn, ch_out, "RESPONSE", resp)
+                pool.submit(work)
+        except (ReplayDetected, ProtocolError, SequenceExhausted, ConnectionError):
+            pass                                                   # R8: fail close
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
+            self._end_session(conn, ch_out)
+
+    def _end_session(self, conn, ch_out):
+        # R6: Cleanup-Versuch; nur FREED verschwindet; dirty → RECOVERY_REQUIRED
+        pending = getattr(self, "console_recovery_pending", False)
+        report = self.resources.cleanup_all()
+        if report.console_dirty or pending:
+            self.console_recovery = True                           # bleibt konsoleweit
+        state = ("RECOVERY_REQUIRED" if self.console_recovery else "CLOSED")
+        try:
+            with self._send_lock:
+                _send_frame(conn, ch_out, "BYE", {
+                    "msg": "BYE", "reason": ("RECOVERY_REQUIRED" if pending
+                                             else "CLIENT_CLOSE"),
+                    "cleanup": {"state": report.state,
+                                "resources": report.resources}})
+        except OSError:
+            pass
+# mock.hang-Pfad: _end_session wird erst bei Verbindungsabbruch erreicht;
+# der Client sieht den Timeout, NIE ein sauberes BYE (R5).
+ 
+ 
+11. Testabdeckung — Zuordnung der geforderten Regressionen
+Gefordert
+	
+Test
+	
+Datei
+mixed-context / mixed-session / dup-seq / reboot	§1.2	test_capability_resolution.py
+fake/failed/wrong-op/wrong-profile verification	§2.2	test_verification.py
+AVAILABLE+OBSERVED kernel.exec not granted	test_negotiation_denies_observed_kernel_exec	test_mock_negotiation.py
+RECOVERY_REQUIRED survives reconnect	test_recovery_survives_reconnect (READY nach Hang)	test_mock_recovery.py
+memory.alloc / experiment.load rejected in recovery	zentrale Dispatch-Checks, beide → SESSION_RECOVERY_REQUIRED	test_mock_recovery.py
+mock.leak → unrecoverable → recovery required	test_leak_marks_console_dirty	test_mock_recovery.py
+echter Hang → Client-Timeout, kein BYE	test_hang_produces_client_timeout (recv-Timeout ≠ BYE-Frame)	test_mock_recovery.py
+zwei In-Flight Calls gleichzeitig	test_two_inflight_concurrent (2× barrier.wait parties=2)	test_concurrency.py
+Barrier-Race (A: check→wait→use, B: wait→mutate)	test_barrier_race_lanes	test_concurrency.py
+Parallel-Limit serverseitig	test_pool_limit_enforced (parties=3, Deckel 2 → BARRIER_TIMEOUT×2; Deckel 4 → PASS)	test_concurrency.py
+Oversized Frame vor Allokation	test_oversized_frame_rejected (Länge > max → ProtocolError, kein recv des Payloads)	test_framing.py
+Unbekannter msg_type	test_unknown_msg_type_closes_session	test_framing.py
+Kumulatives RPC-Budget	test_rpc_cumulative_budget (Req+Resp-Plaintext, Req+Resp)	test_rpc_budget.py
+global_ms < computed → compile rejection	§7.1	test_budget.py
+Parity	§8.2	test_parity.py
+Kanonisches U64	§9.2	test_canonical.py
+ 
+ 
+12. Reihenfolge und Status
+text
+ 
+  
+ 
+ 
+1. pytest komplett grün (bestehende v0.5-Suite + §11-Erweiterungen)
+2. Mock Round Trip erneut (YAML→IR→Safe→Budget→JCS→SHA256→Negotiation→Run→Evidence→Hash)
+3. Fault Injection erneut (replay, transcript, profile, budget, leak, hang,
+   RECOVERY_REQUIRED, framing, concurrency)
+→ erst danach: 1. OrbisProbe Inventory + Mapping
+               2. OrbisProbe Adapter gegen Mock
+               3. Metasploit Adapter gegen Mock msfrpcd
+               4. Ghidra/Rizin/angr/AFL++ Tool Adapter
+ 
+ 
+
+Statusangabe: Die Resolver-, Verification-, Registry-, Budget- und Canonical-Änderungen (§1–§3, §7–§9) sind vollständig und konsistent. Die Mock-Agent-Integration (§10) ist als Referenzarchitektur spezifiziert; die Thread-Feinheiten (Sauberkeit des Pool-Shutdowns beim Hang-Pfad, console_recovery_pending-Initialisierung, Barrier-Timeout-Races) sind bewusst die Stellen, die die Fault-Injection-Suite beim ersten Lauf validieren muss — genau dafür ist sie gebaut. Kein echter PS4 Agent Code, kein Kernel Code, keine Payloads; OrbisProbe und Metasploit bleiben zurückgestellt bis die Suite grün ist.

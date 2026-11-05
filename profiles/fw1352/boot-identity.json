@@ -1,0 +1,144 @@
+{
+  "schema": "ps4rf.w10.boot-identity.v1",
+  "generated_from": "offline analysis of the pinned FW13.52 research (2026-10-05)",
+  "platform_constants": {
+    "static_image_base": "0xffffffffd00d0000",
+    "note": "static base of the pinned kernel image: RVA + static base = unslid address; the live address is kbase + RVA where kbase is the KASLR-shifted base measured from LSTAR",
+    "provenance": "pinned FW13.52 research (kernel.bin sha256 cf157ffdbae872a20bbb9a46c8518b53d96c1ed75d4e73878466a295d92eca35), same base the W9 attestation windows use"
+  },
+  "boot_instance_candidates": [
+    {
+      "id": "kern.boottime.userland",
+      "source": "userland API",
+      "api": "sysctlbyname(\"kern.boottime\") / sysctl MIB (CTL_KERN=1, KERN_BOOTTIME=21)",
+      "rva_or_api": "libPS4 exposes sysctl/sysctlbyname; no privilege beyond the jailbreak",
+      "datatype": "struct timeval (tv_sec 8 B, tv_usec 8 B, little endian)",
+      "why_boot_bound": "the kernel writes the wall-clock boot instant once during boot init and never again until the next boot",
+      "changes_per_reboot": "yes - a new boot writes a new instant; two boots in the same second only differ in tv_usec",
+      "read_only_ok": "yes, read only",
+      "confidence": "MEDIUM",
+      "evidence": "libPS4 exposes sysctl/sysctlbyname (resolved from libkernel at init; the SDK itself calls sysctl with CTL_KERN for process enumeration) and the kernel-side OID is number 0x15 = 21 = KERN_BOOTTIME, CTLFLAG_RD | CTLTYPE_OPAQUE. Open point: whether libkernel on FW13.52 lets an unprivileged homebrew agent call it is not verifiable offline - that is why the confidence is MEDIUM and the kernel variable is the independent cross-check."
+    },
+    {
+      "id": "kern.boottime.kernel_variable",
+      "source": "fixed read-only kernel variable",
+      "rva_or_api": "RVA 0x224c6c8 (16 bytes: tv_sec, tv_usec at 0x224c6c8 / 0x224c6cd0), inside the kernel data segment; runtime address = kbase + RVA",
+      "datatype": "struct timeval (two little-endian 64 bit words: seconds then microseconds)",
+      "why_boot_bound": "same variable the sysctl node above exports; initialised once per boot",
+      "changes_per_reboot": "yes",
+      "read_only_ok": "yes, read only",
+      "confidence": "HIGH",
+      "evidence": "offline re-verification 2026-10-05: bytes at the RVA decode to sec 1789910256 / usec 860896 = 2026-09-20T13:17:36Z, i.e. the boot instant of the capture (the dossier was written about 47 minutes later). The sysctl handler for kern.boottime loads exactly this address (text-segment LEA to 0xffffffffd231c6c8 = static base + this RVA) and copies 16 bytes, so the sysctl path and a direct read return the same value. The only write to this address in the whole image sits in the internal clock-set routine (RVA 0x34ea16), whose callers are the RTC/inittodr boot path and the kern_time.c clock-set path.",
+      "rva": "0x224c6c8",
+      "correction": "earlier W10 draft named 0x1a5ef80 as the boot instant: that address is in fact time_second (and 0x1a5ef88 time_uptime) - a pair that changes every second within a boot; corrected before review"
+    },
+    {
+      "id": "kern.boottime.node",
+      "source": "kernel structure (sysctl node)",
+      "rva_or_api": "RVA 0x1a5efb8 (node entry) with the name string at RVA 0x7dc0e0",
+      "datatype": "sysctl OID entry: parent/link, number 0x15 (= 21, KERN_BOOTTIME), kind 0x80000005 (CTLFLAG_RD | CTLTYPE_OPAQUE), name pointer, handler pointer, type string, description, format string",
+      "why_boot_bound": "the node is static; the variable it points at is the boot instant",
+      "changes_per_reboot": "no - the node is constant, only its data changes",
+      "read_only_ok": "yes, read only (read the variable at RVA 0x224c6c8; never call the handler)",
+      "confidence": "HIGH",
+      "evidence": "fields read from the image: number 0x15 = 21 = KERN_BOOTTIME, kind 0x80000005 = CTLFLAG_RD | CTLTYPE_OPAQUE (read-only), name pointer resolves to the \"boottime\" string (RVA 0x7dc0e0), handler pointer into the text segment (RVA 0x34f430) whose code returns 16 bytes from RVA 0x224c6c8, type string \"S,timeval\", description \"System boottime\", format string \"U\"",
+      "rva": "0x1a5ef90"
+    },
+    {
+      "id": "kaslr_slide",
+      "source": "runtime value (secondary discriminator only)",
+      "rva_or_api": "kbase - static_image_base, with kbase derived from LSTAR - the xfast syscall entry offset",
+      "datatype": "unsigned 64 bit integer",
+      "why_boot_bound": "the kernel is relocated once per boot; the slide is constant within a boot",
+      "changes_per_reboot": "with high probability yes, but not guaranteed (two boots could land on the same slide)",
+      "read_only_ok": "yes, read only (already measured in W9)",
+      "confidence": "MEDIUM",
+      "evidence": "three independent captures of the same firmware show three different kernel bases (capture dossiers: kernel-dump, kernel-live-snapshot, ram-full) plus the W9 live run",
+      "not_sufficient_alone": true
+    },
+    {
+      "id": "kern.boottimebin.bintime",
+      "source": "fixed read-only kernel variable (bintime twin)",
+      "rva": "0x224c6b0",
+      "rva_or_api": "RVA 0x224c6b0 (16 bytes: sec at 0x224c6b0, frac at 0x224c6b8)",
+      "datatype": "struct bintime { int64 sec; uint64 frac } (16 bytes)",
+      "why_boot_bound": "same boot instant as the timeval: the same code block writes both representations (write sites RVA 0x34ea08..0x34ea3b)",
+      "changes_per_reboot": "yes (same instant as the timeval)",
+      "read_only_ok": "yes, but second choice: the timekeeping routine adds into the bintime on every tick (RVA 0x34eb30), so its low bits may be adjusted within a boot while the timeval stays as set; the timeval is what sysctl returns",
+      "confidence": "MEDIUM",
+      "evidence": "bytes at the RVA: sec 1789910256 (identical to the timeval) and frac 0xdc63bd3cfedeccfe = 0.8608968996 s, matching the timeval usec 860896 exactly"
+    }
+  ],
+  "non_candidates": [
+    {
+      "id": "session_id",
+      "why": "per session, not per boot: two sessions in one boot would derive two identities"
+    },
+    {
+      "id": "payload_or_build_id",
+      "why": "delivery artefact identity, unrelated to the boot instance"
+    },
+    {
+      "id": "time_second_and_time_uptime_pair_at_0x1a5ef80",
+      "why": "changes every second within a boot (observed 1789913089 / 2832 s); the *difference* cross-checks the boot instant to about one second, but neither value is an identity - an earlier W10 draft misread this pair as the boot timeval and it was corrected"
+    },
+    {
+      "id": "pid_and_agent_start_time",
+      "why": "per process, freely reused within one boot"
+    },
+    {
+      "id": "random_values",
+      "why": "not reproducible: the same boot would produce different identities"
+    },
+    {
+      "id": "profile_sha256_alone",
+      "why": "identifies the firmware facts, not the boot instance (identical across all boots)"
+    },
+    {
+      "id": "firmware_version_alone",
+      "why": "identical across every boot of this firmware"
+    },
+    {
+      "id": "kernel_sdk_version_string",
+      "why": "userland value (kern.sdk_version = 0.0-prototype) - it is not a firmware attestation and not a boot instance"
+    },
+    {
+      "id": "rtc_or_persistent_counters",
+      "why": "persistent (not boot scoped), and reaching them is out of the W10 scope"
+    }
+  ],
+  "boot_id_contract": {
+    "schema": "ps4rf.boot-binding.v1",
+    "algorithm": "boot_digest = SHA256(JCS({'schema': 'ps4rf.boot-binding.v1', 'platform': 'orbis', 'profile_sha256': '<real profile hash>', 'boottime': {'sec': int, 'usec': int}}})); boot_id = 'BOOT-' + first 16 lowercase hex of boot_digest",
+    "object_keys_exactly": [
+      "schema",
+      "platform",
+      "profile_sha256",
+      "boottime"
+    ],
+    "full_digest_in_evidence": true,
+    "accepted_primary_source": "sysctl:kern.boottime (read-only userland sysctl, the same struct timeval the kernel variable at RVA 0x224c6c8 holds)",
+    "secondary_discriminator": "kaslr_slide (never a source on its own)",
+    "refuse_when": [
+      "tv_sec <= 0",
+      "tv_usec < 0",
+      "tv_usec >= 1000000",
+      "boottime after the console wall clock",
+      "missing profile_sha256",
+      "target identity does not match the profile",
+      "the sysctl read fails",
+      "the two reads inside one session are not byte identical (BOOT_SOURCE_NOT_STABLE)",
+      "a simulated or test label is claimed as measured"
+    ],
+    "no_fallback_to_random_or_session_values": true,
+    "no_secret_inputs": true,
+    "implementation": "tools/profiles/bootid.py (derivation, validation, stability, labels)",
+    "note": "W11 replaced the withdrawn W10 draft derivation (schema ps4rf.bootid.v1, which folded the target identity into the digest); the algorithm above is authoritative and the earlier draft string is not. A simulated second boot exists only as an offline vector and is always labelled SIMULATED_REBOOT_VECTOR."
+  },
+  "open_questions": [
+    "the live value of kern.boottime has not been measured on a running console in this project yet (W9 read no boot instant): either the agent calls the userland sysctl before any privileged step, or a minimal fixed callback copies 16 bytes at the RVA above",
+    "whether the sysctl call is reachable from the homebrew agent sandbox on FW13.52 is unverified offline (libkernel may gate it); the kernel-variable path is the fallback that only needs the existing one-shot privileged entry",
+    "two boots inside the same wall-clock second would need the microsecond field (and ideally the secondary slide discriminator) to stay distinguishable",
+    "no second boot of this firmware could be sampled for the boot instant offline: the live snapshot and the full RAM capture do not contain the kernel page holding the variable, so \"changes per reboot\" rests on the write-path analysis (RTC/inittodr boot path plus the clock-set path) and on the three observed different kernel bases, not on two measured samples"
+  ]
+}

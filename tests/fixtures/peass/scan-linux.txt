@@ -1,0 +1,64 @@
+# linPEAS fixture report (SYNTHETIC)
+# generated offline by tools/recon/peass/mock/linpeas_mock.py
+# scanner: linPEAS 20231115-mock
+# synthetic: true
+# no real host was contacted and no credentials are present
+
+╔══════════╣ System Information ╚ offline fixture ╝
+╚ hostname: ac-lab-host
+╚ uname -a: Linux ac-lab-host 6.8.0-31-generic #31-Ubuntu SMP PREEMPT_DYNAMIC x86_64 GNU/Linux
+╚ kernel: 6.8.0-31-generic
+╚ /etc/os-release: PRETTY_NAME="Ubuntu 24.04.1 LTS" ID=ubuntu VERSION_ID="24.04"
+
+╔══════════╣ Filesystem ╚ offline fixture ╝
+╚ world-writable file: /srv/app/cache/staging.sock (mode 0777, fixture)
+╚ writable directory: /opt/vendor/updates (owned by appuser, fixture)
+╚ world-writable directory: /srv/app/backup (mode 0777, fixture)
+
+╔══════════╣ Mounts ╚ offline fixture ╝
+╚ overlay on / (docker-style rootfs, fixture)
+╚ /dev/sda2 on /boot type ext4 (rw, fixture)
+╚ tmpfs on /run (rw, fixture)
+╚ cgroup2 on /sys/fs/cgroup (container hint, fixture)
+
+╔══════════╣ Permissions ╚ offline fixture ╝
+╚ unreadable by scan user: /root (fixture)
+╚ world-writable directory: /tmp (sticky, fixture)
+╚ group-writable file: /var/log/app.log (mode 0664, fixture)
+
+╔══════════╣ SUID-SGID binaries ╚ offline fixture ╝
+╚ /usr/bin/sudo (SUID root, fixture)
+╚ /usr/bin/wall (SGID tty, fixture)
+╚ /opt/vendor/helper (SUID root, not package-owned, fixture)
+
+╔══════════╣ Linux Capabilities ╚ offline fixture ╝
+╚ /usr/bin/ping cap_net_raw+ep (fixture)
+╚ /opt/vendor/netd cap_net_admin,cap_net_bind_service+ep (fixture)
+
+╔══════════╣ Services ╚ offline fixture ╝
+╚ systemd unit app.service runs as root (fixture)
+╚ systemd unit update-agent.service enabled (fixture)
+╚ daemon sshd.service running (fixture)
+
+╔══════════╣ Cron Jobs ╚ offline fixture ╝
+╚ /etc/crontab: 17 * * * * root /opt/vendor/update.sh (fixture)
+╚ user crontab (appuser): @reboot /srv/app/bin/start.sh (fixture)
+
+╔══════════╣ Active Sockets ╚ offline fixture ╝
+╚ tcp 127.0.0.1:8080 LISTEN (fixture)
+╚ unix socket /run/app/control.sock (fixture)
+╚ udp 0.0.0.0:5353 (fixture)
+
+╔══════════╣ Credentials Search ╚ offline fixture ╝
+╚ /home/operator/.netrc: credential-like directives observed (values never copied)
+╚ /home/operator/.bash_history: credential-like patterns observed (values never copied)
+╚ /srv/app/.env: credential-like assignment present (values never copied)
+
+╔══════════╣ Interesting Binaries ╚ offline fixture ╝
+╚ /usr/bin/gdb present (fixture)
+╚ /usr/bin/curl present (fixture)
+╚ /usr/bin/python3.12 present (fixture)
+
+╔══════════╣ Container-VM Indicators ╚ offline fixture ╝
+╚ /.dockerenv present (container indicator, fixture)
+╚ hypervisor cpu flag present (VM indicator, fixture)

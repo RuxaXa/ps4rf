@@ -1,0 +1,36 @@
+{
+ "artifact_sha256": "b6f6dd4bf5acf1a82f9b71db9d80e4bc99493ffe80a7daecbeac4ab51f1ea53d",
+ "entries": [
+  {
+   "kind": "function",
+   "locator": {
+    "kind": "rva",
+    "value": 4096
+   },
+   "name": "fixture_entry_a",
+   "size": 128
+  },
+  {
+   "kind": "function",
+   "locator": {
+    "kind": "rva",
+    "value": 5120
+   },
+   "name": "fixture_entry_b",
+   "size": 64
+  },
+  {
+   "kind": "string_ref",
+   "locator": null,
+   "name": "fixture_note",
+   "size": 16
+  }
+ ],
+ "notes": [
+  "fixture analysis output; no adapter is implemented (W6 section 12)",
+  "produced by a ghidra fixture, capped at WEAK confidence"
+ ],
+ "schema": "ps4rf.external-analysis.v1",
+ "tool": "ghidra",
+ "version": "fixture-0.1"
+}

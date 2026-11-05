@@ -1,0 +1,24 @@
+---
+comment: Synthetic ps4rf fixture entry written in the upstream GTFOBins entry format; not a real GTFOBins entry and contains no real recipe.
+functions:
+  file-write:
+    - code: ./synthetic-beta --synthetic-write
+      contexts:
+        unprivileged:
+  file-read:
+    - code: ./synthetic-beta --synthetic-read
+      contexts:
+        unprivileged:
+  upload:
+    - code: ./synthetic-beta --synthetic-upload
+      contexts:
+        unprivileged:
+  download:
+    - code: ./synthetic-beta --synthetic-download
+      contexts:
+        unprivileged:
+  restricted_shell:
+    - code: ./synthetic-beta --synthetic-restricted
+      contexts:
+        unprivileged:
+...

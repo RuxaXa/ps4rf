@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ps4rf:schemas/common.schema.json",
+  "$defs": {
+    "capability_name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "u64_hex": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{16}$"
+    },
+    "address": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{16}$"
+    },
+    "address_kernel": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{16}$"
+    },
+    "request_id": {
+      "type": "string",
+      "pattern": "^REQ-[0-9a-f]{32}$"
+    },
+    "session_id": {
+      "type": "string",
+      "pattern": "^SES-[0-9A-Fa-f]{16,64}$"
+    }
+  }
+}

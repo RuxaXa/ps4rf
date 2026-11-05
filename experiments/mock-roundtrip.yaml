@@ -1,0 +1,13 @@
+schema_version: 1
+name: mock-roundtrip
+ir_encoding: jcs-rfc8785
+timeouts: {default_step_ms: 100, global_ms: 5000}
+budget:
+  max_expanded_steps: 100
+  max_parallel_tasks: 4
+  max_runtime_budget_ms: 5000
+  max_snapshot_bytes: 1048576
+  max_rpc_bytes: 1048576
+steps:
+  - op: CALL
+    call: {operation: session.ping, arguments: {}}

@@ -1,0 +1,53 @@
+{
+  "example": true,
+  "example_note": "SHAPE EXAMPLE for the W2 skeleton. Contains placeholder hashes - not a real build. Real manifests must carry the real sha256 of every external input and artifact (W0/D4).",
+  "kind": "ps4rf.toolchain-manifest",
+  "manifest_version": 1,
+  "profile": "fw1352",
+  "external_inputs": [
+    {
+      "name": "openorbis-ps4-toolchain",
+      "version": "2.2.0-example",
+      "source_id": "example-only/no-real-sdk-present",
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "pinned": true,
+      "licence": "example"
+    },
+    {
+      "name": "ps4rf-protocol-core",
+      "version": "in-repo",
+      "source_id": "core/rpc + core/canonical.py",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "pinned": true
+    }
+  ],
+  "build": {
+    "compiler": {"name": "clang", "version": "example-18.1.0"},
+    "linker": {"name": "ld.lld", "version": "example-18.1.0"},
+    "flags": ["-target x86_64-unknown-freebsd", "-ffreestanding", "-fPIC", "-O2"],
+    "source_commit": "0000000000000000000000000000000000000000",
+    "timestamp": {
+      "value": "1970-01-01T00:00:00Z",
+      "hash_authority": false
+    }
+  },
+  "artifacts": [
+    {
+      "name": "ps4rfd",
+      "kind": "elf",
+      "elf_type": "ET_DYN",
+      "path": "build/ps4rfd.elf",
+      "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+    },
+    {
+      "name": "ps4rfd-payload",
+      "kind": "bin",
+      "path": "build/ps4rfd.bin",
+      "sha256": "4444444444444444444444444444444444444444444444444444444444444444"
+    }
+  ],
+  "pins": {
+    "ps4rfd": "3333333333333333333333333333333333333333333333333333333333333333",
+    "ps4rfd-payload": "4444444444444444444444444444444444444444444444444444444444444444"
+  }
+}

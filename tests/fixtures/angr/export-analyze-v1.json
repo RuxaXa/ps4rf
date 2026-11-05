@@ -1,0 +1,121 @@
+{
+  "artifact": {
+    "sha256": "efd361839429619ba5d83586dc973688fd21c9e55ae9e5b580fcc63db82238dd"
+  },
+  "cfg": {
+    "edges": [
+      {
+        "dst": "0x401030",
+        "src": "0x401000",
+        "type": "fallthrough"
+      },
+      {
+        "dst": "0x401060",
+        "src": "0x401030",
+        "type": "call"
+      },
+      {
+        "dst": "0x4010a0",
+        "src": "0x401060",
+        "type": "fallthrough"
+      },
+      {
+        "dst": "0x4010e0",
+        "src": "0x4010a0",
+        "type": "call"
+      },
+      {
+        "dst": "0x40110c",
+        "src": "0x4010e0",
+        "type": "jump"
+      },
+      {
+        "dst": "0x40110c",
+        "src": "0x401134",
+        "type": "ret"
+      }
+    ],
+    "nodes": [
+      {
+        "offset": "0x401000",
+        "size": 48
+      },
+      {
+        "offset": "0x401030",
+        "size": 48
+      },
+      {
+        "offset": "0x401060",
+        "size": 64
+      },
+      {
+        "offset": "0x4010a0",
+        "size": 64
+      },
+      {
+        "offset": "0x4010e0",
+        "size": 44
+      },
+      {
+        "offset": "0x40110c",
+        "size": 40
+      },
+      {
+        "offset": "0x401134",
+        "size": 24
+      }
+    ]
+  },
+  "entry": "0x401000",
+  "functions": [
+    {
+      "blocks": [
+        "0x401000",
+        "0x401030"
+      ],
+      "name": "mock_main",
+      "offset": "0x401000",
+      "size": 96
+    },
+    {
+      "blocks": [
+        "0x401060",
+        "0x4010a0"
+      ],
+      "name": "mock_parse",
+      "offset": "0x401060",
+      "size": 128
+    },
+    {
+      "blocks": [
+        "0x4010e0",
+        "0x40110c"
+      ],
+      "name": "mock_check",
+      "offset": "0x4010e0",
+      "size": 84
+    },
+    {
+      "blocks": [
+        "0x401134"
+      ],
+      "name": "mock_tail",
+      "offset": "0x401134",
+      "size": 24
+    }
+  ],
+  "generator": {
+    "runner": "ps4rf_angr_run",
+    "runner_sha256": "edf328c2a4bf64dabf1e6261094854f6dde9a84a6c069bf540306d18a7388527",
+    "tool": "angr",
+    "version": "9.2.4-mock"
+  },
+  "info": {
+    "arch": "AMD64",
+    "bits": 64,
+    "endian": "little",
+    "os": "linux"
+  },
+  "mode": "analyze",
+  "schema": "ps4rf.angr.export/v1"
+}

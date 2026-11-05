@@ -1,0 +1,118 @@
+{
+  "name": "own1-authority-recipe",
+  "profile": "fw1352",
+  "version": 1,
+  "provenance": {
+    "source": "P13-v4.2 recipe entries for OWN-1 plus published authority list",
+    "source_file": "p13v42-kpayload.c",
+    "source_sha256": "78a793676573b92bb8d2196ce8aa8b3a2b12fd3a9f10d7b72032ffea16ab7c40",
+    "note": "root values and pointed-to contents are separate entries; stale_rows never appears"
+  },
+  "limits": {
+    "max_entries": 16,
+    "max_entry_len": 4096,
+    "max_disp": 4096
+  },
+  "entries": [
+    {
+      "i": 0,
+      "name": "BMP_LIMIT",
+      "type": "RVA_READ",
+      "rva": "0x238A848",
+      "length": 8,
+      "role": "authority"
+    },
+    {
+      "i": 1,
+      "name": "BMP_ROOT",
+      "type": "RVA_READ",
+      "rva": "0x238A870",
+      "length": 8,
+      "role": "authority (root value)"
+    },
+    {
+      "i": 2,
+      "name": "BMP_SLICE",
+      "type": "FOLLOW_ONCE",
+      "root_index": 1,
+      "index_source": "idx_bitmap_word",
+      "max_index": 3028,
+      "length": 512,
+      "role": "pointed-to contents (bitmap bits)"
+    },
+    {
+      "i": 3,
+      "name": "RECORDS",
+      "type": "RVA_READ",
+      "rva": "0x238A880",
+      "length": 256,
+      "role": "ownership records"
+    },
+    {
+      "i": 4,
+      "name": "VMID",
+      "type": "RVA_READ",
+      "rva": "0x23D4538",
+      "length": 8,
+      "role": "authority"
+    },
+    {
+      "i": 5,
+      "name": "VMID_COUNTERS",
+      "type": "RVA_READ",
+      "rva": "0x23D3D30",
+      "length": 64,
+      "role": "counters"
+    },
+    {
+      "i": 6,
+      "name": "POOL_COUNTER",
+      "type": "RVA_READ",
+      "rva": "0x23D459C",
+      "length": 8,
+      "role": "counters"
+    },
+    {
+      "i": 7,
+      "name": "PTSLOT_ROOT",
+      "type": "RVA_READ",
+      "rva": "0x23D4558",
+      "length": 8,
+      "role": "authority (root value)"
+    },
+    {
+      "i": 8,
+      "name": "PTSLOT_SLICE",
+      "type": "FOLLOW_ONCE",
+      "root_index": 7,
+      "index_source": "idx_ptslot",
+      "max_index": 7,
+      "length": 64,
+      "role": "pointed-to contents (PT slot entries)"
+    },
+    {
+      "i": 9,
+      "name": "CDEV_SLOT",
+      "type": "RVA_READ",
+      "rva": "0x2684810",
+      "length": 8,
+      "role": "attach/window authority"
+    },
+    {
+      "i": 10,
+      "name": "SOFTC_A_ROOT",
+      "type": "RVA_READ",
+      "rva": "0x2686840",
+      "length": 8,
+      "role": "attach/window authority"
+    },
+    {
+      "i": 11,
+      "name": "SOFTC_B_ROOT",
+      "type": "RVA_READ",
+      "rva": "0x2686848",
+      "length": 8,
+      "role": "attach/window authority"
+    }
+  ]
+}

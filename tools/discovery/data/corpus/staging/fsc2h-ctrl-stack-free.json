@@ -1,0 +1,61 @@
+{
+  "id": "fsc2h-ctrl-stack-free",
+  "name": "sys_fsc2h_ctrl kernel stack free - free() of a path buffer that is a kernel stack address",
+  "role": "training",
+  "burned_reason": "",
+  "platform": [
+    "ps5"
+  ],
+  "bug_class": "UAF",
+  "subsystem": "kernel/sys_fsc2h_ctrl",
+  "root_cause": {
+    "summary": "sys_fsc2h_ctrl keeps per-path state addressed by command. CMD_RESOLVE (0x20005) sets the pointer for path 2 to a local stack buffer and sleeps; CMD_COMPLETE (0x20003) writes into that buffer and wakes the resolver. A CMD_WAIT (0x10001) thread waiting on path 2 can wake before the resolver resumes and free path 2 - but path 2 is not a malloc allocation, it is a pointer into the kernel stack. The kernel therefore frees stack memory, which the allocator can then hand out as a heap object while the stack frame is still live.",
+    "primitive": "free() of a kernel stack pointer; kernel stack memory reused as a heap object (type confusion between stack and heap)",
+    "trigger": "four threads: CMD_WAIT on path 1, CMD_WAIT on path 2, CMD_RESOLVE on path 2 (sets the stack pointer and sleeps), CMD_COMPLETE on path 2 (writes and wakes), with the path-2 waiter winning the wake race and freeing before the resolver resumes",
+    "consequence": "kernel memory corruption; the public report's impact line is privilege escalation"
+  },
+  "discovery_approach": {
+    "summary": "TheFloW found the command protocol race, reported it privately to PlayStation on 2024-12-15 (HackerOne 2900606) and disclosed it publicly on 2025-04-18. A Y2JB payload that only demonstrates the crash and RIP control appeared on 2025-11-13 with a trigger rate around 15 percent.",
+    "signals": [
+      "a syscall that stores a pointer to a local stack buffer in a long-lived per-path slot",
+      "a free() on that slot reachable from a different thread's wait path",
+      "no check that the pointer being freed came from malloc rather than from the stack",
+      "command handlers that share per-path state without a lock covering the wake/free ordering"
+    ],
+    "blind_usable": false
+  },
+  "firmware": {
+    "affected": [
+      "10.40"
+    ],
+    "fixed_in": "11.00",
+    "differences": [
+      "public record: present through 10.40, 'maybe' also in 10.60, fixed by 11.00; the only mechanism description is the wake-order race between CMD_WAIT, CMD_RESOLVE and CMD_COMPLETE",
+      "the four-command protocol (WAIT 0x10001 / RESOLVE 0x20005 / COMPLETE 0x20003) is the interface whose locking changed, but which check was added in 11.00 is not public"
+    ]
+  },
+  "patch_evidence": {
+    "available": false,
+    "what": "the disclosed HackerOne report gives the trigger sequence and the impact; the dev wiki gives the version cutoffs (<= 10.40, maybe 10.60, fixed 11.00) and the PoC link",
+    "limits": "no diff, no fixed-version analysis and no vendor advisory text; the fix mechanism is unknown"
+  },
+  "sources": [
+    {
+      "url": "https://hackerone.com/reports/2900606",
+      "supports": "the exact four-thread sequence, the statement that path 2 is a pointer to kernel stack rather than a malloc allocation, the title 'kernel stack free' and the impact 'Privilege escalation'",
+      "kind": "advisory"
+    },
+    {
+      "url": "https://www.psdevwiki.com/ps5/Vulnerabilities",
+      "supports": "affected through 10.40, maybe 10.60, fixed since 11.00; TheFloW's report (2024-12-15) and public disclosure (2025-04-18); the MeisterLone PoC (2025-11-13) and its ~15 percent trigger rate",
+      "kind": "writeup"
+    }
+  ],
+  "confidence": "medium",
+  "gaps": [
+    "the report is a trigger description, not an analysis: it does not say which structure holds path 2 or why CMD_WAIT is allowed to free it",
+    "no fix or diff is public; 10.60 is explicitly 'maybe' and 11.00 is stated without a mechanism",
+    "no source quantifies the exploitability beyond 'privilege escalation'; the only public payload demonstrates a crash/RIP control at ~15 percent",
+    "the command values and structure layout are quoted from the report and wiki only; no disassembly of the syscall was fetched"
+  ]
+}

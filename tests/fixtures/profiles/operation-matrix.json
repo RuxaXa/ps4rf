@@ -1,0 +1,177 @@
+{
+ "generated_by": "tests/fixtures/profiles/gen_profiles.py",
+ "note": "every gated operation has an explicit profile policy (no implicit defaults)",
+ "operations": [
+  {
+   "locator_kind": "rva",
+   "module": "gpuvm",
+   "op": "gpuvm.map",
+   "profile_fields": [
+    "gvm_id",
+    "va",
+    "prot"
+   ],
+   "profile_required": true,
+   "w4_reason": "needs section 70 approval; mapping values come from the profile"
+  },
+  {
+   "locator_kind": "rva",
+   "module": "gpuvm",
+   "op": "gpuvm.unmap",
+   "profile_fields": [
+    "mapping_ref"
+   ],
+   "profile_required": true,
+   "w4_reason": "needs section 70 approval; must release the mapping acquired by gpuvm.map"
+  },
+  {
+   "locator_kind": "rva",
+   "module": "gpuvm",
+   "op": "gpuvm.lookup",
+   "profile_fields": [
+    "gvm_id",
+    "va"
+   ],
+   "profile_required": true,
+   "w4_reason": "needs section 70 approval; the frozen core still marks it mutating (F8/F10)"
+  },
+  {
+   "locator_kind": "rva",
+   "module": "keymgr",
+   "op": "keymgr.claim",
+   "profile_fields": [
+    "slot"
+   ],
+   "profile_required": true,
+   "w4_reason": "needs section 70 approval; slot indices come from the profile"
+  },
+  {
+   "locator_kind": "rva",
+   "module": "keymgr",
+   "op": "keymgr.release",
+   "profile_fields": [
+    "claim_ref"
+   ],
+   "profile_required": true,
+   "w4_reason": "needs section 70 approval; must release the claim"
+  },
+  {
+   "locator_kind": "rva",
+   "module": "keymgr",
+   "op": "keymgr.snapshot",
+   "profile_fields": [
+    "scope"
+   ],
+   "profile_required": true,
+   "w4_reason": "needs section 70 approval; bulk data leaves the agent only via copyout"
+  },
+  {
+   "locator_kind": "rva",
+   "module": "ccp",
+   "op": "ccp.submit",
+   "profile_fields": [
+    "slot",
+    "command"
+   ],
+   "profile_required": true,
+   "w4_reason": "needs section 70 approval; completion is observed via kernel read"
+  },
+  {
+   "locator_kind": "rva",
+   "module": "kernel",
+   "op": "kernel.read",
+   "profile_fields": [
+    "addr",
+    "size"
+   ],
+   "profile_required": true,
+   "w4_reason": "needs section 70 approval; range/alignment come from the profile"
+  },
+  {
+   "locator_kind": "rva",
+   "module": "kernel",
+   "op": "kernel.snapshot",
+   "profile_fields": [
+    "range",
+    "region_ref",
+    "expected_sha256"
+   ],
+   "profile_required": true,
+   "w4_reason": "needs section 70 approval; hash mismatch zeroizes and never releases bytes"
+  },
+  {
+   "locator_kind": "rva",
+   "module": "kernel",
+   "op": "kernel.snapshot.recipe",
+   "profile_fields": [
+    "recipe_ref"
+   ],
+   "profile_required": true,
+   "w4_reason": "recipe and roots come from the generated profile table; no host address"
+  },
+  {
+   "locator_kind": "rva",
+   "module": "userland",
+   "op": "ioctl.invoke",
+   "profile_fields": [
+    "command"
+   ],
+   "profile_required": true,
+   "w4_reason": "device, command allowlist and sizes are target-side policy; no host pointer"
+  },
+  {
+   "locator_kind": "rva",
+   "module": "kernel",
+   "op": "kernel.dump.full",
+   "profile_fields": [
+    "region_map"
+   ],
+   "profile_required": true,
+   "w4_reason": "needs section 70 approval; full dump is a P5 privilege level"
+  },
+  {
+   "locator_kind": "rva",
+   "module": "kernel",
+   "op": "verify.kernel.read",
+   "profile_fields": [
+    "addr",
+    "expected"
+   ],
+   "profile_required": true,
+   "w4_reason": "needs section 70 approval; observes an expected/observed pair"
+  },
+  {
+   "locator_kind": "rva",
+   "module": "kernel",
+   "op": "verify.kernel.exec",
+   "profile_fields": [
+    "probe"
+   ],
+   "profile_required": true,
+   "w4_reason": "needs section 70 approval; execution evidence comes from a real run"
+  },
+  {
+   "locator_kind": "rva",
+   "module": "kernel",
+   "op": "verify.kernel.copyout",
+   "profile_fields": [
+    "addr",
+    "size",
+    "expected"
+   ],
+   "profile_required": true,
+   "w4_reason": "needs section 70 approval; expected values must be evidence-backed"
+  },
+  {
+   "locator_kind": "rva",
+   "module": "kernel",
+   "op": "verify.samu.access",
+   "profile_fields": [
+    "probe"
+   ],
+   "profile_required": true,
+   "w4_reason": "needs section 70 approval; SAMU is a privileged namespace"
+  }
+ ],
+ "schema": "ps4rf.profile-operation-matrix.v1"
+}

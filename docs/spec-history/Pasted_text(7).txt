@@ -1,0 +1,726 @@
+PS4RF v0.8 — Finale Core-Korrekturrunde F1–F20 vor Freeze
+0. Korrektur-Matrix
+#
+	
+Vorgabe
+	
+Umsetzung
+F1	PROVEN nach Provider-Ceiling, nicht nach privilege	§1
+F2	ManualOverride max. OBSERVED	§2
+F3	Evidence-Binding vollständig (Inhalt + ref/run + Re-Hash)	§3
+F4	BOOT↔SESSION-Merge normativ	§4
+F5	AUTHORITY_INVALID auditiert	§5
+F6	max_inflight = running + queued (Token)	§6
+F7	Task-States QUEUED/RUNNING/COMPLETED/CANCELED_AT_RECOVERY	§6
+F8	Hang-Release ohne Response (MockHangReleased)	§7
+F9	Pool-Shutdown mit Sentinels	§6
+F10	Recovery-Cleanup: attempted nur bei safe, Callbacks	§8
+F11	Lifecycle try/except/finally, Dup-Response → PROTOCOL_ERROR	§6
+F12	Gate/Barrier participant-set	§9
+F13	Limits exakt aus authentisiertem HELLO_ACK	§10
+F14	MAX_HANDSHAKE_BYTES vor Read	§11
+F15	max_frame_bytes = Ciphertext-Limit (Tag 16)	§11
+F16	Message-Direction-FSM + Request-Validierung	§12
+F17	Agent-Budget-Abort atomar, IN_FLIGHT_AT_ABORT	§13
+F18	Sync-Objekte als ResourceManager-Ressourcen	§9
+F19	Stress-Regressionen	§14
+F20	Freeze: PS4RF CORE 1.0-MOCK-READY	§15
+ 
+ 
+
+Keine neuen Architekturfeatures — alle Punkte sind Korrekturen bestehender v0.7-Struktur.
+1. F1 — PROVEN-Semantik
+
+grant_from_verification() — geänderter Abschluss (alle bisherigen Prüfungen unverändert):
+python
+ 
+  
+ 
+ 
+    # F1: Authority-Regel MUSS existieren; Ceiling entscheidet über PROVEN.
+    provider_rule = authority.rule_for(capability, verification.provider_type,
+                                       verification.provider)
+    if provider_rule is None:
+        raise rej("AUTHORITY_INVALID",
+                  f"keine Regel für {capability}/{verification.provider_type.value}")
+
+    # ... Registry-, Outcome-, Evidence-, Intake-, Provider-, Profil-Checks ...
+
+    privileged = capability.split(".")[0] in PRIVILEGED_NAMESPACES
+    if privileged and verification.verification_run_id == trigger_run_id:
+        raise rej("RUN_NOT_SEPARATE")          # Privileged: Run-Trennung PFLICHT
+    # Non-privileged: separater Run optional (Manifest darf Strengeres verlangen).
+
+    # F1: PROVEN nach Ceiling — NICHT nach privilege:
+    proven = ASSURANCE_RANK[Assurance.PROVEN] <= \
+             ASSURANCE_RANK[provider_rule.max_assurance]
+    assurance = Assurance.PROVEN if proven else Assurance.OBSERVED
+
+    return intake.ingest(CapabilityRecord(
+        ..., assurance=assurance,
+        verified_by=VerifiedBy(...) if proven else None, ...))
+ 
+ 
+
+Regressionstests:
+python
+ 
+  
+ 
+ 
+def test_f1_userland_observed_then_verified_becomes_proven():
+    """Non-privileged: trigger → OBSERVED; separates verify → PROVEN."""
+    store = InMemoryEvidenceStore()
+    st = store.put(_stored(capability="userland.exec",
+                           operation="verify.userland.exec",
+                           run_id=VERIFY, evidence_ref=EvidenceRef(run_id=VERIFY)))
+    m = _Manifest(); m.name = "exploit.webkit_x"
+    m.provides = [CapabilityGrant(capability="userland.exec",
+                                  verify_operation="verify.userland.exec")]
+    rec = grant_from_verification(
+        _verification(capability="userland.exec", operation="verify.userland.exec",
+                      evidence_sha256=st.canonical_sha256),
+        "userland.exec", m, TRIGGER, default_authority(),
+        default_registry(), store, CapabilityIntake("SES-A", "BOOT-1"))
+    assert rec.assurance is Assurance.PROVEN     # F1: ceiling EXPLOIT = PROVEN
+
+def test_f1_probe_never_proven_even_after_verify():
+    store = InMemoryEvidenceStore()
+    st = store.put(_stored())
+    rec = grant_from_verification(
+        _verification(evidence_sha256=st.canonical_sha256,
+                      provider_type=ProviderType.RUNTIME_PROBE),
+        CAP, _Manifest(), TRIGGER, default_authority(),
+        default_registry(), store, CapabilityIntake("SES-A", "BOOT-1"))
+    assert rec.assurance is Assurance.OBSERVED   # F1: Ceiling RUNTIME_PROBE=OBSERVED
+ 
+ 
+2. F2 — ManualOverride ohne PROVEN-Pfad
+
+resolve() — Assurance-Manual-Block ersetzt:
+python
+ 
+  
+ 
+ 
+    if manual is not None and manual.assurance is not None:
+        if manual.assurance is Assurance.PROVEN:
+            raise ValueError(
+                "ManualOverride kann kein PROVEN erzeugen — ausschließlicher "
+                "Erzeugungspfad: VerificationEvidence via grant_from_verification()")
+        op_rule = authority.rule_for(name, ProviderType.OPERATOR, "manual")
+        manual_assur = _clamp(manual.assurance,
+                              op_rule.max_assurance if op_rule else Assurance.OBSERVED)
+ 
+ 
+
+Test:
+python
+ 
+  
+ 
+ 
+def test_f2_manual_proven_rejected():
+    with pytest.raises(ValueError, match="VerificationEvidence"):
+        resolve(CAP, Scope.SESSION, CTX, [], AUTH,
+                ManualOverride(assurance=Assurance.PROVEN),
+                session_id="SES-A", boot_id="BOOT-1")
+ 
+ 
+3. F3 — Evidence-Binding vollständig
+
+get_verified_evidence-Vertrag (Store-Implementierung und Protokoll):
+python
+ 
+  
+ 
+ 
+    def get_verified_evidence(self, evidence_sha256: str) -> StoredEvidence:
+        item = self._items.get(evidence_sha256)
+        if item is None:
+            raise VerificationRejection("EVIDENCE_HASH_INVALID", "unbekannt")
+        # F3: Hash über das TATSÄCHLICH gespeicherte Objekt — nie nur Index-/Dateinamen:
+        recomputed = canonical_sha256(
+            item.model_dump(exclude={"canonical_sha256"}))
+        if recomputed != evidence_sha256:
+            raise VerificationRejection("EVIDENCE_HASH_INVALID", "re-hash mismatch")
+        # F3: interner Konsistenzcheck:
+        if item.evidence_ref.run_id != item.run_id:
+            raise VerificationRejection("EVIDENCE_HASH_INVALID",
+                                        "evidence_ref.run_id != run_id")
+        return item
+ 
+ 
+
+Feldvergleich (_STORED_FIELDS) deckt exakt die geforderten 12 Felder ab (bereits in v0.7 so); session_id=None bei BOOT-Scope vergleicht korrekt gegen VerificationEvidence.session_id=None.
+4. F4 — BOOT↔SESSION-Merge normativ
+python
+ 
+  
+ 
+ 
+_SESSION_EFFECTIVE = {Availability.AVAILABLE, Availability.DEGRADED,
+                      Availability.UNAVAILABLE}
+
+def merge_boot_session(name: str, context: TargetExecutionContext,
+                       boot_id: str, session_id: str,
+                       boot_res: "Resolution", sess_res: "Resolution") -> "Resolution":
+    """F4 — normativ:
+    Availability: SESSION-Befund in {AVAILABLE, DEGRADED, UNAVAILABLE} gewinnt.
+    SESSION UNKNOWN oder NO_RECORD → BOOT-Availability (fehlendes Session-Wissen
+    vernichtet keinen belegten Boot-Zustand nicht).
+    Assurance: max(BOOT, SESSION) — nur gültig, da resolve() (R1) bereits
+    exakte Identität (name, context, boot_id) erzwingt; Guard unten.
+    Provenance: die Resolution der gewählten Quelle wird übernommen."""
+    for res, sid in ((boot_res, None), (sess_res, session_id)):
+        if res.name != name:
+            raise ValueError("Merge-Identität verletzt: name")
+        # context/boot_id sind in resolve() bereits strukturell gefiltert.
+    sess_has = sess_res.availability_resolution.factor is not AxisFactor.NO_RECORD
+    if sess_has and sess_res.availability in _SESSION_EFFECTIVE:
+        avail, a_prov = sess_res.availability, sess_res.availability_resolution
+    else:
+        avail, a_prov = boot_res.availability, boot_res.availability_resolution
+    if ASSURANCE_RANK[boot_res.assurance] >= ASSURANCE_RANK[sess_res.assurance]:
+        assur, s_prov = boot_res.assurance, boot_res.assurance_resolution
+    else:
+        assur, s_prov = sess_res.assurance, sess_res.assurance_resolution
+    return Resolution(name, avail, assur, a_prov, s_prov)
+ 
+ 
+
+Mock negotiate() nutzt ausschließlich diese Funktion (ersetzt die Inline-Heuristik aus v0.7 §7).
+
+Tests (exakt die fünf geforderten):
+python
+ 
+  
+ 
+ 
+def _pair(b_avail, b_assur, s_avail, s_assur, s_record=True):
+    bi = CapabilityIntake(None, "BOOT-1")
+    boot = bi.ingest(CapabilityRecord(name=CAP, availability=b_avail,
+        assurance=b_assur, context=CTX, provider="profile.fw",
+        provider_type=ProviderType.FIRMWARE_PROFILE, scope=Scope.BOOT,
+        boot_id="BOOT-1"))
+    br = resolve(CAP, Scope.BOOT, CTX, [boot], AUTH, boot_id="BOOT-1")
+    if not s_record:
+        sr = resolve(CAP, Scope.SESSION, CTX, [], AUTH,
+                     session_id="SES-A", boot_id="BOOT-1")
+    else:
+        si = CapabilityIntake("SES-A", "BOOT-1")
+        sess = si.ingest(CapabilityRecord(name=CAP, availability=s_avail,
+            assurance=s_assur, context=CTX, provider="probe.runtime",
+            provider_type=ProviderType.RUNTIME_PROBE))
+        sr = resolve(CAP, Scope.SESSION, CTX, [sess], AUTH,
+                     session_id="SES-A", boot_id="BOOT-1")
+    return merge_boot_session(CAP, CTX, "BOOT-1", "SES-A", br, sr)
+
+def test_f4_boot_available_session_unknown():        # → AVAILABLE
+    r = _pair(Availability.AVAILABLE, Assurance.UNVERIFIED,
+              None, None, s_record=False)
+    assert r.availability is Availability.AVAILABLE
+
+def test_f4_boot_available_session_unavailable():    # → UNAVAILABLE
+    r = _pair(Availability.AVAILABLE, Assurance.UNVERIFIED,
+              Availability.UNAVAILABLE, Assurance.OBSERVED)
+    assert r.availability is Availability.UNAVAILABLE
+
+def test_f4_boot_unavailable_session_available():    # → AVAILABLE
+    r = _pair(Availability.UNAVAILABLE, Assurance.UNVERIFIED,
+              Availability.AVAILABLE, Assurance.OBSERVED)
+    assert r.availability is Availability.AVAILABLE
+
+def test_f4_boot_proven_session_observed():          # → PROVEN
+    r = _pair(Availability.AVAILABLE, Assurance.PROVEN,
+              Availability.AVAILABLE, Assurance.OBSERVED)
+    assert r.assurance is Assurance.PROVEN
+
+def test_f4_boot_observed_session_proven():          # → PROVEN
+    r = _pair(Availability.AVAILABLE, Assurance.OBSERVED,
+              Availability.AVAILABLE, Assurance.PROVEN)
+    assert r.assurance is Assurance.PROVEN
+ 
+ 
+5. F5 — AUTHORITY_INVALID auditiert
+
+resolve() — statt stillen Ignorierens:
+python
+ 
+  
+ 
+ 
+        rule = authority.rule_for(name, rec.provider_type, rec.provider)
+        if rule is None:
+            excluded.append(ExcludedRecord(i, "AUTHORITY_INVALID")); continue
+        participants.append((i, rec, rule))
+ 
+ 
+
+Test: Record mit unbekanntem Provider-Muster → taucht in resolution.excluded mit AUTHORITY_INVALID auf, Resolver läuft mit Rest weiter.
+6. F6+F7+F9+F11 — BoundedPool, Lifecycle, Shutdown (vollständig)
+
+core/rpc/pool.py (ersetzt v0.7-Fassung):
+python
+ 
+  
+ 
+ 
+        """'OK' | 'TOO_MANY_INFLIGHT' | 'POISONED'"""
+        with self._lock:
+            if self._poisoned:
+                return "POISONED"
+            if not self._tokens._semaphore.acquire(blocking=False) \
+                    if False else not self._tokens.acquire(blocking=False):
+                return "TOO_MANY_INFLIGHT"                # running+queued voll
+            self._tasks[rid] = {"state": TaskState.QUEUED, "op": op}
+        self._queue.put((rid, op, fn))
+        return "OK"
+
+    # ---------- F6/F7: FINALIZE — genau einmal pro rid ----------
+    def _finalize(self, rid: str, state: TaskState) -> bool:
+        with self._lock:
+            if self._tasks.pop(rid, None) is not None:
+                self._tokens.release()                    # exakt einmal
+                return True
+            return False
+
+    # ---------- F5(v0.7)/F7: Poison ----------
+    def poison(self, reason: str) -> tuple[list[dict], list[str]]:
+        """Rückgabe: (in_flight, queued_rids). Queued werden als
+        CANCELED_AT_RECOVERY markiert; Worker erkennen beim Dequeue."""
+        with self._lock:
+            self._poisoned = True
+            in_flight = [{"request_id": rid, "operation": t["op"],
+                          "status": "IN_FLIGHT_AT_RECOVERY"}
+                         for rid, t in self._tasks.items()
+                         if t["state"] is TaskState.RUNNING]
+            queued = [rid for rid, t in self._tasks.items()
+                      if t["state"] is TaskState.QUEUED]
+            for rid in queued:
+                self._tasks[rid]["state"] = TaskState.CANCELED_AT_RECOVERY
+            return in_flight, queued
+
+    # ---------- Worker ----------
+    def _worker(self) -> None:
+        while True:
+            item = self._queue.get()
+            if item is self.SENTINEL:                     # F9
+                return
+            rid, op, fn = item
+            with self._lock:
+                task = self._tasks.get(rid)
+                if task is None:
+                    continue                              # bereits finalisiert
+                if task["state"] is TaskState.CANCELED_AT_RECOVERY:   # F7
+                    if self._finalize(rid, TaskState.CANCELED_AT_RECOVERY) \
+                            and self._on_canceled:
+                        self._on_canceled(rid, op)        # F7: Respond falls Transport ok
+                    continue
+                task["state"] = TaskState.RUNNING
+            fn(rid, op)                                    # F11: fn ruft _finish im finally
+
+    # ---------- F11: Lifecycle-Wrapper wird vom Agent bereitgestellt; Pool
+    # garantiert nur Token/State. Agent-_worker_run:
+    #   try handler / except expected / except unexpected → INTERNAL_ERROR
+    #   (falls nicht poisoned & Transport ok, sonst Evidence only)
+    #   finally: _finalize(rid, COMPLETED) + registry.complete(rid)
+
+    def finish(self, rid: str) -> None:                    # nach erfolgreichem Respond
+        self._finalize(rid, TaskState.COMPLETED)
+
+    def has_pending(self) -> bool:
+        with self._lock:
+            return bool(self._tasks)
+
+    # ---------- F9: Shutdown ----------
+    def shutdown(self, cancel_queued: bool = True, wait_running: bool = False,
+                 cancel_cb: Optional[Callable[[str, str], None]] = None) -> None:
+        """Normal: queued fertig ODER canceln gemäß Close-Policy.
+        Recovery/Hang: NIE auf gehangene Worker warten (wait_running=False)."""
+        if cancel_queued:
+            while True:                                   # physisch drainen
+                try:
+                    item = self._queue.get_nowait()
+                except queue.Empty:
+                    break
+                if item is self.SENTINEL:
+                    continue
+                rid, op, _fn = item
+                if self._finalize(rid, TaskState.CANCELED_AT_RECOVERY) and cancel_cb:
+                    cancel_cb(rid, op)
+        for _ in self._threads:
+            self._queue.put(self.SENTINEL)
+        if wait_running:
+            for t in self._threads:
+                t.join(timeout=5.0)
+        # wait_running=False: Worker enden nach Sentinels bzw. nach
+        # hang_event.set() (V11-Test-Hook). Test-Assertion: keine Leaks.
+ 
+ 
+
+Agent-Integration (F7-Ende): beim Session-Ende für alle verbleibenden rids registry.complete(rid); Invariante assert not pool.has_pending() — keine Request-ID bleibt künstlich pending (Test §14).
+
+F11-Worker-Pfad im Agent:
+python
+ 
+  
+ 
+ 
+    def _worker_run(self, rid: str, op: str, req: dict) -> None:
+        try:
+            resp = self.dispatch(rid, op, req.get("arguments", {}))
+        except MockHangReleased:                          # F8
+            self._evidence.append({"request_id": rid, "operation": op,
+                                   "result": "HANG", "response": "NO_RESPONSE"})
+            return                                        # suppress_response
+        except BudgetExceeded as e:                       # F17
+            self._abort_on_budget(rid, str(e))
+            return
+        except Exception as e:                            # F11 unexpected
+            if self._pool.poisoned:
+                self._evidence.append({"request_id": rid, "operation": op,
+                                       "result": "UNEXPECTED_AT_POISON",
+                                       "exception": type(e).__name__})
+                return                                    # Evidence only
+            resp = {"status": "ERROR", "error": {
+                "code": "INTERNAL_ERROR", "message": type(e).__name__}}
+        try:
+            self._respond(rid, op, resp)                  # charge_out + send (F17)
+        finally:
+            self._pool.finish(rid)                        # Token exakt einmal
+            self._reqs.complete(rid)
+ 
+ 
+
+F11-Host-Seite — Dup-Response:
+python
+ 
+  
+ 
+ 
+# RequestIdRegistry erweitert:
+    def respond_once(self, rid: str) -> bool:
+        """True = erste gültige Response; False = Duplikat/unbekannt."""
+        with self._lock:
+            if rid not in self._pending:
+                return False
+            self._pending.discard(rid)
+            self._completed[rid] = None
+            while len(self._completed) > self._cache_size:
+                self._completed.popitem(last=False)
+            return True
+# Host-Loop: respond_once(rid) False → PROTOCOL_ERROR → Session close.
+ 
+ 
+7. F8 — Hang-Release ohne Response
+python
+ 
+  
+ 
+ 
+class MockHangReleased(Exception): ...
+# Nicht im RPC-Namespace, kein Code-String nach außen.
+
+# dispatch():
+        if op_name == "mock.hang":
+            with self._agent_lock:
+                self.console_recovery_pending = True
+                in_flight, _queued = self._pool.poison("mock.hang")   # V5 sofort
+                self._in_flight_evidence = in_flight
+            self.hang_event.wait()          # V11 Test-Hook ONLY (kein RPC-Element)
+            raise MockHangReleased()        # F8: NIEMALS eine Response erzeugen
+ 
+ 
+
+_worker_run fängt MockHangReleased ausschließlich intern ab (suppress_response=True-Semantik), schreibt HANG / NO_RESPONSE in Evidence. Der ursprüngliche Request bleibt evidence-technisch ohne Response — auch nach hang_event.set().
+8. F10 — Recovery-Cleanup-Semantik
+python
+ 
+  
+ 
+ 
+@dataclass
+class ManagedResource:
+    ref: str; kind: str
+    recoverable: bool = True
+    out_of_band_cleanup_safe: bool = False
+    force_cleanup_failure: bool = False
+    cleanup: Optional[Callable[[], bool]] = None    # F10: echter Cleanup-Callback
+    cleanup_attempted: bool = False
+    cleanup_result: CleanupResult | None = None
+
+    def do_cleanup(self) -> CleanupResult:
+        """F10: FREED nur nach tatsächlichem, erfolgreichem Cleanup."""
+        self.cleanup_attempted = True
+        if self.force_cleanup_failure:
+            return CleanupResult.FAILED
+        if self.cleanup is None:
+            return CleanupResult.FREED              # reine Framework-Ressource
+        return CleanupResult.FREED if self.cleanup() else CleanupResult.FAILED
+
+# ResourceManager.cleanup_after_hang():
+        with self._lock:
+            for ref, r in list(self._held.items()):
+                if r.out_of_band_cleanup_safe:
+                    res = r.do_cleanup()            # attempted=True hier
+                    if res is CleanupResult.FREED:
+                        del self._held[ref]
+                    else:
+                        r.cleanup_result = res
+                        self._leaked[ref] = self._held.pop(ref)
+                else:
+                    r.cleanup_attempted = False     # F10: KEIN Versuch erfolgt
+                    r.cleanup_result = CleanupResult.UNCERTAIN
+                    self._leaked[ref] = self._held.pop(ref)
+ 
+ 
+
+Mock nutzt deterministische Callbacks (z. B. lambda: True für safe, lambda: False für Force-Fail-Test).
+9. F12+F18 — Participants und Sync-Ressourcen
+python
+ 
+  
+ 
+ 
+class Gate:
+    def __init__(self, expected: int) -> None:
+        self._cond = threading.Condition()
+        self._participants: set[str] = set()          # F12
+        self._expected = expected
+        self._released = False
+        self._destroyed = False
+
+    def arrive(self, participant_id: str) -> int:
+        with self._cond:
+            if self._destroyed: raise GateDestroyed()
+            if participant_id in self._participants:  # F12: Duplicate-Lane
+                raise ResourceStateInvalid("duplicate participant arrival")
+            self._participants.add(participant_id)
+            if len(self._participants) >= self._expected and not self._released:
+                self._released = True                 # expected basiert auf UNIQUE participants
+                self._cond.notify_all()
+            self._cond.notify_all()
+            return len(self._participants)
+
+    def status(self) -> dict:
+        with self._cond:
+            return {"arrived_count": len(self._participants),
+                    "expected": self._expected,
+                    "released": self._released, "destroyed": self._destroyed,
+                    # participant IDs nur in Debug/Evidence:
+                    "participants": sorted(self._participants)}
+    # wait/release/destroy unverändert (F10-Semantik DESTROYED ≠ Success)
+ 
+ 
+
+Barrier identisch mit arrived_participants.
+
+F18 — Sync über ResourceManager:
+python
+ 
+  
+ 
+ 
+        if op_name == "sync.gate.create":
+            gate = Gate(int(args["parties"]))
+            ref = self.resources.acquire(
+                "gate", out_of_band_cleanup_safe=False,
+                cleanup=gate.destroy_and_confirm)     # F10-Callback
+            with self._agent_lock:
+                self._gates[ref] = gate
+            return {"status": "OK", "result": {"gate": ref}}
+# Session-Cleanup (cleanup_all/cleanup_after_hang-safe-Pfad) ruft den Callback:
+#   destroy() → alle Waiter sehen RESOURCE_DESTROYED (F10/v0.7 V10),
+#   niemals normalen Success.
+ 
+ 
+10. F13 — Limits aus authentisiertem HELLO_ACK
+
+Mock (Agent = HOST-Handshake-Rolle, V3):
+python
+ 
+  
+ 
+ 
+        accept = self._build_hello_ack(hello)          # enthält limits
+        keys, hello_seen = host_handshake(ep, self.secret, accept)
+        limits = accept["limits"]                      # F13: exakt das Transcript-Objekt
+        self._limits = limits                          # KEIN DEFAULT_LIMITS im Loop
+ 
+ 
+
+Host-CLI (Agent-Rolle): keys, ack = agent_handshake(...); limits = ack["limits"]. Sowohl Pool-Größe, Framing-Limits als auch beide RpcByteBudgets werden ausschließlich aus diesem Objekt initialisiert. Test §14: authenticated_limits == runtime_limits (Vergleich gespeichertes ACK-Objekt gegen laufende Session-Konfiguration).
+11. F14+F15 — Framing-Limits
+python
+ 
+  
+ 
+ 
+MAX_HANDSHAKE_BYTES = 65536                      # F14
+TAG_LEN = 16                                     # AEAD Tag (ChaCha20-Poly1305 / AES-GCM)
+
+def _recv_msg_hs(ep: "Duplex") -> dict:
+    n = int.from_bytes(ep.recv_exact(4), "big")
+    if n > MAX_HANDSHAKE_BYTES:                  # F14: VOR Payload-Read
+        raise ProtocolError(f"handshake frame {n} > {MAX_HANDSHAKE_BYTES}")
+    return json.loads(ep.recv_exact(n))
+# HELLO, HELLO_ACK, AUTH, AUTH_ACK nutzen ausschließlich _recv_msg_hs.
+
+# F15: DirectionChannel erhält max_frame_bytes (Ciphertext-Limit):
+    def seal(self, message_type: str, plaintext: bytes) -> tuple[int, bytes]:
+        ...
+        ct = self._aead.encrypt(self._nonce(seq), plaintext, self._aad(seq, message_type))
+        if len(ct) > self._max_frame_bytes:      # Sender lehnt ab
+            raise FrameLimitExceeded(
+                f"plaintext {len(plaintext)} → ciphertext {len(ct)} > "
+                f"max_frame_bytes {self._max_frame_bytes}")
+        return seq, ct
+
+# Receiver (recv_frame, R8): n = ciphertext-Länge; n > max_frame_bytes →
+# PROTOCOL_ERROR VOR _recv_exact(n).
+# max_plaintext_frame_bytes = max_frame_bytes - TAG_LEN  (dokumentiert normativ).
+# RpcByteBudget zählt weiterhin PLAINTEXT bytes (unverändert).
+ 
+ 
+
+Grenz-Tests:
+python
+ 
+  
+ 
+ 
+def test_f15_plaintext_boundary():
+    s = _session(); ch = mk_channel(s, max_frame_bytes=1024)
+    seq, ct = ch.seal("REQUEST", b"x" * (1024 - 16))          # PASS
+    with pytest.raises(FrameLimitExceeded):
+        ch.seal("REQUEST", b"x" * (1024 - 15))                # REJECT
+
+def test_f14_oversized_handshake_rejected_pre_read():
+    ep = StubDuplex(announce_length=MAX_HANDSHAKE_BYTES + 1)
+    with pytest.raises(ProtocolError):
+        _recv_msg_hs(ep)
+    assert ep.total_read == 4                                 # nur Längenfeld gelesen
+ 
+ 
+12. F16 — RPC Message State Machine
+python
+ 
+  
+ 
+ 
+AGENT_INBOUND = frozenset({"REQUEST"})
+HOST_INBOUND = frozenset({"RESPONSE", "EVENT", "BYE"})
+
+# Agent-Loop nach READY:
+        if mtype not in AGENT_INBOUND:              # F16: falsche Richtung
+            raise ProtocolError(f"agent accepts REQUEST only, got {mtype}")
+# Host-Loop:
+        if mtype not in HOST_INBOUND:
+            raise ProtocolError(f"host accepts RESPONSE/EVENT/BYE only, got {mtype}")
+# Beide: PROTOCOL_ERROR → Session sofort schließen (R8 fail-close).
+# BYE ist Agent→HOST-gerichtet; host-initiiertes Schließen erfolgt via
+# TCP-EOF (dokumentiert, konsistent mit REVERSE_TCP-Modell).
+
+# F16: REQUEST-Body validieren VOR Dispatch:
+class RpcRequestHeader(StrictModel):
+    protocol_version: int
+    session_id: str
+    request_id: str
+class RpcRequestBody(StrictModel):
+    operation: OperationName
+    arguments: dict = {}
+class RpcRequest(StrictModel):
+    header: RpcRequestHeader
+    body: RpcRequestBody
+
+        try:
+            req = RpcRequest.model_validate_json(pt)
+        except ValidationError as e:
+            raise ProtocolError(f"malformed request: {e.errors()[:1]}")
+# Kein KeyError/TypeError aus malformed authenticated JSON im Session-Thread.
+ 
+ 
+13. F17 — Agent-Budget-Abort
+python
+ 
+  
+ 
+ 
+    def _respond(self, rid: str, op: str, resp: dict) -> None:
+        if self._pool.poisoned or self._aborted:
+            return                                   # F17: keine Responses nach Abort
+        pt = canonical_bytes(resp)
+        try:
+            self._budget.charge_out(pt, experiment=self._exp_active)
+        except BudgetExceeded as e:
+            with self._agent_lock:                   # ATOMAR (F17)
+                self._aborted = True
+                in_flight, _queued = self._pool.poison("BUDGET_EXCEEDED")
+                self._in_flight_evidence = [
+                    {"request_id": r, "status": "IN_FLIGHT_AT_ABORT"}
+                    for r in (x["request_id"] for x in in_flight)]
+            self._evidence.append({"result": "BUDGET_EXCEEDED",
+                                   "request_id": rid, "detail": str(e)})
+            return                                   # überschreitende Response verworfen
+        with self._send_lock:
+            _send_frame(self._conn, self._ch_out, "RESPONSE", resp)
+# Reader-Loop: if self._aborted: break → Session close, Cleanup-Policy.
+ 
+ 
+
+Test: Worker A flutet Budget → BUDGET_EXCEEDED in Evidence, Worker B/QUEUED senden keine Responses mehr, IN_FLIGHT_AT_ABORT protokolliert.
+14. F19 — Erweiterte Stress-Regressionen
+Test
+	
+Erwartung
+test_inflight_counts_running_plus_queued	workers=8, inflight=10: 10 ok, 11. → TOO_MANY_INFLIGHT
+test_poison_leaves_no_pending_ids	nach Poison+Session-Ende: _reqs leer, pool.has_pending()==False
+test_hang_release_produces_no_response	hang_event.set() → kein Frame für rid; Evidence HANG/NO_RESPONSE
+test_pool_shutdown_no_worker_leak	nach shutdown+hang_event: keine lebenden ps4rf-worker-* Threads
+test_1000_duplicate_participants_cannot_open_gate	1000×arrive(same pid) → RESOURCE_STATE_INVALID, Gate bleibt zu
+test_authenticated_limits_eq_runtime_limits	ACK.limits == Session-Config (F13)
+test_handshake_oversized_plaintext_rejected	§11 F14-Test
+test_ciphertext_boundary	§11 F15-Test (max−16 PASS / max−15 REJECT)
+test_wrong_direction_message_type	RESPONSE an Agent → PROTOCOL_ERROR + close
+test_malformed_authenticated_request	fehlender body.op → PROTOCOL_ERROR, sauberer Close
+test_budget_exceed_blocks_further_responses	§13
+ 
+ 
+
+Bestehende v0.7-Stress-Tests (1000 alloc/free, 1000 arrivals, create/destroy while wait, duplicate release) bleiben unverändert und müssen grün bleiben.
+15. F20 — Core Freeze
+text
+ 
+  
+ 
+ 
+PS4RF CORE 1.0-MOCK-READY wird getaggt, wenn ALLE Gates grün sind:
+
+G1  pytest vollständig grün (v0.5–v0.8 Suite inkl. F1–F18-Regressionen)
+G2  Mock Round Trip grün (YAML→IR→Safe→Budget→JCS→SHA256→Negotiation→Run→Evidence→Hash)
+G3  Recovery/Hang grün (echter Hang → Client-Timeout; kein BYE; Poison; UNCERTAIN-Cleanup)
+G4  Concurrency Stress grün (v0.7 + F19-Matrix, Invarianten danach)
+G5  TOCTOU Gate grün (arrive/wait/status/release; participants; DESTROYED)
+G6  Verification Evidence Binding grün (F1–F3 inkl. Ceilings)
+G7  Framing/Fuzz grün (F14/F15, Direction-FSM, malformed, dup request/response IDs)
+G8  RPC Budget beidseitig grün (F17, Session- und Experiment-Level)
+
+Nach dem Tag: KEINE weitere Core-Architekturänderung ohne echten
+Integrationsbefund. Änderungen dann nur als Reaktion auf konkrete
+Adapter-/Integrationsbefunde, dokumentiert im Changelog mit Befund-Referenz.
+
+Nächste Phase (in dieser Reihenfolge):
+  1. OrbisProbe Inventory   (Code weiterhin ausstehend — drei Wege aus v0.3 §10)
+  2. OrbisProbe Mapping
+  3. OrbisProbe Adapter gegen Mock
+  4. Metasploit Adapter gegen Mock msfrpcd
+  5. Ghidra Adapter         6. Rizin Adapter
+  7. angr Adapter           8. AFL++ Adapter
+
+Weiterhin: kein echter PS4 Agent, kein Kernel Code, keine Payloads.
+ 
+ 
+Status
+
+F1–F18 sind vollständig ausgearbeitet und konsistent mit allen vorherigen Zusagen; insbesondere existiert nach F1+F2 genau ein PROVEN-Erzeugungspfad (grant_from_verification mit Evidence-Store-Binding und Authority-Ceiling), der F12-Participant-Check verhindert Gate-Vorzeitöffnung durch Duplicate-Lanes, und F13 eliminiert den letzten Transcript↔Runtime-Drift. Restrisiken für den ersten Testlauf, die die Gate-Suite prüft: Token-Rückgabe im Drain-Pfad von shutdown() konkurriert mit Worker-Dequeue (über _finalize-Idempotenz abgesichert, aber integrationstestwürdig), und das SimpleQueue-Drain-Rennen im Shutdown unter hoher Last (Workers können cancel-markierte Items vor dem Drain ziehen — beides endet in derselben _finalize-Invariante). Weiterhin: kein echter PS4 Agent Code, kein Kernel Code, keine Payloads.

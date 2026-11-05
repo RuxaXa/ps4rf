@@ -1,0 +1,110 @@
+{
+  "id": "bd-jb2-bdjo-traversal",
+  "name": "BD-JB2 - BDJO baseDirectory path traversal in BdjPolicyImpl",
+  "role": "training",
+  "burned_reason": "",
+  "platform": [
+    "ps4",
+    "ps5"
+  ],
+  "bug_class": "SANDBOX_ESCAPE",
+  "subsystem": "userland/bd-j (BdjPolicyImpl path validation)",
+  "root_cause": {
+    "summary": "BD-J decides whether a JAR gets AllPermission with a prefix test in com.sony.bdjstack.security.BdjPolicyImpl: a code source whose file path starts with $JAVA_HOME/lib/ext is trusted. The Xlet location comes from the BDJO baseDirectory, and a value such as file:///app0/cdc/lib/../../../disc/BDMV/JAR/00000.jar passes the prefix test after the runtime resolves the relative components, so an external JAR on the disc is treated as a trusted $JAVA_HOME/lib JAR. The Xlet then loads with AllPermission, disables the SecurityManager and reaches native code.",
+    "primitive": "path traversal / missing canonicalization in the BD-J policy check, leading to AllPermission on an attacker-controlled JAR",
+    "trigger": "crafted bdjo.xml/BDJO with a file:// baseDirectory containing ../ on a burned Blu-ray",
+    "consequence": "JAR loads with AllPermission and the Xlet escapes the Java sandbox to native userland code execution"
+  },
+  "discovery_approach": {
+    "summary": "TheFloW found the path-validation bug before 2023-09-11 while reviewing the BD-J stack, reported it to Sony on 2023-09-22 and disclosed it on 2023-10-25. It was a replacement for the original userprefs deserialization gadget: instead of a serialized file it abuses the BDJO baseDirectory so an external JAR is treated as a $JAVA_HOME/lib JAR. Gezine later confirmed the primitive still worked through PS4 12.52 and chained it with BD-JB3.",
+    "signals": [
+      "the baseDirectory element in bdjo.xml/BDJO",
+      "BdjPolicyImpl.getPermissions comparing location.getFile() against javaHome + \"lib\" + File.separator + \"ext\" with startsWith",
+      "a file:// URL containing ../ that resolves outside $JAVA_HOME/lib",
+      "no canonical-path normalization before the permission decision"
+    ],
+    "blind_usable": false
+  },
+  "firmware": {
+    "affected": [
+      "PS4 <= 12.52",
+      "PS5 <= 7.61"
+    ],
+    "fixed_in": "PS4 13.00 / PS5 8.00",
+    "differences": [
+      "The fix is in BD-J path validation: 13.00/8.00 no longer grant AllPermission to a JAR reached through the BDJO baseDirectory traversal (PS4/PS5 wiki).",
+      "PS4 kept the same class of primitive alive with JAR-infix variants through 12.52 (/lib/ext/sunjce_provider.jar and /bdjstack/lib/ext), and 13.00-13.02 used BD-JB-13.00 (CVE-2025-64390); PS5 8.00 closed BD-JB2 and later needed BD-JB-13.42 for 13.42 and below."
+    ]
+  },
+  "patch_evidence": {
+    "available": true,
+    "what": "the PS4 and PS5 dev wikis record the vulnerable prefix check, the affected ranges and the fix releases (PS4 13.00 / PS5 8.00); no binary diff is public",
+    "limits": "no firmware bytes, no Sony advisory text and no patched decompilation are stored or linked here"
+  },
+  "sources": [
+    {
+      "url": "https://www.psdevwiki.com/ps4/Vulnerabilities",
+      "supports": "BD-JB2 at PS4 <=12.52, the BdjPolicyImpl prefix bug and the baseDirectory traversal, fix in PS4 13.00, and the BD-JB3.2/BD-JB-13.00 variants",
+      "kind": "writeup",
+      "verified_via": "wayback",
+      "snapshot": "20260710164118"
+    },
+    {
+      "url": "https://www.psdevwiki.com/ps5/Vulnerabilities",
+      "supports": "PS5 BD-JB2 at <=7.61 and fixed in PS5 8.00",
+      "kind": "writeup",
+      "verified_via": "wayback",
+      "snapshot": "20260709162809"
+    },
+    {
+      "url": "https://github.com/TheOfficialFloW/bd-jb",
+      "supports": "public bd-jb implementation repository that the BD-JB2 writeup is based on",
+      "kind": "repo"
+    },
+    {
+      "url": "https://consolemods.org/wiki/PS4:BD-JB",
+      "supports": "BD-JB discs working on PS4 9.00-12.52 and the 13.00+ workaround that copies 00000.jar into bdjstack/lib/ext",
+      "kind": "writeup",
+      "verified_via": "wayback",
+      "snapshot": "20260724075552"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/TheOfficialFloW/Presentations/master/2022-hardwear-io-bd-jb.pdf",
+      "supports": "the privileged URLClassLoader example with file:///app0/bdjstack/lib/ext/../../../../disc/BDMV/JAR/00000.jar, which is the same traversal primitive",
+      "kind": "writeup"
+    }
+  ],
+  "confidence": "high",
+  "gaps": [
+    "No binary diff of the 13.00/8.00 fix; the wikis state the affected/fixed versions and the prefix-check mechanism but do not quote the patched code.",
+    "The PS4 wiki says 13.00-13.02 was still exploitable via BD-JB-13.00 (CVE-2025-64390), so 'fixed in 13.00' applies to BD-JB2 specifically, not to every BD-J path trick.",
+    "The exact BDJO XML field order and the runtime's path-normalization order are described by the wiki, not by a vendor advisory."
+  ],
+  "entry_chain": [
+    {
+      "stage": "Burned Blu-ray inserted; the player parses /disc/BDMV/BDJO/00000.bdjo and resolves the Xlet location",
+      "image_visible": "BDMV/BDJO descriptors and the JAR are on the disc; the BD-J stack classes are in system_ex, not the kernel image",
+      "runtime_only": "which BDJO the player selects and how it normalizes the file:// URL"
+    },
+    {
+      "stage": "baseDirectory is set to file:///app0/cdc/lib/../../../disc/BDMV/JAR/00000.jar",
+      "image_visible": "the literal baseDirectory string in bdjo.xml; the BdjPolicyImpl prefix check in bdjstack.jar",
+      "runtime_only": "whether the resolved code source still starts with $JAVA_HOME/lib/ext when the permission decision is made"
+    },
+    {
+      "stage": "The JAR is treated as a trusted $JAVA_HOME/lib JAR and receives AllPermission",
+      "image_visible": "the startsWith test in BdjPolicyImpl.getPermissions; no kernel-image signal",
+      "runtime_only": "the actual ProtectionDomain and permission collection attached to the Xlet"
+    },
+    {
+      "stage": "SecurityManager disabled and native code reached through Unsafe/findEntry/setcontext",
+      "image_visible": "Unsafe and NativeLibrary references in the BD-J runtime; no kernel-image signal",
+      "runtime_only": "symbol resolution and the native call primitive"
+    },
+    {
+      "stage": "Chain to the firmware's kernel exploit (AIO double free on PS5 <=10.01, umtx on PS5 <=7.61, Lapse on PS4)",
+      "image_visible": "the kernel image contains the candidate bug sites; the chosen exploit depends on the firmware",
+      "runtime_only": "the actual kernel version, offsets and heap state"
+    }
+  ]
+}

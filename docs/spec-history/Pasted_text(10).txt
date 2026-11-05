@@ -1,0 +1,399 @@
+PS4RF — Final Freeze Patch übernommen, dann STOP
+
+Ehrliche Statusangabe vorab (gemäß deinem letzten Absatz): Meine Umgebung kann weiterhin keine Tests ausführen — kein pytest, kein git. Daher: STOP nach dem Commit/Patch. Ich liefere die finalen Source-Dateien vollständig und das Repository als Assemblierungsmanifest. Ich behaupte nicht, dass PS4RF-CORE-1.0-MOCK-READY erreicht wurde — der Tag existiert nicht, bis der Gate-Runner ihn auf einer echten Umgebung setzt.
+1. Finale Freeze-Dateien (verbindlicher Quelltext)
+1.1 core/rpc/pool.py — vollständig, ersetzt jede frühere Fassung
+python
+ 
+  
+ 
+ 
+    def submit(self, rid: str, op: str, fn) -> str:
+        if not self._tokens.acquire(blocking=False):
+            return "TOO_MANY_INFLIGHT"
+
+        with self._lock:
+            if self._poisoned:
+                self._tokens.release()
+                return "POISONED"
+
+            self._tasks[rid] = {
+                "state": TaskState.QUEUED,
+                "op": op,
+            }
+
+        self._queue.put((rid, op, fn))
+        return "OK"
+
+    # ---------- Finalisierung (idempotent; B1: niemals unter gehaltenem Lock) ----------
+    def _finalize(self, rid: str) -> bool:
+        with self._lock:
+            if self._tasks.pop(rid, None) is not None:
+                self._tokens.release()
+                return True
+            return False
+
+    def finish(self, rid: str) -> None:
+        """Aufruf im äußeren finally des Agent-Worker-Pfads (B2)."""
+        self._finalize(rid)
+
+    # ---------- Poison ----------
+    def poison(self, reason: str) -> tuple[list[dict], list[str]]:
+        with self._lock:
+            self._poisoned = True
+            in_flight = [{"request_id": rid, "operation": t["op"],
+                          "status": "IN_FLIGHT_AT_RECOVERY"}
+                         for rid, t in self._tasks.items()
+                         if t["state"] is TaskState.RUNNING]
+            queued = [rid for rid, t in self._tasks.items()
+                      if t["state"] is TaskState.QUEUED]
+            for rid in queued:
+                self._tasks[rid]["state"] = TaskState.CANCELED_AT_RECOVERY
+            return in_flight, queued
+
+    # ---------- Worker (B1: Entscheidung unter Lock, finalize DANACH) ----------
+    def _worker(self) -> None:
+        while True:
+            item = self._queue.get()
+            try:                                   # B3: task_done auf JEDEM Pfad
+                if item is self.SENTINEL:
+                    return
+                rid, op, fn = item
+                with self._lock:
+                    task = self._tasks.get(rid)
+                    if task is None:
+                        canceled = False           # bereits finalisiert
+                    else:
+                        canceled = task["state"] is TaskState.CANCELED_AT_RECOVERY
+                        if not canceled:
+                            task["state"] = TaskState.RUNNING
+                # B1: Lock FREIGEBEN vor _finalize
+                if canceled:
+                    if self._finalize(rid) and self._on_canceled:
+                        try:
+                            self._on_canceled(rid, op)
+                        except BaseException as e:
+                            if self._on_worker_crash:
+                                self._on_worker_crash(rid, op, type(e).__name__)
+                    continue
+                try:
+                    fn(rid, op)
+                except BaseException as e:         # Worker-Thread stirbt nie
+                    if self._on_worker_crash:
+                        self._on_worker_crash(rid, op, type(e).__name__)
+            finally:
+                self._queue.task_done()
+
+    # ---------- Shutdown (F9) ----------
+    def shutdown(self, cancel_queued: bool = True,
+                 wait_running: bool = False,
+                 cancel_cb: Optional[Callable[[str, str], None]] = None) -> None:
+        if cancel_queued:
+            while True:
+                try:
+                    item = self._queue.get_nowait()
+                except queue.Empty:
+                    break
+                try:                               # B3: auch im Drain
+                    if item is self.SENTINEL:
+                        continue
+                    rid, op, _fn = item
+                    if self._finalize(rid) and cancel_cb:
+                        try:
+                            cancel_cb(rid, op)
+                        except BaseException as e:
+                            if self._on_worker_crash:
+                                self._on_worker_crash(rid, op, type(e).__name__)
+                finally:
+                    self._queue.task_done()
+        for _ in self._threads:
+            self._queue.put(self.SENTINEL)
+        if wait_running:
+            for t in self._threads:
+                t.join(timeout=5.0)
+ 
+ 
+1.2 core/rpc/hang.py — neu, gemeinsamer Typ
+python
+ 
+  
+ 
+ 
+"""Gemeinsamer interner Exception-Typ für den Mock-Hang-Testpfad (F8/B8).
+Kein RPC/Wire-Element; erzeugt nie eine Response. dispatch() und
+_worker_run() importieren ausschließlich diese Klasse."""
+
+
+class MockHangReleased(Exception):
+    """Vom Test-Hook (hang_event.set()) freigegebener Mock-Worker."""
+ 
+ 
+1.3 core/resources/manager.py — vollständig, ersetzt jede frühere Fassung
+python
+ 
+  
+ 
+ 
+        if self.force_cleanup_failure:
+            return CleanupResult.FAILED
+        if self.cleanup is None:
+            return CleanupResult.FREED          # reine Framework-Ressource
+        try:
+            return CleanupResult.FREED if self.cleanup() else CleanupResult.FAILED
+        except Exception:
+            return CleanupResult.FAILED
+
+
+@dataclass
+class CleanupReport:
+    state: str
+    resources: list = field(default_factory=list)
+    console_dirty: bool = False
+
+
+class ResourceManager:
+    def __init__(self) -> None:
+        self._lock = threading.RLock()
+        self._held: dict[str, ManagedResource] = {}
+        self._leaked: dict[str, ManagedResource] = {}
+
+    def acquire(self, kind: str, *, recoverable: bool = True,
+                force_cleanup_failure: bool = False,
+                out_of_band_safe: bool = False) -> str:
+        with self._lock:
+            ref = f"{kind}:{os.urandom(8).hex().upper()}"
+            self._held[ref] = ManagedResource(
+                ref=ref, kind=kind, recoverable=recoverable,
+                out_of_band_cleanup_safe=out_of_band_safe,
+                force_cleanup_failure=force_cleanup_failure)
+            return ref
+
+    def attach_cleanup(self, ref: str, callback: Callable[[], bool]) -> None:
+        """B12: Callback NACH acquire an den konkreten Ref binden.
+        Kein Callback mit leerem/fremdem Ref; Ref muss existieren."""
+        with self._lock:
+            res = self._held.get(ref)
+            if res is None:
+                raise ResourceStateInvalid(f"attach_cleanup auf unbekannt {ref!r}")
+            res.cleanup = callback
+
+    def release(self, ref: str) -> bool:
+        with self._lock:
+            r = self._held.get(ref)
+            if r is None:
+                return False
+            result = r.do_cleanup()
+            r.cleanup_result = result
+            if result is CleanupResult.FREED:
+                del self._held[ref]
+                return True
+            self._leaked[ref] = self._held.pop(ref)
+            return False
+
+    def cleanup_all(self) -> CleanupReport:
+        """Normaler Disconnect: alle gehaltenen Ressourcen."""
+        with self._lock:
+            for ref in list(self._held):
+                self.release(ref)
+            return self._report()
+
+    def cleanup_after_hang(self) -> CleanupReport:
+        """V5/F10: nur out_of_band_cleanup_safe bereinigen. Alles andere:
+        cleanup_attempted=False (KEIN Versuch), UNCERTAIN, console_dirty."""
+        with self._lock:
+            for ref, r in list(self._held.items()):
+                if r.out_of_band_cleanup_safe:
+                    result = r.do_cleanup()
+                    r.cleanup_result = result
+                    if result is CleanupResult.FREED:
+                        del self._held[ref]
+                    else:
+                        self._leaked[ref] = self._held.pop(ref)
+                else:
+                    r.cleanup_attempted = False
+                    r.cleanup_result = CleanupResult.UNCERTAIN
+                    self._leaked[ref] = self._held.pop(ref)
+            return self._report()
+
+    def _report(self) -> CleanupReport:
+        resources = [{"ref": r.ref, "kind": r.kind,
+                      "cleanup_attempted": r.cleanup_attempted,
+                      "cleanup_result": (r.cleanup_result.value
+                                         if r.cleanup_result else "NOT_ATTEMPTED"),
+                      "recoverable": r.recoverable,
+                      "out_of_band_safe": r.out_of_band_cleanup_safe}
+                     for r in self._leaked.values()]
+        dirty = bool(self._leaked)
+        return CleanupReport(state="COMPLETE" if not dirty else "PARTIAL",
+                             resources=resources, console_dirty=dirty)
+ 
+ 
+1.4 mock/agent.py — finale Glue-Auszüge (Fix B, §6-Import, B12)
+python
+ 
+  
+ 
+ 
+from core.rpc.hang import MockHangReleased            # §6: EIN gemeinsamer Typ
+from core.rpc.pool import BoundedPool, TaskState
+
+    def __init__(self, ...):
+        ...
+        self._transport_dead = False
+
+    def _respond_now(self, rid: str, op: str, resp: dict) -> None:
+        try:
+            with self._send_lock:
+                _send_frame(self._conn, self._ch_out, "RESPONSE", resp)
+        except OSError:
+            self._transport_dead = True
+
+    def _on_canceled(self, rid: str, op: str) -> None:     # Fix B, verbindlich
+        try:
+            if not self._transport_dead:
+                self._respond_now(rid, op, {
+                    "status": "ERROR",
+                    "error": {"code": "SESSION_RECOVERY_REQUIRED"},
+                })
+        finally:
+            self._reqs.complete(rid)
+
+    def _on_worker_crash(self, rid: str, op: str, exc_name: str) -> None:
+        self._evidence.append({"request_id": rid, "operation": op,
+                               "result": "WORKER_CRASH", "exception": exc_name})
+
+    # Session-Setup (Limits exakt aus authentisiertem host_hello_ack, B6):
+        self._pool = BoundedPool(
+            size=workers,
+            max_inflight=limits["max_parallel_tasks"] * 2,
+            on_canceled=self._on_canceled,
+            on_worker_crash=self._on_worker_crash)
+
+    # B12: Sync-Creation ohne Leer-Ref (Gate und Barrier identisch):
+        if op_name == "sync.gate.create":
+            gate = Gate(int(args["parties"]))
+            ref = self.resources.acquire("gate")                 # 1. acquire
+            self.resources.attach_cleanup(                       # 2. korrekter Ref
+                ref, self._make_sync_cleanup(ref, self._gates, gate))
+            with self._agent_lock:                               # 3. Registry
+                self._gates[ref] = gate
+            return {"status": "OK", "result": {"gate": ref}}     # 4. sichtbar
+
+    def _make_sync_cleanup(self, ref: str, registry: dict, obj) -> Callable[[], bool]:
+        def cleanup() -> bool:
+            with self._agent_lock:
+                registry.pop(ref, None)      # B12: Registry-Eintrag atomar weg
+                obj.destroy()                # Waiter → DESTROYED, nie Success
+                return True
+        return cleanup
+ 
+ 
+
+_worker_run mit äußerem finally (B2) bleibt exakt wie in der Freeze-Spezifikation geliefert; tools/freeze/run_gate_suite.py behält TAG = "PS4RF-CORE-1.0-MOCK-READY" (Punkt 4).
+2. Pre-Flight-Verifikation (nur korrigierte Implementierungen aktiv)
+
+Vor dem Commit ausführen; alle Prüfkriterien müssen erfüllt sein:
+bash
+ 
+  
+ 
+ 
+[ "$(grep -c 'def submit' core/rpc/pool.py)" = "1" ]          # Fix A: genau eine submit()
+! grep -rn "if False else" core/rpc/pool.py                  # alte Token-Zeile weg
+! grep -rn "_tokens\._value" core/ tests/                    # Punkt 3: keine Internals
+grep -q "def available_tokens" core/rpc/pool.py              # Test-API vorhanden
+! grep -rn "class MockHangReleased" --include='*.py' . | grep -v "core/rpc/hang.py"
+grep -q "from core.rpc.hang import MockHangReleased" mock/agent.py
+! grep -rn 'cleanup=_make_sync_cleanup(""' mock/             # B12: kein Leer-Ref
+grep -q 'TAG = "PS4RF-CORE-1.0-MOCK-READY"' tools/freeze/run_gate_suite.py
+grep -q "git\", \"tag\", TAG" tools/freeze/run_gate_suite.py
+grep -q "def _on_canceled" mock/agent.py && grep -q "finally:" -A1 mock/agent.py
+ 
+ 
+3. Repository-Assemblierungsmanifest
+
+Da ich kein binäres ZIP erzeugen kann: das Repository besteht aus den bereits in diesem Thread autoritativ gelieferten Inhalten plus den finalen Dateien aus §1. Index (jede Zeile = Datei → verbindliche Quelle):
+text
+ 
+  
+ 
+ 
+pyproject.toml                                   v0.5 §7 (deps, [project.scripts] ps4rfctl)
+FREEZE-STATUS.md                                 §4 dieser Antwort
+schemas/common.schema.json                       v0.2 §3.1 + v0.3 §3 (K3/K5/N3-Typen) + v0.6 R11 fixed-width
+schemas/capability.schema.json                   v0.3 §2.1 + v0.4 §1.2 + v0.6 R1 (seq/boot_id/session_id)
+schemas/rpc.schema.json                          v0.2 §3.3 + v0.4 N2 + v0.7 V3/V7-Header + v0.8 F16
+schemas/evidence.schema.json                     v0.2 §4.2 + v0.3 §12.4 (metasploit_run_record, N4)
+schemas/experiment.schema.json                   v0.2 §3.4 + v0.3 K7 (budget)
+schemas/profile.schema.json                      v0.2 §4.1
+schemas/exploit.schema.json                      v0.4 §6
+schemas/surface.schema.json                      v0.4 §7 + R10-Enums
+schemas/candidate.schema.json                    v0.4 §8 + R10-Enums
+core/canonical.py                                v0.4 §9.1 + v0.6 §9.2 (normalize_u64)
+core/models/common.py                            v0.4 §9.2 + K3-Enums + N3-Typen + RequestId/SessionId
+core/models/capability.py                        v0.6 §1.1 + v0.7 V2-Binding + F2 + F5 (excluded/AUTHORITY_INVALID)
+core/models/verification.py                      v0.7 V1 §1.1 + F1-Ceiling + B7/B8 (provider_type)
+core/models/exploit.py                           v0.6 §4.2 — OHNE capability_grants_from_runs (gestrichen)
+core/models/candidate.py                         v0.6 §4.3 + R10-Enums
+core/models/surface.py                           v0.6 §4.4 + R10-Enums
+core/models/{evidence,experiment,rpc_docs}.py    datamodel-codegen aus schemas/ (strict)
+core/rpc/handshake.py                            v0.5 §2.1 + V3-Rollen (agent_handshake/host_handshake)
+                                                 + F14 MAX_HANDSHAKE_BYTES + F15 TAG_LEN + B10
+core/rpc/registry.py                             v0.6 §3.1 + R7-Sync-Ops + v0.8 Gate-Ops
+core/rpc/pool.py                                 ★ §1.1 dieser Antwort (FINAL)
+core/rpc/requests.py                             v0.7 §6 + respond_once (F11)
+core/rpc/hang.py                                 ★ §1.2 dieser Antwort
+core/sync/gate.py                                v0.7 §4 + F12-Participants + B4 manuell
+core/resources/manager.py                        ★ §1.3 dieser Antwort (FINAL)
+core/capabilities/{catalog,authority}.json       v0.3 §1 + v0.4 §2.2 + C1-Tiers (OPERATOR aw=false)
+core/experiment/{compiler,budget,engine,rpc_budget}.py   v0.4 §9.5 + v0.6 §3/§7
+core/session/states.py                           K9 inkl. RECOVERY_REQUIRED
+core/evidence/store.py                           v0.5 §9 + F3-Vertrag (get_verified_evidence, Re-Hash)
+mock/agent.py                                    v0.6 §10 + v0.7 §7 + B5/B6-AGENT-Rolle
+                                                 + F8/F13 + ★ §1.4-Glue
+ctl/ps4rfctl.py                                  v0.5 §9 (host_handshake-Rolle)
+tools/freeze/run_gate_suite.py                   Freeze-Antwort (TAG korrigiert)
+tools/inventory/extract_orbisprobe_inventory.py  v0.3 §10.1
+tools/metasploit/{redact.py,adapter.py,mock/}    v0.3 §12 + C6 (Adapter nur Stub bis nach Freeze)
+tests/                                           v0.4 §10 + v0.6 §11 + v0.7 §10 + v0.8 §14
+                                                 + B13 + Freeze-Tests (Fix A/B/§6)
+experiments/ profiles/ docs/                     Round-Trip-YAML, fw900/fw1352-Platzhalter
+ 
+ 
+
+Hinweis zu B6 im Mock: Limits stammen stets aus dem host_hello_ack, den der Host (Test-Harness/ps4rfctl) erzeugt; der Mock spielt ausschließlich die AGENT-Rolle. DEFAULT_LIMITS existiert im Mock-Agent nicht mehr.
+4. FREEZE-STATUS.md
+PS4RF Freeze Status
+
+STATUS: FREEZE PATCH ANGEWENDET — NICHT GETAGGT.Die Gate-Suite wurde in der Erstellungsumgebung NICHT ausgeführt(keine Python/pytest/git-Ausführung verfügbar). Der TagPS4RF-CORE-1.0-MOCK-READY existiert erst nach einem grünenRunner-Lauf und wird ausschließlich von run_gate_suite.py gesetzt.
+
+Angewendete, verbindlich aktive Korrekturen:
+
+    Fix A  submit(): Token-First + Poison-Re-Check   (core/rpc/pool.py)
+    Fix B  exception-safe Cancel-Completion          (mock/agent.py _on_canceled)
+    available_tokens Test-API, keine Semaphore-Internals (pool.py, tests/)
+    Tag-Name: PS4RF-CORE-1.0-MOCK-READY              (runner + alle Dokumente)
+    B12 Sync-Cleanup ohne Leer-Ref, Registry-Removal (manager.py + mock/agent.py)
+    Gemeinsamer MockHangReleased-Typ                 (core/rpc/hang.py)
+
+Ausführung (Umgebung mit Python 3.12, pytest, git):    git add -A    git commit -m "PS4RF final freeze patch"    python tools/freeze/run_gate_suite.py
+
+Fehlschlag  -> kein Tag, FAILED-Report (Gate/Test/Exception/Root Cause/Fix).Voll Erfolg -> Runner setzt den Tag und schreibt FREEZE-REPORT.json.
+5. Ausführung und Entscheidung
+bash
+ 
+  
+ 
+ 
+git add -A
+git commit -m "PS4RF final freeze patch"
+python tools/freeze/run_gate_suite.py
+ 
+ 
+
+     Ein Gate rot: Runner druckt FAILED gate=… + Traceback und taggt nicht. Diesen Output zurückspielen; ich liefere ausschließlich Test / Exception / Root Cause / Minimaler Fix — keine Architekturänderung.
+     G1–G8 grün: Runner setzt PS4RF-CORE-1.0-MOCK-READY und schreibt FREEZE-REPORT.json (Commit, Python-Version, pytest-Summary, Gate-Matrix). Erst dieser Report ist der Tag-Nachweis — nicht diese Nachricht.
+
+6. Danach — unverändert
+
+Core eingefroren; Änderungen nur bei echtem Integrationsbefund. Nächste Phase: OrbisProbe Inventory → Mapping → Adapter gegen Mock, ausschließlich mit echtem Code — der steht weiterhin aus (drei Wege aus v0.3 §10: Dateien einfügen, Archiv/Textdump, Extraktor-Draft zurückspielen). Danach Metasploit, Ghidra, Rizin, angr, AFL++. Kein echter PS4 Agent, kein Kernel Code, keine Payloads.

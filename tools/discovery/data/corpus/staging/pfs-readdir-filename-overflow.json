@@ -1,0 +1,62 @@
+{
+  "id": "pfs-readdir-filename-overflow",
+  "name": "pfs_readdir - filename length overflow in PFS directory read",
+  "role": "training",
+  "burned_reason": "",
+  "platform": [
+    "ps4"
+  ],
+  "bug_class": "HEAP_OVERFLOW",
+  "subsystem": "fs/pfs (PlayStation File System)",
+  "root_cause": {
+    "summary": "The PFS directory-read routine (pfs_readdir, described in the public notes as an ioctl-level routine used for savedata and game-data access) copies a directory entry's filename into a destination that is sized for a 256-byte name but does not validate the name length before copying, so a name of up to roughly 500 bytes is written past the end of the buffer and corrupts adjacent kernel memory. The public description does not establish whether the destination is on the stack or the heap, nor whether the overlong name must be created through PFS itself or can come from a mounted image.",
+    "primitive": "unbounded filename copy into a fixed 256-byte kernel buffer, overwriting adjacent memory with attacker-influenced ASCII bytes",
+    "trigger": "a pfs_readdir call that returns a directory entry whose filename exceeds the expected length; the caller must be able to reach the PFS readdir path with a directory containing such a name",
+    "consequence": "kernel memory corruption with restricted (filename-character) content; the public notes describe a plausible ROP/JOP route but no working exploit"
+  },
+  "discovery_approach": {
+    "summary": "zecoxao diffed the PS4 12.52 and 13.00 kernels and disclosed on 2025-09-29 that 13.00 contained a buffer-overflow patch in pfs_readdir. The public record is a diff disclosure plus a wiki description; no PoC, writeup or implementation is known.",
+    "signals": [
+      "fixed-size 256-byte destination receiving a filename whose length is not checked against the destination size",
+      "copy length taken from on-disk directory metadata rather than from the destination buffer size",
+      "the only change between 12.52 and 13.00 in this function is a length check on the name copy"
+    ],
+    "blind_usable": false
+  },
+  "firmware": {
+    "affected": [
+      "9.00",
+      "11.00",
+      "12.52"
+    ],
+    "fixed_in": "13.00",
+    "differences": [
+      "12.52 to 13.00: a buffer-overflow patch was added in pfs_readdir, i.e. a length check before the filename copy; the exact check is not public in the fetched sources",
+      "PS5 is reported as affected at least on 7.61 and fixed around 12.00, but that range is marked uncertain in the wiki"
+    ]
+  },
+  "patch_evidence": {
+    "available": false,
+    "what": "a diff-disclosure tweet stating that 13.00 contains a pfs_readdir buffer-overflow patch, and a wiki section describing the unchecked 256-byte filename copy",
+    "limits": "no diff, decompilation or advisory was fetched; the mechanism beyond 'unchecked filename length' is not public"
+  },
+  "sources": [
+    {
+      "url": "https://twitter.com/notnotzecoxao/status/1972775526877233470",
+      "supports": "disclosure on 2025-09-29 that the 13.00 kernel contains a buffer-overflow patch in pfs_readdir",
+      "kind": "writeup"
+    },
+    {
+      "url": "https://www.psdevwiki.com/ps4/Vulnerabilities",
+      "supports": "pfs_readdir expects a filename of at most 256 bytes but can copy up to 500, corrupting kernel memory; fixed in 13.00; no implementation exists",
+      "kind": "writeup"
+    }
+  ],
+  "confidence": "low",
+  "gaps": [
+    "whether the overflow is on the stack or the heap is explicitly uncertain in the only mechanism description",
+    "the exact patched check, the affected lower bound and whether the overlong name can be supplied from a crafted image rather than created through PFS are unknown",
+    "no PoC or exploit exists publicly, so exploitability is an assessment rather than a demonstrated result",
+    "the PS5 range (7.61 affected, ~12.00 fixed) is marked uncertain in the wiki and was not independently checked"
+  ]
+}

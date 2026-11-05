@@ -1,0 +1,282 @@
+{
+  "categories": [
+    {
+      "category": "os_kernel",
+      "entries": [
+        {
+          "key": "os.name",
+          "value": "OrbisOS (synthetic)"
+        },
+        {
+          "key": "kernel.release",
+          "value": "12.1-SYNTH"
+        },
+        {
+          "key": "uname.machine",
+          "value": "x86_64"
+        }
+      ]
+    },
+    {
+      "category": "identity",
+      "entries": [
+        {
+          "key": "uid",
+          "value": "1000"
+        },
+        {
+          "key": "gid",
+          "value": "1000"
+        },
+        {
+          "key": "groups",
+          "value": "synth:synth"
+        }
+      ]
+    },
+    {
+      "category": "mounts",
+      "entries": [
+        {
+          "key": "/",
+          "value": "ufs rw"
+        },
+        {
+          "key": "/system",
+          "value": "ufs ro"
+        },
+        {
+          "key": "/user",
+          "value": "ufs rw"
+        },
+        {
+          "key": "/dev",
+          "value": "devfs rw"
+        }
+      ]
+    },
+    {
+      "category": "filesystem_permissions",
+      "entries": [
+        {
+          "key": "/system",
+          "value": "drwxr-xr-x root:wheel"
+        },
+        {
+          "key": "/user/synth-user",
+          "value": "drwxr-xr-x synth:synth"
+        }
+      ]
+    },
+    {
+      "category": "suid",
+      "entries": [
+        {
+          "key": "/system/bin/synth-suid-helper",
+          "value": "4755 root:wheel"
+        }
+      ]
+    },
+    {
+      "category": "sgid",
+      "entries": [
+        {
+          "key": "/system/bin/synth-sgid-helper",
+          "value": "2755 root:synth"
+        }
+      ]
+    },
+    {
+      "category": "path",
+      "entries": [
+        {
+          "key": "PATH",
+          "value": "/system/bin:/usr/bin:/bin"
+        }
+      ]
+    },
+    {
+      "category": "environment",
+      "entries": [
+        {
+          "key": "HOME",
+          "value": "/user/synth-user"
+        },
+        {
+          "key": "LANG",
+          "value": "C"
+        },
+        {
+          "key": "PATH",
+          "value": "/system/bin:/usr/bin:/bin"
+        },
+        {
+          "key": "SHELL",
+          "value": "/bin/sh"
+        }
+      ]
+    },
+    {
+      "category": "processes",
+      "entries": [
+        {
+          "key": "1",
+          "value": "init"
+        },
+        {
+          "key": "77",
+          "value": "synth-orbis-agent"
+        }
+      ]
+    },
+    {
+      "category": "services",
+      "entries": [
+        {
+          "key": "synth-orbis-agent",
+          "value": "running"
+        }
+      ]
+    },
+    {
+      "category": "sockets",
+      "entries": [
+        {
+          "key": "unix:/var/run/synth-orbis.sock",
+          "value": "synth-orbis-agent listening"
+        },
+        {
+          "key": "tcp:127.0.0.1:9090",
+          "value": "synth-orbis-agent listening"
+        }
+      ]
+    },
+    {
+      "category": "cron",
+      "entries": [
+        {
+          "key": "/etc/crontab",
+          "value": "0 4 * * * synth-user /system/bin/synth-maintenance"
+        }
+      ]
+    },
+    {
+      "category": "writable_executables",
+      "entries": [
+        {
+          "key": "/user/app/synth-tool",
+          "value": "mode 0777 owner synth"
+        }
+      ]
+    },
+    {
+      "category": "writable_libraries",
+      "entries": [
+        {
+          "key": "/user/app/libsynth.so",
+          "value": "mode 0777 owner synth"
+        }
+      ]
+    },
+    {
+      "category": "writable_configuration",
+      "entries": [
+        {
+          "key": "/user/app/synth.conf",
+          "value": "mode 0666 owner synth"
+        }
+      ]
+    },
+    {
+      "category": "device_nodes",
+      "entries": [
+        {
+          "key": "/dev/synth-ctl",
+          "value": "crw-rw-rw- root:operator"
+        }
+      ]
+    },
+    {
+      "category": "loaded_modules",
+      "entries": [
+        {
+          "key": "synth_kld",
+          "value": "kldstat present"
+        }
+      ]
+    },
+    {
+      "category": "sysctls",
+      "entries": [
+        {
+          "key": "security.bsd.unprivileged_proc_debug",
+          "value": "0"
+        },
+        {
+          "key": "kern.osreldate",
+          "value": "1201000"
+        }
+      ]
+    },
+    {
+      "category": "jails",
+      "entries": [
+        {
+          "key": "jails.count",
+          "value": "1"
+        },
+        {
+          "key": "synth-jail",
+          "value": "path=/synth/jails/synth ip4=inherit"
+        }
+      ]
+    },
+    {
+      "category": "shells",
+      "entries": [
+        {
+          "key": "/bin/sh",
+          "value": "present"
+        },
+        {
+          "key": "/rescue/sh",
+          "value": "present"
+        }
+      ]
+    },
+    {
+      "category": "installed_binaries",
+      "entries": [
+        {
+          "key": "/system/bin/synth-tool",
+          "value": "present"
+        },
+        {
+          "key": "/usr/bin/synth-util",
+          "value": "present"
+        }
+      ]
+    }
+  ],
+  "collector": {
+    "tool": "ps4rf-unix-collector",
+    "version": "0.1-mock"
+  },
+  "platform_specific": [
+    {
+      "key": "orbisos.family_marker",
+      "value": "synthetic"
+    },
+    {
+      "key": "ps4.target_family",
+      "value": "orbisos (synthetic)"
+    }
+  ],
+  "schema": "ps4rf.unix_privesc.collect/v1",
+  "target": {
+    "hostname": "synth-orbis",
+    "kernel": "12.1-SYNTH",
+    "os": "OrbisOS (synthetic)",
+    "platform_hint": "OrbisOS (FreeBSD 12.1, synthetic)"
+  }
+}

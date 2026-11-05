@@ -1,0 +1,45 @@
+{
+  "base_rva": "0x1000",
+  "case_notes": {
+    "fixture_d3_lock_on_every_path": "NO_CLAIM: both arms take the lock before the join, so no path reaches the store unlocked -- even though neither lock block dominates it",
+    "fixture_d3_lock_on_one_path": "the false arm writes the same field without taking the lock",
+    "fixture_d3_store_after_lock_same_block": "the store is after the acquisition in the same basic block",
+    "fixture_d3_store_before_lock_same_block": "a store preceding the lock in the same basic block has a lock-free path"
+  },
+  "cases": {
+    "fixture_d3_lock_on_every_path": "NO_CLAIM",
+    "fixture_d3_lock_on_one_path": "UNLOCKED_WRITE",
+    "fixture_d3_store_after_lock_same_block": "NO_CLAIM",
+    "fixture_d3_store_before_lock_same_block": "UNLOCKED_WRITE"
+  },
+  "image_hex": "c34885f6740a4889dfe8f2ffffffeb084889dfe8e8ffffffc7831001000001000000c34885f674144889dfe8d0ffffffc7831001000001000000eb0ac7831001000002000000c3c78310010000010000004889dfe8a7ffffffc34889dfe89effffffc7831001000001000000c3",
+  "image_sha256": "362b06f10aef7239a670e17b6bbbff717f28181488c8987a26110c82c396a214",
+  "roots": {
+    "lock": "0x1000"
+  },
+  "schema": "ps4rf.discovery.lock-coverage-fixtures/1",
+  "source": "lock-coverage-fixtures.S",
+  "source_sha256": "8a076771a637efc5ede7e5dcca6cbc04911a8361e7845b3897bd7e89f7263d2f",
+  "symbols": {
+    "d3_lock": {
+      "rva": "0x1000",
+      "size": "0x1"
+    },
+    "fixture_d3_lock_on_every_path": {
+      "rva": "0x1001",
+      "size": "0x22"
+    },
+    "fixture_d3_lock_on_one_path": {
+      "rva": "0x1023",
+      "size": "0x24"
+    },
+    "fixture_d3_store_after_lock_same_block": {
+      "rva": "0x105a",
+      "size": "0x13"
+    },
+    "fixture_d3_store_before_lock_same_block": {
+      "rva": "0x1047",
+      "size": "0x13"
+    }
+  }
+}

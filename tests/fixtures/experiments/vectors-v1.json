@@ -1,0 +1,70 @@
+{
+  "identity_rule": "B marker in a global/latest status region alone is NOT TOCTOU; TOCTOU_CONFIRMED needs an A-attributable result containing B-only state",
+  "oracle": {
+    "own1live": {
+      "artifact": "own1live.bin",
+      "elf_sha256": "7d0f5089fd0fd0dacb24348737766efafc9abb51048a83d9072e8baa47c276c1",
+      "harness": "tests/harness (host, scenario per process) -- archived run log sha256 below",
+      "sha256": "7b812f745371facc070ed7990fc6a09fb993e0cfba368f7881881e66c53f53a7"
+    },
+    "q6live": {
+      "artifact": "q6live.bin",
+      "elf_sha256": "51cb0164fc851222ad1dc2143e384e6202824dcdc240a4a75e5cbfa49a433c53",
+      "harness": "tests/harness (host, scenario per process) -- archived run log sha256 below",
+      "sha256": "6d61637f90d3687f59fc9019c28064c9ddb8bcbbe06f3b91aaedd48c0de00328"
+    }
+  },
+  "purpose": "oracle parity: PS4RF experiment layer vs the frozen payload harnesses",
+  "schema": "ps4rf-experiment-vectors-v1",
+  "stale_rows": "never computed, never reported by the OWN-1 experiment",
+  "vectors": [
+    {
+      "expected_classification": "TOCTOU_CONFIRMED",
+      "experiment": "q6",
+      "oracle_log_sha256": "af82138611c3c5d53a74a23e1bcf0c6809d7e7a8f449775273755066c352d4d6",
+      "scenario": "q6_toctou"
+    },
+    {
+      "expected_classification": "SHARED_BACKING_ONLY",
+      "experiment": "q6",
+      "oracle_log_sha256": "6fd49c468f7892e70fbb5a9a7282a0dcc1212976bc367c2e6c99ee81ae21bfd3",
+      "scenario": "q6_shared"
+    },
+    {
+      "expected_classification": "ENGINE_LATCHED_BEFORE_UNLOCK",
+      "experiment": "q6",
+      "oracle_log_sha256": "fe751ea1335fea5c4c12b766c32d9fa4604182019d2ece457d1d4fd484deffde",
+      "scenario": "q6_latched"
+    },
+    {
+      "expected_classification": "STATUS_OWNERSHIP_UNPROVABLE|GLOBAL_STATUS_ALIASING",
+      "experiment": "q6",
+      "oracle_log_sha256": "4c4a6a91b69efac927ce47a41bbc2ddfabbeef0b5ddc13bd795d852c6b59ea0a",
+      "scenario": "q6_noid"
+    },
+    {
+      "expected_classification": "FULL_ROLLBACK",
+      "experiment": "own1",
+      "oracle_log_sha256": "1252d8f09b352f4e9d8ede826cb11d992836576463eb850a09357b40dba408f6",
+      "scenario": "on1_rollback"
+    },
+    {
+      "expected_classification": "STALE_TRANSLATION",
+      "experiment": "own1",
+      "oracle_log_sha256": "a017e89dc5ac712c110eeca963c20f5024d55d25d187ad89343519218a5d5353",
+      "scenario": "on1_stale"
+    },
+    {
+      "expected_classification": "RESOURCE_LEAK",
+      "experiment": "own1",
+      "oracle_log_sha256": "dd08fdcc5c57a35d21918525b0cb4ddec391cfbd282ede082005a5ad75c8d1d1",
+      "scenario": "on1_leak"
+    },
+    {
+      "expected_classification": "AUTHORITY_DIVERGENCE",
+      "experiment": "own1",
+      "oracle_log_sha256": "ca90d739c7ed907cc9cf87fddb45c2f4404c8c7609bf1019fe5e5a943eac017c",
+      "scenario": "on1_diverg"
+    }
+  ]
+}

@@ -1,0 +1,96 @@
+{
+ "baseline_commit": "9c087268d862b20d7775e3aac65d31ca35fc967c",
+ "cycle": "S1.3-cycle4-final",
+ "file_sha256": {
+  "tools/discovery/chains.py": "c8384d679b662af3419738fb8af0a1559cf093c98c36afce823bd1c133b143b7",
+  "tools/discovery/cli.py": "4ee24f96cd49482ef2f47cd114cb7911a9ffc75baef308169399e8a726bda972",
+  "tools/discovery/data/families/families.json": "f0c18155897ca395ee162531b349f4b71c5dffda130818aad54de6f21b529718",
+  "tools/discovery/data/training/references.json": "558b007190149267c9338633c6ee59a411f716e024297a6eb0ebee74803c9aed",
+  "tools/discovery/entries.py": "65f89df17e6c6a186a2bc0c6009df64107cc09bd777398fa4e90dd3a4507eb17",
+  "tools/discovery/handles.py": "59f99a334a46b95418bbb262196e1358d6c0ca155c07d25cc4eb0b0afd042fce",
+  "tools/discovery/patterns.py": "b205c52b12e53b1814f3e6c5fc1714ee917bc9074db302e280ca0b47716fdc26",
+  "tools/discovery/semgraph.py": "741eae44fb9575227112d99969ae1a39d26e1b0de8d41d7df82b10cf6051692b"
+ },
+ "held_back_set": [
+  {
+   "entry_class": "network receive (not a syscall)",
+   "id": "pppwn-cycle2",
+   "label": "NEGATIVE",
+   "subsystems": [
+    "socket",
+    "net/ppp",
+    "net/if"
+   ]
+  },
+  {
+   "entry_class": "vfs/mount + exFAT parse",
+   "id": "relapse-cycle2",
+   "label": "POSITIVE",
+   "subsystems": [
+    "vfs",
+    "fs/exfat"
+   ]
+  }
+ ],
+ "metrics": {
+  "entry_coverage": "whether the generic root set reaches the family entry class",
+  "false_positive": "claims on PPPwn NEGATIVE / analysed functions, with numerator, denominator and 95% upper bound",
+  "ranking_hit": "matching root-cause chain in frozen top-10",
+  "root_cause_recall": "proved rank<=2 chain whose evidence matches the labelled root-cause class; subsystem hit alone is zero"
+ },
+ "note": "Final freeze after attribution barriers and conservative graph reachability. Written before cycle-4 chain construction and before held-back family results were mapped. Scan artifacts are the cycle-3 products because the final change touches graph export only, not scanning.",
+ "ranking": {
+  "excluded_functions": {
+   "13.52": [
+    "0x164e90",
+    "0x164dc0",
+    "0x1e0ad0",
+    "0x1e0710",
+    "0x164810"
+   ],
+   "reason": "netcontrol training reference"
+  },
+  "excluded_subsystems": [],
+  "score_terms": [
+   "proved_hop_ratio x 3",
+   "+ 2 if the primitive carries a decisive identity domain (handle)",
+   "+ 1 if a surplus reference is proven",
+   "+ 1 if a cross-subsystem hop is witnessed",
+   "- 0.5 x entry depth",
+   "- 2 if the chain depends on a 'possible' or 'unknown' hop"
+  ]
+ },
+ "repair_from_cycle2": {
+  "cause": "split-record continuation crossed another known syscall handler root; the finding label was expansion-order attribution, not ownership",
+  "generic_rule": "known entry handlers are continuation barriers; explicit call/jump/table edges may still cross them",
+  "training_control": "9.00 netcontrol must resolve only through sysent[99]; 13.52 likewise"
+ },
+ "revisions": [
+  {
+   "blind_result_seen_before_change": true,
+   "change": "remove unused HandleCatalog.instructions cache; semgraph uses FunctionView and no caller referenced this method",
+   "file": "tools/discovery/handles.py",
+   "independent_result_valid": true,
+   "metrics_changed": false,
+   "ranking_changed": false,
+   "rules_changed": false,
+   "search_space_changed": false,
+   "sha256_after": "c03c0e21a134790d30dd4d7e1ab3391ce859ab2e7d699e1cb929329ef3cb2d65",
+   "sha256_before": "59f99a334a46b95418bbb262196e1358d6c0ca155c07d25cc4eb0b0afd042fce"
+  }
+ ],
+ "scan_artifacts": {
+  "13.52": "s13c4-scan-fw1352-ext.json",
+  "13.52_frozen": "s13c4-scan-fw1352-frozen.json",
+  "9.00": "s13c4-scan-fw900-ext.json"
+ },
+ "schema": "ps4rf.discovery.freeze/1",
+ "search_space": {
+  "depth": 2,
+  "entry_set": "extended",
+  "firmware": "13.52",
+  "max_functions": 12000,
+  "selection_order": "depth"
+ },
+ "selection": "all integrated families not marked training and not previously evaluated; no family was discarded after selection"
+}

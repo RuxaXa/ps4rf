@@ -1,0 +1,36 @@
+{
+ "artifact_sha256": "b2d9cdc63fb0620b14a017f8b9e66a37ac5ade109cd7665fe4fb0bad87f1f552",
+ "entries": [
+  {
+   "kind": "function",
+   "locator": {
+    "kind": "rva",
+    "value": 4096
+   },
+   "name": "fixture_entry_a",
+   "size": 128
+  },
+  {
+   "kind": "function",
+   "locator": {
+    "kind": "rva",
+    "value": 5120
+   },
+   "name": "fixture_entry_b",
+   "size": 128
+  },
+  {
+   "kind": "string_ref",
+   "locator": null,
+   "name": "fixture_note",
+   "size": 16
+  }
+ ],
+ "notes": [
+  "fixture analysis output; no adapter is implemented (W6 section 12)",
+  "produced by a rizin fixture, capped at WEAK confidence"
+ ],
+ "schema": "ps4rf.external-analysis.v1",
+ "tool": "rizin",
+ "version": "fixture-0.1"
+}

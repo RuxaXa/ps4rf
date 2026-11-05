@@ -1,0 +1,232 @@
+{
+  "schema": "ps4rf.discovery.families/1",
+  "note": "One entry per integrated exploit family. Everything here is derived from a pinned primary source; grades: B = byte/instruction proven, A = necessarily derived, K = source self-report (unverified), H = hypothesis, X = checked and refuted, BLOCKED = not provable with named unblocking condition.",
+  "families": [
+    {
+      "id": "pppwn",
+      "name": "PPPwn -- PPPoE/sppp LCP-Configure-Request heap overflow",
+      "bug_class": "HEAP_OVERFLOW_UNBOUNDED_COPY",
+      "subsystems": ["socket", "net/ppp", "net/if"],
+      "source": {
+        "repo": "TheOfficialFloW/PPPwn",
+        "commit": "fb4ab5ffa97e083775ccad3a95e2348fc6b53e1c",
+        "commit_date": "2024-06-16T17:57:50+02:00",
+        "files": {
+          "pppwn.py": "0892b4eb40b9a9a4d4bed96c6cdc8bcbfae3b66a9cd55dcf2707ca8c0852fa9a",
+          "stage1/offsets.h": "058fb1650a69ab4144619f082b96303ecc1d82372dd710a0966741beabc8b141",
+          "stage1/stage1.c": "4ffcf4d8c58bb4902b0b8d5c5e15913ebabd54c6e29f0841fec97d72db390156",
+          "stage2/stage2.c": "3f8c692d5fdf1d32a1155627aa9231567418f3a512b175a3873a26944eab3461"
+        }
+      },
+      "root_cause": {
+        "summary": "The kernel's PPP implementation copies the option payload of an inbound LCP/IPCP Configure-Request into a fixed-size buffer without validating the length taken from the packet, so a peer-controlled length overflows a heap object of the pppoe softc.",
+        "grade": "K",
+        "why_grade": "the upstream writeup is the HackerOne report (CVE-2006-4304, H1 #2177925) which is not public; the reconstruction rests on the exploit's own packet construction and on the fact that the overflow payload is built as an mbuf/LLE-shaped object (build_overflow_lle in pppwn.py)",
+        "evidence": [
+          "pppwn.py:184 lcp_negotiation() and :213 ipcp_negotiation() drive the Configure-Request exchange that the overflow rides in",
+          "pppwn.py:360 build_overflow_lle() constructs the object that must land in the overflowed slot: pppoe_softc-relative pointers, an rwlock, lle_head/lle_free chain fields",
+          "stage1/offsets.h resolves pppoe_softc_list, nd6_llinfo_timer, cc_cpu, callwheelsize, kernel_map, kmem_alloc, kproc_create per firmware -- the primitive set the family needs"
+        ]
+      },
+      "lifecycle": [
+        {"object": "pppoe_softc", "owned_by": "PPPoE session (if_spppsubr attach)", "claim": "the overflow corrupts a heap object adjacent to the softc; the exploit then frees and reallocates to place a controlled LLE", "grade": "K"},
+        {"object": "sppp session / LCP option buffer", "claim": "inbound Configure-Request options are parsed into a fixed buffer; the length is peer-controlled", "grade": "H"}
+      ],
+      "trigger": {
+        "who": "unauthenticated peer on the same L2 segment (PPPoE discovery + session)",
+        "precondition": "kernel PPP/PPPoE support reachable from the network stack; no userland privilege needed",
+        "grade": "B",
+        "evidence": ["the whole exploit runs from a host on the segment with no console access"]
+      },
+      "privilege_boundary": {
+        "entry": "network receive path (no syscall)",
+        "requires": "L2 adjacency; PPPoE discovery to get a session id",
+        "note": "the only family in this set whose entry is not a syscall at all -- reachability cannot be read off sysent"
+      },
+      "primitives_required": [
+        "heap overflow with controlled length and content",
+        "deterministic reclaim of the freed object (socket/LLE spray)",
+        "kernel ROP or a kexec-style syscall hijack to leave ring 3"
+      ],
+      "firmware": {
+        "vulnerable": "7.00 - 11.00 (all firmwares the exploit ships offsets for)",
+        "fixed": "after 11.00 (the vendor fix is not public; the exploit has no 13.52 offsets)",
+        "grade_on_fix": "K"
+      },
+      "labels": {"9.00": "POSITIVE", "13.52": "NEGATIVE"},
+      "label_reasoning": "9.00 is in the exploit's own supported list (POSITIVE = the vulnerable code shape is present). 13.52 is outside it and the exploit ships no offsets for it (NEGATIVE = no evidence the shape survived; this is an assumption of the source, not a proof).",
+      "falsification": "show a 13.52 image in which the LCP/IPCP Configure-Request option copy still uses a peer-controlled length without a bound check",
+      "counter_evidence": []
+    },
+    {
+      "id": "lapse",
+      "name": "Lapse -- aio_multi_delete unlocked entry-array race",
+      "bug_class": "RACE_UNLOCKED_SHARED_WRITE",
+      "subsystems": ["aio", "thread", "socket"],
+      "source": {
+        "repo": "kmeps4/PSFree",
+        "commit": "368d82aa40d3017c220757ce315761adb5f06678",
+        "commit_date": "2026-05-30T22:15:46-06:00",
+        "files": {
+          "lapse.mjs": "1bedab6c77188cdef97ccc65bab38d917997dc3ee03c705e6025464d1240936a",
+          "kpatch/900.c": "9b55a579a6c75e9928961f55561cc9ad64687d58e4758c52a9e91f23e8ba2eec",
+          "module/chain.mjs": "a6cd4a6db5e47c5adf6c18e2547d46aa949ad6c682a75d31440309caea6bf781",
+          "AIO_Fix_Temp/vfs_aio2_pdtor.c": "9047656530cebabea66b84747e9d2cb3671b60a644328ffc2d865f79df9ed2fc"
+        }
+      },
+      "root_cause": {
+        "summary": "In _aio_multi_delete() the branch that handles a submission with more than one remaining id decrements obj->ao_rem_ids and frees obj->ao_entries[req_idx] without taking the write lock; the slot is only NULLed afterwards, so a second thread can read the same slot and free the entry twice.",
+        "grade": "B",
+        "why_grade": "the vulnerable C body is quoted verbatim in lapse.mjs (comment above race_one(), reproduced from the author's disassembly) and every field it names is a real structure access",
+        "evidence": [
+          "lapse.mjs:493-537 -- the quoted _aio_multi_delete/free_queue_entry body with the inline marker 'BUG: wlock not acquired on this path'",
+          "lapse.mjs:538 race_one() -- two threads pinned to one core, a pthread barrier, then aio_multi_delete on the same id range; thr_suspend_ucontext is used to stretch the window inside soclose()",
+          "lapse.mjs:1510 -- sysent[661] is taken over for the kexec primitive (offset 0x1107f00 on 9.00)",
+          "module/chain.mjs:85-89 -- syscall numbers: aio_multi_delete=662, aio_multi_wait=663, aio_multi_poll=664, aio_multi_cancel=666, aio_submit_cmd=669"
+        ]
+      },
+      "lifecycle": [
+        {"object": "aio_object (id table entry)", "claim": "id_rlock() read-locks the id table; the >1 branch then mutates ao_rem_ids and the entry array while holding only that read view", "grade": "B"},
+        {"object": "aio_entry (reqs2)", "claim": "free_queue_entry() drops the file reference (fdrop) and frees the entry with M_AIO_REQS2", "grade": "B"},
+        {"object": "struct file", "claim": "the file reference survives long enough to reach soclose(), which is where the exploit stretches the window", "grade": "A"}
+      ],
+      "trigger": {
+        "who": "any process that can call aio_multi_delete (662) on a multi-entry submission",
+        "precondition": "an SceAIO parameter with more than one submitted id; two threads on the same core for deterministic interleaving",
+        "grade": "B"
+      },
+      "privilege_boundary": {
+        "entry": "syscall 662 (aio_multi_delete), narg 3",
+        "requires": "a valid aio context and a multi-id submission -- no root, no device node",
+        "note": "the exploit uses cpuset_setaffinity + rtprio_thread + pthread barriers to make the race deterministic; those are all unprivileged"
+      },
+      "primitives_required": [
+        "controlled double free of an aio_entry (128-byte class)",
+        "reclaim with an aliased object (the exploit uses IPv6 routing-header sprays)",
+        "a kernel call primitive (sysent[661] hijack to a jmp [rsi] gadget)"
+      ],
+      "firmware": {
+        "vulnerable": "[5.00, 12.50) on PS4, [1.00, 10.20) on PS5",
+        "fixed": "PS4 12.50 / PS5 10.20",
+        "grade_on_fix": "K"
+      },
+      "labels": {"9.00": "POSITIVE", "13.52": "NEGATIVE"},
+      "label_reasoning": "9.00 is inside the source's own supported range and our image resolves the very sysent[661] slot the exploit writes (0x1107f00). 13.52 is outside the range, so the fix is expected; the label is an expectation from the source, not a measurement.",
+      "falsification": "show that on 13.52 the >1 branch of aio_multi_delete still mutates ao_rem_ids and frees the entry array slot while holding only the read lock",
+      "counter_evidence": [
+        "our 13.52 image is not pristine (kpatched), so an unchanged-looking function could be a patch artefact rather than the shipped code"
+      ]
+    },
+    {
+      "id": "relapse",
+      "name": "Relapse / exFAThax v2 -- exFAT driver UAF class",
+      "bug_class": "OWNERSHIP_UAF",
+      "subsystems": ["vfs", "fs/exfat"],
+      "source": {
+        "repo": "adri22235/ps4-13xx-research",
+        "commit": "77d3212ef2896be65670ab079387663f376fe4f0",
+        "commit_date": "2026-10-27T16:11:44+01:00",
+        "files": {
+          "README.md": "b8bcad7e4aa91c812f0b8230b775d7c8f1568bbd72c373b36e88d058521e8dcf"
+        }
+      },
+      "root_cause": {
+        "summary": "exFAT driver use-after-free of a driver object, reachable by mounting a crafted image; the family is the pOOBs4 class re-instantiated for 13.02-13.52 and fixed in 14.00.",
+        "grade": "K",
+        "why_grade": "the research repo states the class and the FW range but publishes no root-cause body; the primary report (H1) is not public. Our own R3 round did validate a POS/NEG pair by running the published code in an emulation harness, which is recorded as internal evidence, not as a primary source.",
+        "evidence": [
+          "ps4-13xx-research/README.md -- 'exFAThax v2: kernel panic confirmed on FW 13.04', 'Relapse 13.02-13.52', 'fixed 14.00'",
+          "the same README lists the 14.00 candidates the authors consider unpatched (semctl/semop/tty TIOCSCTTY), which is the family's own follow-up surface"
+        ]
+      },
+      "lifecycle": [
+        {"object": "exFAT mount/driver object", "claim": "a crafted image drives an object through mount -> directory parse -> free while a second reference survives", "grade": "H"}
+      ],
+      "trigger": {
+        "who": "any process that can mount or open a crafted exFAT image (USB media path is the classic one)",
+        "precondition": "a filesystem view the kernel parses on attach; no privilege beyond the media path",
+        "grade": "H"
+      },
+      "privilege_boundary": {
+        "entry": "vfs/mount + exFAT driver parse path",
+        "requires": "media attach (USB) or an image mount the sandbox permits",
+        "note": "the reachability is physical-media shaped, which is why the family is not a remote primitive"
+      },
+      "primitives_required": [
+        "UAF with a controllable free point",
+        "reclaim of the freed object with attacker-influenced content",
+        "a write-what-where or call primitive out of the reclaimed object"
+      ],
+      "firmware": {
+        "vulnerable": "13.02 - 13.52",
+        "fixed": "14.00",
+        "grade_on_fix": "K"
+      },
+      "labels": {"13.52": "POSITIVE", "9.00": "NOT_APPLICABLE"},
+      "label_reasoning": "13.52 is inside the family's range (POSITIVE). 9.00 carries the *earlier* instance of the same class (pOOBs4, fixed 9.03), so a 9.00 image cannot serve as a negative for this instance; it is marked NOT_APPLICABLE instead of being forced into a label.",
+      "falsification": "show that on 13.52 no exFAT parse path frees a driver object while another reference to it stays live",
+      "counter_evidence": [
+        "no public root-cause body exists for this family; any code-level claim needs our own emulation evidence, which is not part of Sprint 1"
+      ]
+    },
+    {
+      "id": "afterglow",
+      "name": "Afterglow -- kqueue knote/clone UAF on the fd teardown path",
+      "bug_class": "AIO_KQUEUE_SLOT_UAF",
+      "subsystems": ["kqueue", "vfs", "devfs"],
+      "source": {
+        "repo": "well0nez/afterglow-web",
+        "commit": "acf25a831725f0d44fcb64725d4ce35acbba8f9d",
+        "commit_date": "2026-11-03T11:43:16+01:00",
+        "files": {
+          "afterglow.js": "37d46dfaa44c97af16cfabd95c320eb47b1095c31c9e2e9d2f288d5f18681e79",
+          "jb.js": "c0e5d287cfb3e2a3720bea96c960a7244e910be08c6e3181c8e1fe6804941568",
+          "ps4_offsets.js": "2bc41955c506c71d6f297a44d009177db1ebc962f05f6543932804f4fa682201",
+          "patchset-1352.bin": "adfb9771904f71cd1f5a82cbded8ac46c7ffeb3df974579535cf711904ac347e"
+        }
+      },
+      "root_cause": {
+        "summary": "A kqueue note array outlives the object it points at: notes hang on descriptors that were cloned and freed earlier, so knote_fdclose()/kqueue_close() walk dead memory; the exploit stretches the window with a device open/close and hijacks a close entry.",
+        "grade": "K",
+        "why_grade": "the kernel stage's own writeup ('the same as in the Lua version') is not in this repo; the reconstruction below is read off the code, and the family is therefore deliberately used as a BLIND test -- its labels are held out from the scanner.",
+        "evidence": [
+          "afterglow.js around the 'one attempt at the bug' comment -- a unit is spent only when its clone is freed; the free is the window",
+          "afterglow.js 'exit1() also runs knote_fdclose() for every descriptor, and that does not go through fo_close' -- the teardown path the exploit relies on",
+          "afterglow.js 'kqueue_close takes the note array length from ...' -- length read from the structure itself",
+          "TECHNICAL.md -- 25 kernel text sites covered by the PATCHES table plus 10 written by the bootstrap stub"
+        ]
+      },
+      "lifecycle": [
+        {"object": "knote", "claim": "notes survive the free of the descriptor copies they were registered on", "grade": "K"},
+        {"object": "kqueue fd clone (fd copy)", "claim": "closing a clone frees the note-owning object while a foreign queue still references it", "grade": "K"},
+        {"object": "apm(4) cdev", "claim": "open/close of the device node is the spray and the close path is the hijack target", "grade": "K"}
+      ],
+      "trigger": {
+        "who": "a process that can call kqueue/kevent/open/close/ioctl (all unprivileged)",
+        "precondition": "one free unit per boot; a warm second attempt is not equivalent (the handles are not defused on failure)",
+        "grade": "K"
+      },
+      "privilege_boundary": {
+        "entry": "syscalls 362 (kqueue) / 363 (kevent) plus the device-node close path",
+        "requires": "nothing beyond the browser host's syscall primitive",
+        "note": "the exploit's own host boundary is only {syscall, buffer address, typed read/write, keepAlive}"
+      },
+      "primitives_required": [
+        "fd clone + knote registration",
+        "deterministic reclaim of a freed note-array owner",
+        "controlled fo_close entry (the exploit points each copy's close entry at a stub)"
+      ],
+      "firmware": {
+        "vulnerable": "13.52, 14.00",
+        "fixed": "unknown",
+        "grade_on_fix": "BLOCKED"
+      },
+      "labels": {"13.52": "HELD_OUT", "9.00": "HELD_OUT"},
+      "label_reasoning": "Blind test: the scanner must reach this subsystem without being told. Labels are held out of every rule and every assertion that the scanner uses.",
+      "falsification": "show that on 13.52 every knote registered on a cloned fd is destroyed before the clone's owner is freed, and that kqueue_close() never trusts a length read from the structure",
+      "counter_evidence": [
+        "the exploit ships one free unit per boot and fails silently if another allocation wins the hole -- a shape that is easy to over-claim from static code"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,491 @@
+{
+  "project_name": "PS4RF",
+  "project_version": "0.8.1-handoff-candidate",
+  "status": "FREEZE_PATCH_APPLIED_REAL_GATES_PENDING",
+  "created_at": "2026-10-05T12:00:14.646312+00:00",
+  "file_count": 95,
+  "expected_freeze_tag": "PS4RF-CORE-1.0-MOCK-READY",
+  "freeze_gate_command": "python tools/freeze/run_gate_suite.py",
+  "local_assembly": {
+    "pytest": "12 passed",
+    "preflight": "blocked only by missing rfc8785 dependency",
+    "freeze_gates_run": false
+  },
+  "files": [
+    {
+      "path": ".gitignore",
+      "sha256": "6149a6324bad7e5376258b92787e722a6eafefe86685b1a1deb8aa477e45ddbf",
+      "size": 199
+    },
+    {
+      "path": "ARCHITECTURE.md",
+      "sha256": "a91782121d6b0ef2dbd7779d664305e15eb75639369f084d6ef51ea72201c2d4",
+      "size": 2045
+    },
+    {
+      "path": "CHANGELOG.md",
+      "sha256": "60a3442eea8cfcc362bfd2ae9e3dd5f062f9ea3a1ff0e5f17d6d7818a67e2f64",
+      "size": 833
+    },
+    {
+      "path": "CURRENT-STATE.json",
+      "sha256": "ded1e07a17cc1aad0ccf71c93b84461cea7cdc2fc27bb9eb223807f2267d8e05",
+      "size": 343
+    },
+    {
+      "path": "FREEZE-STATUS.md",
+      "sha256": "2db26e310da4b0f6d97ddbd97c1849b4ff8f3bc7b122ec43f54091b59f7d4650",
+      "size": 392
+    },
+    {
+      "path": "HERMES-HANDOFF.md",
+      "sha256": "bc8c2a58e1c4c4c4148ef644f5124a739802795ef4383605c563473ee0ba6463",
+      "size": 2302
+    },
+    {
+      "path": "HERMES-PROMPT.md",
+      "sha256": "56c8e4b1ec7af9839f5bddf5415183c8e6c185e8a24ee969a0cbbba99ce5bfa1",
+      "size": 852
+    },
+    {
+      "path": "HERMES-TODO.md",
+      "sha256": "34cde8ae724eb9ace50329b698757357f8f129e0505e9a3625fe584f64b8db05",
+      "size": 1147
+    },
+    {
+      "path": "LOCAL-ASSEMBLY-REPORT.md",
+      "sha256": "f029f900714f8fc54b02b03ba9413aaa274ac76cb24532638e38b7789c24e6f0",
+      "size": 818
+    },
+    {
+      "path": "PS4-RESEARCH-CONTEXT.md",
+      "sha256": "4f88fbe7ae09fc7f9427304ee39bd69b144deca285049c6798df445a57dfb6dc",
+      "size": 910
+    },
+    {
+      "path": "README.md",
+      "sha256": "4eaa07acb4b688f59b7ca6585e040229ef9fd2eb61d392e8128e4a274aedf8ec",
+      "size": 1930
+    },
+    {
+      "path": "RESEARCH-MODEL.md",
+      "sha256": "ecdd62e197ead2d3c0f39080571ca07cbb8d7e1b71b149fc08a0bfb82286611f",
+      "size": 1182
+    },
+    {
+      "path": "SAFETY-AND-EXECUTION-RULES.md",
+      "sha256": "4599cb0fa69feaa2c8cf01aedd440844dd9af6b6ab617c625d2e94eb06158f3a",
+      "size": 778
+    },
+    {
+      "path": "TOOLS.md",
+      "sha256": "c85e6485dd9f653edf6e6557990fae6723ea39eb680965011cb9c723d0ea1628",
+      "size": 830
+    },
+    {
+      "path": "core/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "core/canonical.py",
+      "sha256": "e35983f1c77cbea889c9b298d17ec99d1728095f8d1a800e2fe1ff80086bcb2d",
+      "size": 1854
+    },
+    {
+      "path": "core/capabilities/authority.json",
+      "sha256": "3ba2604f079f1240fe1bdd40f4bd2bece4eea3044d7b1036b8ab0a8a99350502",
+      "size": 153
+    },
+    {
+      "path": "core/capabilities/catalog.json",
+      "sha256": "f36e55d55ee5bce48d6f64084ed8ee8c0970325296ef75a703e1a97b4e8d4970",
+      "size": 693
+    },
+    {
+      "path": "core/evidence/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "core/evidence/store.py",
+      "sha256": "a0d13c5032782753f5e66631dc45e97e01fcd7e54c8b235daf39d9898e16c0bb",
+      "size": 809
+    },
+    {
+      "path": "core/experiment/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "core/experiment/budget.py",
+      "sha256": "c48e6912f2b745324316d770646f81f898a855f5be4d597d3e5854dae319a0af",
+      "size": 3175
+    },
+    {
+      "path": "core/experiment/compiler.py",
+      "sha256": "07e61ee02e0a3a554624fa3a4a5c0582d098b18a410f6791a5055342f08527c0",
+      "size": 324
+    },
+    {
+      "path": "core/experiment/engine.py",
+      "sha256": "fa43a56fb61976ba98228b5e34c7c858ca18208d500cd9b75412a39f61d711d2",
+      "size": 80
+    },
+    {
+      "path": "core/experiment/rpc_budget.py",
+      "sha256": "a80604a6343ffd9b046861a7412fe59f44b65b0cb0724ced50e6c1f0f1550d53",
+      "size": 561
+    },
+    {
+      "path": "core/models/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "core/models/candidate.py",
+      "sha256": "93c4b3403989cdd73d94b26fff5a9946dfeb3b55aa7611602512b70656d7a72d",
+      "size": 930
+    },
+    {
+      "path": "core/models/capability.py",
+      "sha256": "2d999bc7d515fe0d2969b7ca7d20a076849efeea34a14d21fe9c047340b1708c",
+      "size": 9228
+    },
+    {
+      "path": "core/models/common.py",
+      "sha256": "7163f308407edafe33fafb0f4d9de4248e9bfde231b147714661c65ef2133ed9",
+      "size": 1928
+    },
+    {
+      "path": "core/models/exploit.py",
+      "sha256": "b9d38a34f87abdcc8df814fbfdf6ff691f0820a2841726a78b5f56a95bb44a00",
+      "size": 720
+    },
+    {
+      "path": "core/models/surface.py",
+      "sha256": "61088a0be43f5a2e0e662ba480ed978bb5c5c763001725adc2a74d27856155fb",
+      "size": 622
+    },
+    {
+      "path": "core/models/verification.py",
+      "sha256": "f825db98aab473840f56c775f7d71231157c59558f10221526c93a7fd173bf1d",
+      "size": 3257
+    },
+    {
+      "path": "core/resources/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "core/resources/manager.py",
+      "sha256": "7d709303f6f2ebcc9e77fe92214241e96bf9bbff05efca9e48a8ff4183778ec1",
+      "size": 2866
+    },
+    {
+      "path": "core/rpc/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "core/rpc/handshake.py",
+      "sha256": "497a77a9021773a51faee5d981920d07e1d4ab1a3285122190952e4c0ba4d203",
+      "size": 4257
+    },
+    {
+      "path": "core/rpc/hang.py",
+      "sha256": "7e108687aa9fd9f0d2f84c79ca5aa23291d49bafb0cacdc64f4e8df3648423eb",
+      "size": 44
+    },
+    {
+      "path": "core/rpc/pool.py",
+      "sha256": "7c148d3c61e5db91c4b305f8c16c9a2208c94b90e0ed723ddf006c96499ae8cb",
+      "size": 3901
+    },
+    {
+      "path": "core/rpc/registry.py",
+      "sha256": "788ef091bcf9e3f2664a7956941ebaaa575560345cf002592e8d7faacad5cc7c",
+      "size": 1534
+    },
+    {
+      "path": "core/rpc/requests.py",
+      "sha256": "90889b97fa2df23d54dbdd23df7e54e1acda9daac888a21dd779757b9ca0d3b8",
+      "size": 1009
+    },
+    {
+      "path": "core/session/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "core/session/states.py",
+      "sha256": "48bb7197eba6dab4bfe723b63e0fcf83ded9b70b72fe740086eb51c19658371f",
+      "size": 198
+    },
+    {
+      "path": "core/sync/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "core/sync/gate.py",
+      "sha256": "b7d7cb9076017f8ea7f7ac9fc09b26d07c9fd9379b8818435dc50e0790c823ed",
+      "size": 1679
+    },
+    {
+      "path": "ctl/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "ctl/ps4rfctl.py",
+      "sha256": "dfd59c51c355ab7b428d1cb36dc7af14c3379e2c7b4e0d8728b8cb9973d31e4a",
+      "size": 317
+    },
+    {
+      "path": "docs/SOURCE-MANIFEST.md",
+      "sha256": "a6f4f557b03e102a46a99f296ffd08b63cb4833948a06ebd7bf56bdbc6f6d506",
+      "size": 485
+    },
+    {
+      "path": "docs/spec-history/Pasted_text(10).txt",
+      "sha256": "a5803b54661efb02cc1eb967f399e99c741595a12ab7319a21f089f82944e912",
+      "size": 18725
+    },
+    {
+      "path": "docs/spec-history/Pasted_text(2).txt",
+      "sha256": "7e849da44e3e3de30d34b7c2463faec7addcd14364906b4e871bae9f1dce75fc",
+      "size": 35833
+    },
+    {
+      "path": "docs/spec-history/Pasted_text(20261005-115353).txt",
+      "sha256": "903547569942c6172a297b2d4ceaa50488ac24543513b9185d68805468098532",
+      "size": 27287
+    },
+    {
+      "path": "docs/spec-history/Pasted_text(3).txt",
+      "sha256": "cf6502f333970752cb8aebbc910892f26a8b470026256f7f09eb60aebdd1d696",
+      "size": 49396
+    },
+    {
+      "path": "docs/spec-history/Pasted_text(4).txt",
+      "sha256": "88b423ea051f9d553d8fd48c382cdc33e904d6a66b8496c700b37b325d6b86ed",
+      "size": 53490
+    },
+    {
+      "path": "docs/spec-history/Pasted_text(5).txt",
+      "sha256": "b062b113721687fd43515565a6df1871cbb19fe2da1c44daa62fc540c798410a",
+      "size": 46166
+    },
+    {
+      "path": "docs/spec-history/Pasted_text(6).txt",
+      "sha256": "c968e6d9cd26a424315bace658ef97699cec8bfffb3b2aa22f5ab5c1253fa10b",
+      "size": 43529
+    },
+    {
+      "path": "docs/spec-history/Pasted_text(7).txt",
+      "sha256": "3f955c2efd85010a82a778b9b0e134c5cf3bcbe163d34047f4af653db3b8637e",
+      "size": 30081
+    },
+    {
+      "path": "docs/spec-history/Pasted_text(8).txt",
+      "sha256": "4d462037c832fbdb51db9c65e3e4def738899be69b65ed1b6665a63432a296c2",
+      "size": 34810
+    },
+    {
+      "path": "docs/spec-history/Pasted_text(9).txt",
+      "sha256": "58c3251f91326f98f42c74f683b6d2e67a5fb8fcc559df99d1f7b2b798bc26cc",
+      "size": 11291
+    },
+    {
+      "path": "experiments/mock-roundtrip.yaml",
+      "sha256": "d834409c70364f4fce8372729bb2e23d2d5650864d0226ff680ef51163c05d57",
+      "size": 328
+    },
+    {
+      "path": "mock/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "mock/agent.py",
+      "sha256": "d2f34efc3aedac8437519d49a50436416507cfbba94295604aac49b1117fa360",
+      "size": 1934
+    },
+    {
+      "path": "profiles/fw1352/README.md",
+      "sha256": "ff55d1530a926551bcf281309ccd080476f4b0d6e786a3cc4ada5a64b3502698",
+      "size": 108
+    },
+    {
+      "path": "profiles/fw900/README.md",
+      "sha256": "acd3707d921bd568a0a2446fe14eb5498b16631f1c20d1450db214692a739953",
+      "size": 62
+    },
+    {
+      "path": "pyproject.toml",
+      "sha256": "5307ba2898cbca7c9bec1a9f82b841644d0ef9c8d6457e87287d05142148b4da",
+      "size": 598
+    },
+    {
+      "path": "references/ps4-fw900-cross-processor-handoff-20260907.zip",
+      "sha256": "5b07d49a7025a51ba83d61900adaf4976ca4f8c431678692c087bec031098b9d",
+      "size": 7679747
+    },
+    {
+      "path": "references/ps4_fw1352_ccp_harness.zip",
+      "sha256": "5bbabb5d60d546e1357fbfe8ae2e704fe18999733ff79d4b2c4156615c6b3d0b",
+      "size": 14788
+    },
+    {
+      "path": "references/samurf-0.1.0.zip",
+      "sha256": "7a821034417f9d0b057db3836a051b35f49e87f88a606389730d0231831167f8",
+      "size": 47196
+    },
+    {
+      "path": "schemas/candidate.schema.json",
+      "sha256": "cbe75f5a5c6066f8754fdb20feb33e165dcb2a89867b0498103672edf9e84320",
+      "size": 196
+    },
+    {
+      "path": "schemas/capability.schema.json",
+      "sha256": "5962765a8495accd31a0917d3ad0ae352053edf8da91ad5f50d537aed80c2a9f",
+      "size": 198
+    },
+    {
+      "path": "schemas/common.schema.json",
+      "sha256": "fd21b35cdcb967c95bc3f6d0b0eb0e81efe2d262ba127898fce35f5ab010090d",
+      "size": 763
+    },
+    {
+      "path": "schemas/evidence.schema.json",
+      "sha256": "bc869d08ace79e7b2f9f4a6c01d16356750ef4ab3e36feee2c5da897642208db",
+      "size": 194
+    },
+    {
+      "path": "schemas/experiment.schema.json",
+      "sha256": "1ad1fb5ef9eb7a09ff7f488a18ff91230e177c018ff7b1229eafe99d6031fce4",
+      "size": 198
+    },
+    {
+      "path": "schemas/exploit.schema.json",
+      "sha256": "4a6973a571e9db6e78de618eb243eb9c800edad52d0c7e12a0b81278fb5e7355",
+      "size": 192
+    },
+    {
+      "path": "schemas/profile.schema.json",
+      "sha256": "e00ee7da37894ca98e78914be942040b1b89d68ebc125727a0965b7404afb9c7",
+      "size": 192
+    },
+    {
+      "path": "schemas/rpc.schema.json",
+      "sha256": "315104e8024c52a69b805bb59e255546dfb5d212d726494aaab2f92c738984c5",
+      "size": 184
+    },
+    {
+      "path": "schemas/surface.schema.json",
+      "sha256": "4a665878bdca5836f34523511b03aedc7316d51cd981de58af285edbe4cd1485",
+      "size": 192
+    },
+    {
+      "path": "tests/test_concurrency.py",
+      "sha256": "f783b7b349ef50bac7119a8c92e836f3a8746cc913c699bb08b23fd9188198cc",
+      "size": 52
+    },
+    {
+      "path": "tests/test_framing.py",
+      "sha256": "b44cdf262eb9bb998371016618bfb5e4f6af1ae8cbfd558f081324720cf3fcf0",
+      "size": 437
+    },
+    {
+      "path": "tests/test_gate.py",
+      "sha256": "b656cd10a714cfce71d349331dffc67e4f0fdb58cdb663d27f4de30bf831ba50",
+      "size": 400
+    },
+    {
+      "path": "tests/test_handshake_roles.py",
+      "sha256": "3f768eae7d54ed42cc001c220dcdb08d27b720147402689eb20335f9b8e7201d",
+      "size": 148
+    },
+    {
+      "path": "tests/test_mock_recovery.py",
+      "sha256": "6e72882798a097f2ce7a1d0f5089ee0244f09711f8bb2f2caed9f2eb2bb5f7a4",
+      "size": 49
+    },
+    {
+      "path": "tests/test_pool.py",
+      "sha256": "68ba2a685cbe3b258747c2adcb30418a0ecbcfec4ca0e0c6d2d2ef707a81cbfa",
+      "size": 549
+    },
+    {
+      "path": "tests/test_roundtrip.py",
+      "sha256": "9c44fa989fe512e11e9fd9126675fae79ce34bf67e5b5a3262044f7fca229984",
+      "size": 223
+    },
+    {
+      "path": "tests/test_rpc_budget.py",
+      "sha256": "bc41c3a58b6762a5466b9f7681b52ae5a9a0c4bb387b5d8d54837c95b33c7561",
+      "size": 219
+    },
+    {
+      "path": "tests/test_sync.py",
+      "sha256": "2af7fcd4157edc7e59d8dedc699afc5c21ae17035decd759f90f25e13ad1e8e2",
+      "size": 181
+    },
+    {
+      "path": "tests/test_verification.py",
+      "sha256": "2c3a514eec3f1e1adc057c5866198df03fd05e4beede07acc64e2ac92a710182",
+      "size": 53
+    },
+    {
+      "path": "tools/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "tools/export/build_export.py",
+      "sha256": "b1a4aa94136e44872388f6896a6e6f2ec1d0a64dc89a67cfe9fd97a50d459bdf",
+      "size": 1958
+    },
+    {
+      "path": "tools/freeze/run_gate_suite.py",
+      "sha256": "c06d46c0492833cf775d90f4ead0c50100a39a5cbff99404d5b5d65880b22946",
+      "size": 1774
+    },
+    {
+      "path": "tools/inventory/extract_orbisprobe_inventory.py",
+      "sha256": "aef61d963d2a291f84bbf9f41d716a9ceb93e59e85c13d2aa79229944244c94e",
+      "size": 2100
+    },
+    {
+      "path": "tools/metasploit/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    {
+      "path": "tools/metasploit/adapter.py",
+      "sha256": "577925495bb64700af01a8487ae9321fe010f585a4077631527d1517be7b8dc8",
+      "size": 69
+    },
+    {
+      "path": "tools/metasploit/mock/msfrpcd_mock.py",
+      "sha256": "a33aa228b88fd45d2d57437017b062cac1448370114b2756c7d0ecb50f33eb8e",
+      "size": 67
+    },
+    {
+      "path": "tools/metasploit/provider.py",
+      "sha256": "921aa73c24e1eafc4dab66b13f0c441e8832820e7bf3b2dde382eebd2bb26bcc",
+      "size": 45
+    },
+    {
+      "path": "tools/metasploit/redact.py",
+      "sha256": "18f0911ccc4299886a4863e05a1e22466d383b5c605677f3011bc0d514d74315",
+      "size": 568
+    },
+    {
+      "path": "tools/preflight.py",
+      "sha256": "288e258516f35a0352a5bb77123ae7b5a4380a21e93bf79f9a1461b401bed81b",
+      "size": 1922
+    }
+  ]
+}

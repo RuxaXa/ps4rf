@@ -1,0 +1,119 @@
+{
+  "name": "own1-authority-recipe",
+  "profile": "fw1352",
+  "version": 2,
+  "provenance": {
+    "source": "P13-v4.2 recipe entries for OWN-1 plus published authority list",
+    "source_file": "p13v42-kpayload.c",
+    "source_sha256": "78a793676573b92bb8d2196ce8aa8b3a2b12fd3a9f10d7b72032ffea16ab7c40",
+    "note": "shared cells corrected with q6-recipe-v3: the pup_update state block is RVA 0x2684810, window A is state+0x30 (RVA 0x2684840), window B is state+0x38 (RVA 0x2684848). W18: the BMP_SLICE window starts at bitmap word 2520 with length 4072 (words 2520..3028, the bitmap's dynamically allocatable tail) - below word 2520 the bitmap is statically reserved by the boot union [0, 0x9D800000), so a word-0 window can only ever read zero.",
+    "supersedes": "own1-recipe-v1 (window roots 0x2686840/0x2686848, a dead page)"
+  },
+  "limits": {
+    "max_entries": 16,
+    "max_entry_len": 4096,
+    "max_disp": 4096
+  },
+  "entries": [
+    {
+      "i": 0,
+      "name": "BMP_LIMIT",
+      "type": "RVA_READ",
+      "rva": "0x238A848",
+      "length": 8,
+      "role": "authority"
+    },
+    {
+      "i": 1,
+      "name": "BMP_ROOT",
+      "type": "RVA_READ",
+      "rva": "0x238A870",
+      "length": 8,
+      "role": "authority (root value)"
+    },
+    {
+      "i": 2,
+      "name": "BMP_SLICE",
+      "type": "FOLLOW_ONCE",
+      "root_index": 1,
+      "index_source": "idx_bitmap_word",
+      "max_index": 3028,
+      "length": 4072,
+      "role": "pointed-to contents (bitmap words 2520..3028 = the dynamically allocatable tail)"
+    },
+    {
+      "i": 3,
+      "name": "RECORDS",
+      "type": "RVA_READ",
+      "rva": "0x238A880",
+      "length": 256,
+      "role": "ownership records"
+    },
+    {
+      "i": 4,
+      "name": "VMID",
+      "type": "RVA_READ",
+      "rva": "0x23D4538",
+      "length": 8,
+      "role": "authority"
+    },
+    {
+      "i": 5,
+      "name": "VMID_COUNTERS",
+      "type": "RVA_READ",
+      "rva": "0x23D3D30",
+      "length": 64,
+      "role": "counters"
+    },
+    {
+      "i": 6,
+      "name": "POOL_COUNTER",
+      "type": "RVA_READ",
+      "rva": "0x23D459C",
+      "length": 8,
+      "role": "counters"
+    },
+    {
+      "i": 7,
+      "name": "PTSLOT_ROOT",
+      "type": "RVA_READ",
+      "rva": "0x23D4558",
+      "length": 8,
+      "role": "authority (root value)"
+    },
+    {
+      "i": 8,
+      "name": "PTSLOT_SLICE",
+      "type": "FOLLOW_ONCE",
+      "root_index": 7,
+      "index_source": "idx_ptslot",
+      "max_index": 378,
+      "length": 512,
+      "role": "pointed-to contents (level1 blocks 315..378 = the dynamically allocatable 8 MiB blocks)"
+    },
+    {
+      "i": 9,
+      "name": "CDEV_SLOT",
+      "type": "RVA_READ",
+      "rva": "0x2684810",
+      "length": 8,
+      "role": "attach/window authority"
+    },
+    {
+      "i": 10,
+      "name": "SOFTC_A_ROOT",
+      "type": "RVA_READ",
+      "rva": "0x2684840",
+      "length": 8,
+      "role": "attach/window authority"
+    },
+    {
+      "i": 11,
+      "name": "SOFTC_B_ROOT",
+      "type": "RVA_READ",
+      "rva": "0x2684848",
+      "length": 8,
+      "role": "attach/window authority"
+    }
+  ]
+}

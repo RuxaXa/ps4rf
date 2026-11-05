@@ -1,0 +1,10 @@
+{
+  "project": "PS4RF",
+  "version": "0.8.1-handoff-candidate",
+  "status": "FREEZE_PATCH_APPLIED_REAL_GATES_PENDING",
+  "expected_tag": "PS4RF-CORE-1.0-MOCK-READY",
+  "primary_target": "PS4 Slim FW 13.52",
+  "reference_target": "FW 9.00",
+  "next_owner": "Hermes",
+  "next_phase": "P0 freeze gates then OrbisProbe inventory/mapping/adapter"
+}

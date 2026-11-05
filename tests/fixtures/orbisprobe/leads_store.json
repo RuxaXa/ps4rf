@@ -1,0 +1,331 @@
+{
+  "count": 8,
+  "leads": [
+    {
+      "budget": {
+        "closure": 1,
+        "discovery": 1,
+        "proof": 1
+      },
+      "candidate_invariant": "INV_GPUVM_001",
+      "closure_cost": "COST-1",
+      "control_score": 5,
+      "edge_distance": "EDGE-0",
+      "evidence": [
+        "AGGREGATE.json sha256:fixture"
+      ],
+      "evidence_actions": [],
+      "evidence_value": 5,
+      "gap_score": 5,
+      "hardware_class": "gpuvm_visible",
+      "known_edges": [
+        "consumer-known"
+      ],
+      "lead_id": "RC-001",
+      "lead_score": 64,
+      "legacy_status": null,
+      "mode": "PROOF_MODE",
+      "observable": "role register write observed",
+      "origin": "reference",
+      "persistence_risk": "none",
+      "risk_class": "reversible_kernel_ram",
+      "root": "0xffffffffd0568e10",
+      "runtime_requirements": [
+        "fw13.52"
+      ],
+      "sink": "gpuvm-register",
+      "sink_score": 5,
+      "source": "AGGREGATE.json",
+      "status": "VULNERABILITY_CANDIDATE",
+      "unknown_edges": [],
+      "user_influence": "USER_CONTROLLED"
+    },
+    {
+      "budget": {
+        "closure": 1,
+        "discovery": 1,
+        "proof": 1
+      },
+      "candidate_invariant": "INV_GPUVM_001",
+      "closure_cost": "COST-2",
+      "control_score": 4,
+      "edge_distance": "EDGE-2",
+      "evidence": [
+        "AGGREGATE.json sha256:fixture"
+      ],
+      "evidence_actions": [],
+      "evidence_value": 3,
+      "gap_score": 4,
+      "hardware_class": "gpuvm_visible",
+      "known_edges": [
+        "consumer-known"
+      ],
+      "lead_id": "V5-P1-0123456789ab",
+      "lead_score": 41,
+      "legacy_status": null,
+      "mode": "DISCOVERY_MODE",
+      "observable": "role register write observed",
+      "origin": "restart-v5-migration",
+      "persistence_risk": "none",
+      "risk_class": "read_only",
+      "root": "0xffffffffd05ac8f0",
+      "runtime_requirements": [
+        "fw13.52"
+      ],
+      "sink": "gpuvm-register",
+      "sink_score": 4,
+      "source": "AGGREGATE.json",
+      "status": "EDGE_ANALYZED",
+      "unknown_edges": [
+        "user-binding",
+        "writer-source"
+      ],
+      "user_influence": "USER_CONTROLLED"
+    },
+    {
+      "budget": {
+        "closure": 1,
+        "discovery": 1,
+        "proof": 1
+      },
+      "candidate_invariant": "INV_GPUVM_001",
+      "closure_cost": "COST-2",
+      "control_score": 4,
+      "edge_distance": "EDGE-1",
+      "evidence": [
+        "AGGREGATE.json sha256:fixture"
+      ],
+      "evidence_actions": [],
+      "evidence_value": 3,
+      "gap_score": 4,
+      "hardware_class": "gpuvm_visible",
+      "known_edges": [
+        "consumer-known"
+      ],
+      "lead_id": "V5-P1-cccccccccccc",
+      "lead_score": 49,
+      "legacy_status": null,
+      "mode": "DISCOVERY_MODE",
+      "observable": "role register write observed",
+      "origin": "restart-v5-migration",
+      "persistence_risk": "none",
+      "risk_class": "read_only",
+      "root": "0xffffffffd0698e90",
+      "runtime_requirements": [
+        "fw13.52"
+      ],
+      "sink": "gpuvm-register",
+      "sink_score": 5,
+      "source": "AGGREGATE.json",
+      "status": "SCORED",
+      "unknown_edges": [
+        "only-edge"
+      ],
+      "user_influence": "USER_CONTROLLED"
+    },
+    {
+      "budget": {
+        "closure": 1,
+        "discovery": 1,
+        "proof": 1
+      },
+      "candidate_invariant": "INV_GPUVM_001",
+      "closure_cost": "COST-1",
+      "control_score": 5,
+      "edge_distance": "EDGE-0",
+      "evidence": [
+        "AGGREGATE.json sha256:fixture"
+      ],
+      "evidence_actions": [],
+      "evidence_value": 3,
+      "gap_score": 4,
+      "hardware_class": "gpuvm_visible",
+      "known_edges": [
+        "consumer-known"
+      ],
+      "lead_id": "V5-P1-dddddddddddd",
+      "lead_score": 52,
+      "legacy_status": null,
+      "mode": "PROOF_MODE",
+      "observable": "role register write observed",
+      "origin": "restart-v5-migration",
+      "persistence_risk": "none",
+      "risk_class": "reversible_kernel_ram",
+      "root": "0xffffffffd00d7f10",
+      "runtime_requirements": [
+        "fw13.52"
+      ],
+      "sink": "gpuvm-register",
+      "sink_score": 4,
+      "source": "AGGREGATE.json",
+      "status": "PROOF_MODE",
+      "unknown_edges": [],
+      "user_influence": "USER_CONTROLLED"
+    },
+    {
+      "budget": {
+        "closure": 1,
+        "discovery": 1,
+        "proof": 1
+      },
+      "candidate_invariant": "INV_GPUVM_001",
+      "closure_cost": "COST-1",
+      "control_score": 3,
+      "edge_distance": "EDGE-1",
+      "evidence": [
+        "AGGREGATE.json sha256:fixture"
+      ],
+      "evidence_actions": [],
+      "evidence_value": 2,
+      "gap_score": 3,
+      "hardware_class": "gpuvm_visible",
+      "known_edges": [
+        "consumer-known"
+      ],
+      "lead_id": "V5-P1-eeeeeeeeeeee",
+      "lead_score": 38,
+      "legacy_status": null,
+      "mode": "DISCOVERY_MODE",
+      "observable": "role register write observed",
+      "origin": "restart-v5-migration",
+      "persistence_risk": "none",
+      "risk_class": "offline",
+      "root": "0xffffffffd0568e10",
+      "runtime_requirements": [
+        "fw13.52"
+      ],
+      "sink": "gpuvm-register",
+      "sink_score": 4,
+      "source": "AGGREGATE.json",
+      "status": "EDGE_ANALYZED",
+      "unknown_edges": [
+        "edge-x"
+      ],
+      "user_influence": "USER_CONTROLLED"
+    },
+    {
+      "budget": {
+        "closure": 1,
+        "discovery": 1,
+        "proof": 1
+      },
+      "candidate_invariant": "INV_GPUVM_001",
+      "closure_cost": "COST-1",
+      "control_score": 3,
+      "edge_distance": "EDGE-1",
+      "evidence": [
+        "AGGREGATE.json sha256:fixture"
+      ],
+      "evidence_actions": [],
+      "evidence_value": 2,
+      "gap_score": 3,
+      "hardware_class": "gpuvm_visible",
+      "known_edges": [
+        "consumer-known"
+      ],
+      "lead_id": "V5-P1-ffffffffffff",
+      "lead_score": 38,
+      "legacy_status": null,
+      "mode": "DISCOVERY_MODE",
+      "observable": "role register write observed",
+      "origin": "restart-v5-migration",
+      "persistence_risk": "none",
+      "risk_class": "offline",
+      "root": "0xffffffffd0568e10",
+      "runtime_requirements": [
+        "fw13.52"
+      ],
+      "sink": "gpuvm-register",
+      "sink_score": 4,
+      "source": "AGGREGATE.json",
+      "status": "EDGE_ANALYZED",
+      "unknown_edges": [
+        "edge-y"
+      ],
+      "user_influence": "USER_CONTROLLED"
+    },
+    {
+      "budget": {
+        "closure": 1,
+        "discovery": 1,
+        "proof": 1
+      },
+      "candidate_invariant": "INV_GPUVM_001",
+      "closure_cost": "COST-3",
+      "control_score": 2,
+      "edge_distance": "EDGE-3PLUS",
+      "evidence": [
+        "AGGREGATE.json sha256:fixture"
+      ],
+      "evidence_actions": [],
+      "evidence_value": 2,
+      "gap_score": 3,
+      "hardware_class": "gpuvm_visible",
+      "known_edges": [
+        "consumer-known"
+      ],
+      "lead_id": "V5-P2-abcdef123456",
+      "lead_score": 16,
+      "legacy_status": null,
+      "mode": "DISCOVERY_MODE",
+      "observable": "role register write observed",
+      "origin": "restart-v5-migration",
+      "persistence_risk": "none",
+      "risk_class": "offline",
+      "root": "0xffffffffd016efa0",
+      "runtime_requirements": [
+        "fw13.52"
+      ],
+      "sink": "gpuvm-register",
+      "sink_score": 3,
+      "source": "AGGREGATE.json",
+      "status": "EDGE_ANALYZED",
+      "unknown_edges": [
+        "a",
+        "b",
+        "c"
+      ],
+      "user_influence": "USER_CONTROLLED"
+    },
+    {
+      "budget": {
+        "closure": 1,
+        "discovery": 1,
+        "proof": 1
+      },
+      "candidate_invariant": "INV_GPUVM_001",
+      "closure_cost": "COST-BLOCKED",
+      "control_score": 1,
+      "edge_distance": "ARTIFACT_BLOCKED",
+      "evidence": [
+        "AGGREGATE.json sha256:fixture"
+      ],
+      "evidence_actions": [],
+      "evidence_value": 1,
+      "gap_score": 1,
+      "hardware_class": "nonvolatile_storage",
+      "known_edges": [
+        "consumer-known"
+      ],
+      "lead_id": "V5-P2-fedcba654321",
+      "lead_score": -27,
+      "legacy_status": null,
+      "mode": "DISCOVERY_MODE",
+      "observable": "role register write observed",
+      "origin": "restart-v5-migration",
+      "persistence_risk": "none",
+      "risk_class": "offline",
+      "root": "0xffffffffd048f350",
+      "runtime_requirements": [
+        "fw13.52"
+      ],
+      "sink": "gpuvm-register",
+      "sink_score": 1,
+      "source": "AGGREGATE.json",
+      "status": "ARTIFACT_BLOCKED",
+      "unknown_edges": [],
+      "user_influence": "KERNEL_FIXED"
+    }
+  ],
+  "schema": "orbisprobe-research-leads-v1"
+}

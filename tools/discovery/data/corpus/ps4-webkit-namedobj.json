@@ -1,0 +1,96 @@
+{
+  "id": "ps4-webkit-namedobj",
+  "name": "PS4 WebKit to namedobj type confusion/UAF (fail0verflow)",
+  "role": "training",
+  "burned_reason": "",
+  "platform": [
+    "ps4"
+  ],
+  "bug_class": "TYPE_CONFUSION",
+  "subsystem": "kernel/sys_namedobj (entry userland/browser-webkit)",
+  "root_cause": {
+    "summary": "sys_namedobj_create takes a user-supplied kind, ORs 0x1000 into it and stores a 0x18-byte namedobj_usr_t in the process's id_table. IDT_TYPE values are not unique powers of two, and mdbg_service command 1 calls namedobj_create_ex(), which looks the same name up as IDT_TYPE_NAMEDOBJ_DBG and casts the stored pointer to the larger 0x20-byte namedobj_dbg_t. The caller can therefore write past the allocation and overwrite the low 32 bits of namedobj_usr_t.name; namedobj_delete then frees that forged pointer, producing a use-after-free of an arbitrary kernel pointer that shares the high 32 bits. The public exploit frees a struct file located through sysctlbyname(\"kern.file\"), reclaims it with a fake kqueue and uses kevent()'s kl_unlock call to start a ROP chain.",
+    "primitive": "type confusion between namedobj_usr_t (0x18) and namedobj_dbg_t (0x20), converted into a free of an arbitrary kernel pointer",
+    "trigger": "namedobj_create with kind 0x1000|0x4000, mdbg_service command 1 with the same name, then namedobj_delete",
+    "consequence": "use-after-free of a chosen struct file; kqueue spray and kevent function-pointer hijack lead to kernel ROP"
+  },
+  "discovery_approach": {
+    "summary": "fail0verflow started from a 1.01 kernel dump that still had full ELF symbols, enumerated the PS4-specific syscalls and found that most wrap a per-process id_table hash API. The IDT_TYPE enum is not a set of unique bits, and namedobj_create lets userland choose the kind; mdbg_service command 1 then reuses the entry under IDT_TYPE_NAMEDOBJ_DBG, giving the larger cast. The team converted the type confusion into a UAF with namedobj_delete, freed a struct file found through sysctlbyname(\"kern.file\"), and sprayed a fake kqueue whose kl_unlock runs the ROP chain. Cryptogenic later reimplemented the same bug for 4.05.",
+    "signals": [
+      "sys_namedobj_create ORs 0x1000 into a user-controlled kind",
+      "namedobj_create_ex casts an id_table entry to a different, larger structure",
+      "namedobj_delete frees the name pointer stored in the confused object",
+      "IDT_TYPE_NAMEDOBJ_DBG (0x5000) is reachable from a user kind",
+      "sysctlbyname(\"kern.file\") exposes struct file addresses on 1.01"
+    ],
+    "blind_usable": false
+  },
+  "firmware": {
+    "affected": [
+      "1.01",
+      "4.05"
+    ],
+    "fixed_in": "4.06",
+    "differences": [
+      "4.06/4.07 adds `if (!(kind & 0x4000))` to sys_namedobj_create, rejecting the bit that selects IDT_TYPE_NAMEDOBJ_DBG and the larger cast (fail0verflow).",
+      "PS4's 0x4000 page size makes the minimum malloc 0x40, so the 0x08-byte off-end write alone is not exploitable; the public exploit converts the type confusion into a UAF via namedobj_delete (fail0verflow)."
+    ]
+  },
+  "patch_evidence": {
+    "available": true,
+    "what": "fail0verflow quotes the fixed sys_namedobj_create from 4.07, showing the added 0x4000-bit check; Cryptogenic's 4.05 implementation independently confirms the vulnerable path",
+    "limits": "the blog's code is a decompiler transcription, not a vendor patch; no firmware bytes are stored here"
+  },
+  "sources": [
+    {
+      "url": "https://fail0verflow.com/blog/2017/ps4-namedobj-exploit/",
+      "supports": "browser-process entry, id_table/IDT_TYPE design, namedobj_create kind control, namedobj_create_ex cast, namedobj_delete UAF, kern.file leak, kqueue/kevent ROP, fixed in 4.06 and the 4.07 check",
+      "kind": "writeup"
+    },
+    {
+      "url": "https://github.com/Cryptogenic/PS4-4.05-Kernel-Exploit",
+      "supports": "full namedobj implementation for 4.05; the exploit is delivered through WebKit (the README notes WebKit rarely crashes); kernel patches including syscall 11",
+      "kind": "repo"
+    },
+    {
+      "url": "https://consolemods.org/wiki/PS4:Exploit_Chart",
+      "supports": "the 1.76-era WebKit userland exploit (JSArray heap overflow) and the NamedOBJ kernel exploit in the <=4.07 range; records a one-release difference from the blog (<=4.07 versus fixed 4.06)",
+      "kind": "writeup",
+      "verified_via": "wayback",
+      "snapshot": "20261020125155"
+    }
+  ],
+  "confidence": "high",
+  "gaps": [
+    "The blog's code is from 1.01 and the 4.05 implementation differs; the exact 4.05 offsets are not in the blog.",
+    "The 1.76 WebKit bug (JSArray heap overflow) is named only by the ConsoleMods chart; no primary WebKit writeup was fetched.",
+    "The fixed_in value is 4.06 in the blog but the ConsoleMods chart says NamedOBJ <=4.07, a one-release discrepancy that is not resolved here."
+  ],
+  "entry_chain": [
+    {
+      "stage": "PS4 browser loads the attacker page; a WebKit bug gives arbitrary read/write and a JavaScript-to-native syscall bridge",
+      "image_visible": "the browser/WebKit binaries and the userland exploit page are outside the kernel image; the kernel image shows only the syscall table",
+      "runtime_only": "which WebKit bug and offsets match the firmware, and the state of the browser process"
+    },
+    {
+      "stage": "JavaScript calls namedobj_create(name, kind=0x1000|0x4000, ...) and stores a namedobj_usr_t in the process id_table",
+      "image_visible": "sys_namedobj_create and the id_table code are in the kernel image; the kind OR and allocation size are visible",
+      "runtime_only": "the allocated object's address and the id_table bucket state"
+    },
+    {
+      "stage": "mdbg_service command 1 calls namedobj_create_ex with the same name, casting the entry to namedobj_dbg_t",
+      "image_visible": "sys_mdbg_service, namedobj_create_ex and the namedobj_dbg_t field stores are in the kernel image",
+      "runtime_only": "the exact name match and the resulting out-of-bounds/low-32-bit writes"
+    },
+    {
+      "stage": "namedobj_delete frees the forged name pointer, creating a UAF on a struct file located through sysctlbyname(\"kern.file\")",
+      "image_visible": "sys_namedobj_delete and the free path are in the kernel image; the kern.file sysctl handler is visible",
+      "runtime_only": "the target file object's address and the high-32-bit constraint"
+    },
+    {
+      "stage": "Fake kqueue is sprayed into the freed file; kevent() calls kl_unlock and starts kernel ROP",
+      "image_visible": "the kqueue/kevent structures and function-pointer call sites are in the kernel image",
+      "runtime_only": "the heap reclaim, the fake function pointers and the ROP stack"
+    }
+  ]
+}

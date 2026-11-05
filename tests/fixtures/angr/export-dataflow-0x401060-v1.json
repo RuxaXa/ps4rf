@@ -1,0 +1,44 @@
+{
+  "artifact": {
+    "sha256": "efd361839429619ba5d83586dc973688fd21c9e55ae9e5b580fcc63db82238dd"
+  },
+  "edges": [
+    {
+      "from": "0x401068",
+      "kind": "reg",
+      "to": "0x4010b4",
+      "value": "rax"
+    },
+    {
+      "from": "0x401070",
+      "kind": "mem",
+      "to": "0x4010bc",
+      "value": "0x404020"
+    },
+    {
+      "from": "0x401060",
+      "kind": "stack",
+      "to": "0x4010a0",
+      "value": "0x8"
+    },
+    {
+      "from": "0x401078",
+      "kind": "reg",
+      "to": "0x4010c0",
+      "value": "rdi"
+    }
+  ],
+  "function": {
+    "name": "mock_parse",
+    "offset": "0x401060",
+    "size": 128
+  },
+  "generator": {
+    "runner": "ps4rf_angr_run",
+    "runner_sha256": "edf328c2a4bf64dabf1e6261094854f6dde9a84a6c069bf540306d18a7388527",
+    "tool": "angr",
+    "version": "9.2.4-mock"
+  },
+  "mode": "dataflow",
+  "schema": "ps4rf.angr.export/v1"
+}

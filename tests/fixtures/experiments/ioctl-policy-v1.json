@@ -1,0 +1,23 @@
+{
+  "name": "pup-update-command-policy",
+  "profile": "fw1352",
+  "provenance": {
+    "q6_submit": "0xC0184401 family dispatcher 0x637770, sub0 -> worker 0x638230; argument block {u64 cpuaddr@0x00, u64 size@0x08, u32 mode@0x10, u32 pad@0x14}. The cpuaddr is read as the user address the SBL driver pins and maps (gpuvm.c `map` 0x61ae20 / extractCpuAddrUser -> vm_fault_quick_hold_pages -> gbase_map): it must be held to a 0x4000 boundary and one 0x4000 unit is mapped. The size is round checked to 0x4000 at 0x638295..0x6382b9 (EINVAL 0x16 otherwise), so only 1..0x4000 survives. The mode word is compared against 2 at 0x638376 (which adds a second engine pass); 0 requests the base transfer only. The pointer field is therefore 0 -- the earlier model ({op, ptr, length}, pointer at 8) named the SIZE field and replaced it with the staging address, which is exactly the deterministic EINVAL the live runs measured.",
+    "own1_trigger": "0xC0184404 Tag-4 sub3 0x637BFF, historical mid-fail geometry (4 x 0x4000, hole in the last segment); its block is {u16 mode@0x00, u64@0x08, u64@0x10} -- the semantics of the two u64 are NOT proven, so no size/mode constraint is declared for it",
+    "status_read": "0xC010440A gate [r12+8]==0x104; where the response lands is not proven, so the command declares no pointer field and a caller cannot fill its 260 byte response"
+  },
+  "device": "/dev/pup_update0",
+  "device_open_flags": "0x0002",
+  "commands": [
+    {"command": "0xC0184401", "role": "q6_submit",   "blob_len": 24, "len_field": "bounded-by-family-rounding", "len_allowed": [16384], "out_len": 0,
+     "pointer_field": 0, "size_field": 8, "size_round": 16384, "mode_field": 16, "blob_mode_values": [0]},
+    {"command": "0xC010440A", "role": "status_read", "blob_len": 24, "out_len": 260},
+    {"command": "0xC0184404", "role": "own1_trigger","blob_len": 24, "mode_values": [1], "len_allowed": [65536], "out_len": 0}
+  ],
+  "notes": [
+    "only these three commands may be invoked; the device path is fixed by policy",
+    "0xC0184402/0xC0184403 exist in the family but are not needed by the first experiment profile",
+    "the declared pointer field is the offset the provider overwrites with the address of its own staging region; the host value at that offset never reaches the device",
+    "the request size and the mode word are the caller's and are not touched by the provider: the driver validates them"
+  ]
+}

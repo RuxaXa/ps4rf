@@ -1,0 +1,112 @@
+{
+ "artifact_sha256": {
+  "attribution-final.json": "c858e89d40c9676f9a0d810be54835c89a94c16dd1308f5084aad391415c5bfb",
+  "candidate-falsification.json": "b30dd8d5e6c74e3f21b9e2539d889bc53319e45f20eda4a26ae51f8a8a8d79f6",
+  "chainmap-fw1352-cycle4.json": "ef35a63c205c581b4ba4a199a6dc0568d62c336d43d41bed347fa3280b053bbe",
+  "chainmap-fw1352-release.json": "5ddd3acdff854fadca57a9700d442382a8d9b2a7ae950b407e77115c31348eec",
+  "chainmap-fw900-cycle4.json": "04517d93f1647c0ed12bd5e916efee2d876a75a91fb373e6643e784e9bb8a9f3",
+  "chainmap-fw900-release.json": "04517d93f1647c0ed12bd5e916efee2d876a75a91fb373e6643e784e9bb8a9f3",
+  "d2-identity-screen.json": "5bdf866673791ed6724047d0a0193b21af034072f03edb8a2e289530e0218bd3",
+  "s13-final-eval.json": "3c1659f9dfc6d786bdd9e2e8a84225849169070618364ac0ed409ddf29a90b6b",
+  "s13c4-scan-fw1352-ext.json": "17e7e888b71a716b2f803f9631b2256022490cc82437fb7e695dbab700d5d93f",
+  "s13c4-scan-fw1352-frozen.json": "dcb51150882f87c5a129df9065d1a0a5d3ccb199b1e49ea0521d7a77ef5140fd",
+  "s13c4-scan-fw900-ext.json": "86ac70bd28998e5335d67b981705f9cb8b5e1c77d6d450055ba3d2f89ffb0595",
+  "top-d2-disassembly.json": "eef8dc97023058fe209187861bbf580dca9e30fd5ac62e4c5aea809fef0eda3e"
+ },
+ "baseline_commit": "9c087268d862b20d7775e3aac65d31ca35fc967c",
+ "cycle": "S1.3-cycle6-release",
+ "evaluation_limitations": {
+  "false_positive_rate": "not reported: PPPwn entry is outside the frozen root set and FW 13.52 is not a clean negative corpus",
+  "positive_recall": "one held-back positive was missed; report 0 of 1 as an outcome, not a stable rate",
+  "ranking_depth": "the frozen -0.5 x entry-depth term was not machine-exported in chainmap; full tie ordering is not reproducible. All observed top-10 entries are direct proved handlers, so the held-back root-cause miss is unchanged."
+ },
+ "file_sha256": {
+  "tests/test_discovery_semgraph.py": "7e8000098864d23f0e0157ec45d51a4c662b4f704aafcc8f287e752a00ddb238",
+  "tools/discovery/chains.py": "c8384d679b662af3419738fb8af0a1559cf093c98c36afce823bd1c133b143b7",
+  "tools/discovery/cli.py": "4ee24f96cd49482ef2f47cd114cb7911a9ffc75baef308169399e8a726bda972",
+  "tools/discovery/data/families/families.json": "f0c18155897ca395ee162531b349f4b71c5dffda130818aad54de6f21b529718",
+  "tools/discovery/data/training/references.json": "558b007190149267c9338633c6ee59a411f716e024297a6eb0ebee74803c9aed",
+  "tools/discovery/entries.py": "65f89df17e6c6a186a2bc0c6009df64107cc09bd777398fa4e90dd3a4507eb17",
+  "tools/discovery/handles.py": "e72ea10347026a801f624e21c0f8a5cdf46b9c49b5f52323a4b89298af895756",
+  "tools/discovery/patterns.py": "b205c52b12e53b1814f3e6c5fc1714ee917bc9074db302e280ca0b47716fdc26",
+  "tools/discovery/semgraph.py": "7c21740908456c40c4ecc91aec6c4c439c97f83735982d42fa4deab095b5ffeb"
+ },
+ "held_back_set": [
+  {
+   "entry_class": "network receive (not a syscall)",
+   "id": "pppwn-cycle2",
+   "label": "NEGATIVE",
+   "subsystems": [
+    "socket",
+    "net/ppp",
+    "net/if"
+   ]
+  },
+  {
+   "entry_class": "vfs/mount + exFAT parse",
+   "id": "relapse-cycle2",
+   "label": "POSITIVE",
+   "subsystems": [
+    "vfs",
+    "fs/exfat"
+   ]
+  }
+ ],
+ "metrics": {
+  "entry_coverage": "whether the generic root set reaches the family entry class",
+  "false_positive": "claims on PPPwn NEGATIVE / analysed functions, with numerator, denominator and 95% upper bound",
+  "ranking_hit": "matching root-cause chain in frozen top-10",
+  "root_cause_recall": "proved rank<=2 chain whose evidence matches the labelled root-cause class; subsystem hit alone is zero"
+ },
+ "note": "Release source after post-evaluation requirement-status repair. The independent evaluation remains the cycle-4 frozen run; release chainmaps differ only in requirements, not graph, hops, statuses, counts or ranking inputs.",
+ "post_evaluation_repair": {
+  "blind_result_seen_before_change": true,
+  "change": "infer syscall/cdevsw entry_kind only for all-proved chains so REQ_UNPRIV_ENTRY is cleared exactly when offline entry evidence proves it",
+  "detectors_changed": false,
+  "graph_changed": false,
+  "hop_status_changed": false,
+  "metrics_changed": false,
+  "ranking_inputs_changed": false,
+  "verification": "cycle-4 and release exports are byte-equivalent after removing the requirements field; 122/750 FW 13.52 chains now clear the entry requirement"
+ },
+ "ranking": {
+  "excluded_functions": {
+   "13.52": [
+    "0x164e90",
+    "0x164dc0",
+    "0x1e0ad0",
+    "0x1e0710",
+    "0x164810"
+   ],
+   "reason": "netcontrol training reference"
+  },
+  "excluded_subsystems": [],
+  "score_terms": [
+   "proved_hop_ratio x 3",
+   "+ 2 if the primitive carries a decisive identity domain (handle)",
+   "+ 1 if a surplus reference is proven",
+   "+ 1 if a cross-subsystem hop is witnessed",
+   "- 0.5 x entry depth",
+   "- 2 if the chain depends on a 'possible' or 'unknown' hop"
+  ]
+ },
+ "repair_from_cycle2": {
+  "cause": "split-record continuation crossed another known syscall handler root; the finding label was expansion-order attribution, not ownership",
+  "generic_rule": "known entry handlers are continuation barriers; explicit call/jump/table edges may still cross them",
+  "training_control": "9.00 netcontrol must resolve only through sysent[99]; 13.52 likewise"
+ },
+ "scan_artifacts": {
+  "13.52": "s13c4-scan-fw1352-ext.json",
+  "13.52_frozen": "s13c4-scan-fw1352-frozen.json",
+  "9.00": "s13c4-scan-fw900-ext.json"
+ },
+ "schema": "ps4rf.discovery.freeze/1",
+ "search_space": {
+  "depth": 2,
+  "entry_set": "extended",
+  "firmware": "13.52",
+  "max_functions": 12000,
+  "selection_order": "depth"
+ },
+ "selection": "all integrated families not marked training and not previously evaluated; no family was discarded after selection"
+}

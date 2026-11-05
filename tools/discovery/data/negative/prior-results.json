@@ -1,0 +1,56 @@
+{
+  "schema": "ps4rf.discovery.negative-results/1",
+  "note": "Our own archived negative results. They are counter-evidence for candidates, never a blanket refutation: each entry names what was refuted, on which image, with which method, and what would re-open it.",
+  "results": [
+    {
+      "id": "R14-UAF-COHORT",
+      "subsystems": ["kernel-text-wide"],
+      "claim": "The path-sensitive UAF engine (V5) produced 0 confirmed candidates on the FW13.52 image; 5 rank-1 and 20 rank-2 candidates were refuted (2 by dominance/convention proofs, 1 left undecided).",
+      "refuted": "single-function free-then-use shapes as evidence of a bug",
+      "method": "CFG path walk over 16,811 functions, manual refutation per candidate",
+      "artifact": "/home/hermes/ps4-exploit-archaeology/R14_FINAL_VERDICT.md",
+      "reopen_if": "a candidate shows a use that no kill dominates AND the release callee is proven to free that object",
+      "applies_to": ["13.52"]
+    },
+    {
+      "id": "R27-EXIF-0x38b9",
+      "subsystems": ["vfs"],
+      "claim": "EXIF tag 0x38b9 in the photo path is a genuine defect (DoS) but reachability from an unprivileged context is INSUFFICIENT; PngDec and GIF parsing produced no finding.",
+      "refuted": "the EXIF defect as a privilege-escalation candidate",
+      "method": "offline parser reconstruction plus consumer search",
+      "artifact": "~/handoffs/2026-11-01_R32-CLOSURE_AND_MODEL-ROUTE.md",
+      "reopen_if": "a consumer of the affected parser is shown to take attacker-controlled input in a privileged context",
+      "applies_to": ["13.52"]
+    },
+    {
+      "id": "R32-JPEGPARSER-NO-CONSUMER",
+      "subsystems": ["vfs"],
+      "claim": "JpegParser exports 6 entry points with 0 calls from the four consumers examined, so the decoded path is not reachable through them.",
+      "refuted": "JpegParser as a reachable attack surface",
+      "method": "export inventory plus call search in four consumers",
+      "artifact": "~/handoffs/2026-11-01_R32-CLOSURE_AND_MODEL-ROUTE.md",
+      "reopen_if": "a fifth consumer or a dynamic dispatch site is shown to call one of the six exports",
+      "applies_to": ["13.52"]
+    },
+    {
+      "id": "WP3-IN-MULTI-LIFECYCLE",
+      "subsystems": ["socket"],
+      "claim": "The in_multi/in_mcast object lifecycle on FW13.52 is closed: H1 NOT SUPPORTED.",
+      "refuted": "the in_multi owner-loss hypothesis",
+      "method": "offline lifecycle reconstruction",
+      "artifact": "~/audits/playstation-ps4/fw1352-public-jb-20261103/PHASE16_PUBLIC_JAILBREAK_REPRO.md",
+      "reopen_if": "an owner-loss path is found that does not pass through the closed reference chain",
+      "applies_to": ["13.52"]
+    },
+    {
+      "id": "P16-STUB-REGION-BLOCKED",
+      "subsystems": ["devfs", "kqueue"],
+      "claim": "The ~0xE4-byte stub region at RVA 0x12562f..0x125713 that the afterglow bootstrap would overwrite is live code (227/256 bytes, coherent, no inbound xrefs) -- byte compatibility is not decidable offline because our image is kpatched.",
+      "refuted": "the assumption that the region is padding",
+      "method": "xref scan over the full dump",
+      "artifact": "~/audits/playstation-ps4/fw1352-public-jb-20261103/PHASE16_PUBLIC_JAILBREAK_REPRO.md",
+      "reopen_if": "a readback of the 10 target addresses on the console before patching (hardware, out of Sprint 1)",
+      "applies_to": ["13.52"]
+    }
+  ]
+}

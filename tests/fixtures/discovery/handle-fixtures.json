@@ -1,0 +1,75 @@
+{
+  "base_rva": "0x1000",
+  "case_notes": {
+    "fixture_borrowed_reference": "NO_CLAIM: a second drop is legitimate when the caller took a reference of its own; a count alone never decides",
+    "fixture_handle_reuse": "ownership decided by a 4-byte handle compare, then two drops of the acquired object: the surplus drop may land on a foreign object",
+    "fixture_handle_single_drop": "NO_CLAIM: one drop per acquired reference, even though the decision uses a handle",
+    "fixture_no_identity_premise": "two drops and no deciding callee: an accounting question, reported as an observation (rank 3), never a claim",
+    "fixture_object_identity": "NO_CLAIM: identical shape, but the decision compares the 8-byte object pointer, so the ownership premise holds",
+    "fixture_two_generations": "NO_CLAIM: two acquires, one drop each -- the balance is per acquired object, so a global drop count would be wrong"
+  },
+  "cases": {
+    "fixture_borrowed_reference": "NO_CLAIM",
+    "fixture_handle_reuse": "D7_handle_object_identity",
+    "fixture_handle_single_drop": "NO_CLAIM",
+    "fixture_no_identity_premise": "D8_reference_balance",
+    "fixture_object_identity": "NO_CLAIM",
+    "fixture_two_generations": "NO_CLAIM"
+  },
+  "catalog": {
+    "decide_by_handle": null,
+    "decide_by_object": null,
+    "own_acquire": null,
+    "own_fdrop_like": "free"
+  },
+  "image_hex": "554889e548893931c05dc3554889e58b075dc3554889e53977107407b8050000005dc331c05dc3554889e5483977087407b8050000005dc331c05dc3554889e541554883ec284989fe488d4df0e8aeffffff85c075434c8b6df04c89ef4c89f6e8aeffffff85c07518b8fffffffff0410fc1452883f80175084c89efe88affffffb8fffffffff0410fc1452883f80175084c89efe872ffffff4883c428415d5dc3554889e541554883ec284989fe488d4df0e849ffffff85c075434c8b6df04c89ef4c89f6e85dffffff85c07518b8fffffffff0410fc1452883f80175084c89efe825ffffffb8fffffffff0410fc1452883f80175084c89efe80dffffff4883c428415d5dc3554889e541554883ec284989fe488d4df0e8e4feffff85c075274c8b6df04c89ef4c89f6e8e4feffffb8fffffffff0410fc1452883f80175084c89efe8c4feffff4883c428415d5dc3554889e541554883ec28488d4df0e89efeffff85c075344c8b6df0b8fffffffff0410fc1452883f80175084c89efe889feffffb8fffffffff0410fc1452883f80175084c89efe871feffff4883c428415d5dc3554889e5415441554883ec284989fe488d4df0e846feffff85c0755c4c8b6df04c89ef4c89f6e846feffffb8fffffffff0410fc1452883f80175084c89efe826feffff488d4df0e812feffff85c075284c8b65f04c89e74c89f6e812feffffb8fffffffff0410fc144242883f80175084c89e7e8f1fdffff4883c428415d415c5dc3554889e541554883ec284989fe488d4df0e8c6fdffff85c0754a4c8b6df04c89ef4c89f6e8dafdffffb801000000f0410fc14528b8fffffffff0410fc1452883f80175084c89efe89bfdffffb8fffffffff0410fc1452883f80175084c89efe883fdffff4883c428415d5dc3",
+  "image_sha256": "f96d80917189291c3adda5f32f3dd4d113e153fdfd022a28ec92dbfe039d66ca",
+  "roots": {
+    "free": "0x100b"
+  },
+  "schema": "ps4rf.discovery.handle-fixtures/1",
+  "source": "handle-fixtures.S",
+  "source_sha256": "47e3fcb9d0cc16da5bb2ba9480f4b7112107f01a1f8f78bc67c2ae13fad6fb96",
+  "symbols": {
+    "decide_by_handle": {
+      "rva": "0x1013",
+      "size": "0x14"
+    },
+    "decide_by_object": {
+      "rva": "0x1027",
+      "size": "0x15"
+    },
+    "fixture_borrowed_reference": {
+      "rva": "0x1224",
+      "size": "0x6c"
+    },
+    "fixture_handle_reuse": {
+      "rva": "0x103c",
+      "size": "0x65"
+    },
+    "fixture_handle_single_drop": {
+      "rva": "0x1106",
+      "size": "0x49"
+    },
+    "fixture_no_identity_premise": {
+      "rva": "0x114f",
+      "size": "0x53"
+    },
+    "fixture_object_identity": {
+      "rva": "0x10a1",
+      "size": "0x65"
+    },
+    "fixture_two_generations": {
+      "rva": "0x11a2",
+      "size": "0x82"
+    },
+    "own_acquire": {
+      "rva": "0x1000",
+      "size": "0xb"
+    },
+    "own_fdrop_like": {
+      "rva": "0x100b",
+      "size": "0x8"
+    }
+  }
+}

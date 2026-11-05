@@ -1,0 +1,96 @@
+{
+  "id": "y2jb-youtube-lapse",
+  "name": "Y2JB + Lapse - YouTube app cache injection to aio_multi_delete double free",
+  "role": "training",
+  "burned_reason": "",
+  "platform": [
+    "ps5"
+  ],
+  "bug_class": "DOUBLE_FREE",
+  "subsystem": "kernel/sceaio (entry userland/youtube-app)",
+  "root_cause": {
+    "summary": "The YouTube app mounts its download0 cache image from /user/download/PPSA01650 and loads splash.html from it without verifying cache integrity, so the HTML can be replaced by one that loads attacker JavaScript into the app's V8 engine. The V8 TheHole leak (CVE-2021-38003; Y2JB uses the faster CVE-2022-4174 Promise.any trigger) corrupts a Map's size to -1 and yields out-of-bounds read/write, addrof/fakeobj and a libkernel/ROP bridge. The ROP chain calls aio_multi_delete(); in the ao_rem_ids != 1 branch the kernel holds only id_rlock(), frees ao_entries[req_idx] and only then clears the slot, so two threads free the same aio_entry twice. Lapse turns the double free into aliased sockets and arbitrary kernel read/write.",
+    "primitive": "double free of a 0x80-byte aio_entry (M_AIO_REQS2) plus a double fdrop of the embedded struct file",
+    "trigger": "two threads call aio_multi_delete on the same multi-request id after the requests complete",
+    "consequence": "kernel heap double free, reclaimed as aliased sockets, then arbitrary kernel read/write and jailbreak"
+  },
+  "discovery_approach": {
+    "summary": "The YouTube app was known to run without a license and to load a cached splash page from its mounted download0 image. barisyyild found the YouTube-app issue in 2023, aves publicized the license-free app in 2025, and Gezine built Y2JB on 2025-09-30. The JavaScript stage reuses the public TheHole V8 bugs (CVE-2021-38003 and the faster CVE-2022-4174 Promise.any trigger); the kernel stage is the Lapse aio_multi_delete double free that abc had already turned into a full exploit.",
+    "signals": [
+      "download0/cache/splash_screen/<base64-url>/splash.html in the app's user data",
+      "no signature or integrity check on the cached HTML",
+      "the YouTube app's V8 version and its Promise.any implementation",
+      "aio_multi_delete: id_rlock without id_wlock on the rem_ids != 1 branch; free_queue_entry before the slot is set to NULL"
+    ],
+    "blind_usable": false
+  },
+  "firmware": {
+    "affected": [
+      "PS5 4.03-10.01"
+    ],
+    "fixed_in": "10.20 for the AIO bug; the YouTube app entry is still unpatched as of 13.60",
+    "differences": [
+      "PS5 10.20 fixes the aio_multi_delete locking path, so the Lapse payload is capped at 10.01; the YouTube entry itself survives to 13.60 (PS5 wiki and Y2JB README).",
+      "YouTube app 01.000.002 uses SpiderMonkey 45 with no JIT; 01.000.003 and later use V8, and Y2JB needs 01.000.003 on 4.03-12.40 or 01.000.030 on 12.60+ (PS5 wiki and Y2JB README).",
+      "Since PS5 12.60 the old YouTube app versions require a network license; 01.000.030 is the DRM-free build that keeps the entry usable (PS5 wiki)."
+    ]
+  },
+  "patch_evidence": {
+    "available": true,
+    "what": "the PS5 dev wiki records the aio_multi_delete bug, the affected <=10.01 range and the 10.20 fix; the Gistre article quotes the vulnerable function body and the two-thread interleaving",
+    "limits": "no 10.20 patch diff and no firmware bytes are stored or linked here; the fix is stated, not shown"
+  },
+  "sources": [
+    {
+      "url": "https://blog.gistre.epita.fr/posts/marco.chan-witzel-2026-07-13-lapse-the-aio-kernel-exploit-behind-the-ps5-jailbreak/",
+      "supports": "YouTube app as the entry point; unchecked splash.html cache; V8 TheHole CVE-2021-38003/CVE-2022-4174; the quoted aio_multi_delete body; the two-thread race; 5-stage kernel chain and the 10.20 fix",
+      "kind": "writeup"
+    },
+    {
+      "url": "https://github.com/Gezine/Y2JB",
+      "supports": "Y2JB is userland code execution through the PS5 YouTube app; minimum 4.03; YouTube app PPSA01650 versions; /user/download/PPSA01650 download0.dat; Lapse payload only up to 10.01",
+      "kind": "repo"
+    },
+    {
+      "url": "https://www.psdevwiki.com/ps5/Vulnerabilities",
+      "supports": "YouTube app vulnerabilities 2.00-13.60; cache image loaded from the user download/ folder; V8 since app 01.000.003 and SpiderMonkey 01.000.002; the 12.60 license change; aio_multi_delete <=10.01 and fixed 10.20",
+      "kind": "writeup",
+      "verified_via": "wayback",
+      "snapshot": "20260709162809"
+    }
+  ],
+  "confidence": "high",
+  "gaps": [
+    "The exact YouTube app build strings and offsets are version-specific and are not reproduced here.",
+    "The 12.60+ license/DRM boundary is described by the wiki but the app-version boundary is fuzzy (01.000.025? versus 01.000.030).",
+    "The Gistre article is an educational secondary source; no primary Y2JB design note or V8 exploit writeup was fetched.",
+    "The Lapse kernel details are covered by the sibling entry lapse-aio-multi-delete; this entry describes only enough of the bug to anchor the chain."
+  ],
+  "entry_chain": [
+    {
+      "stage": "YouTube app launches and mounts its download0 cache image from /user/download/PPSA01650",
+      "image_visible": "not in the kernel image; the app package and its user-data layout are in the PS5 filesystem",
+      "runtime_only": "which cache image is mounted and which splash page the app loads"
+    },
+    {
+      "stage": "The app loads splash.html from the mounted cache without an integrity check",
+      "image_visible": "the splash_screen path and HTML file in the app's download0 image",
+      "runtime_only": "whether the modified HTML is accepted at run time"
+    },
+    {
+      "stage": "Attacker JavaScript executes in the app's V8 engine; TheHole leak (CVE-2021-38003 / CVE-2022-4174) gives OOB read/write",
+      "image_visible": "the app's V8 version and the JavaScript entry point; no kernel-image signal",
+      "runtime_only": "the Map corruption, addrof/fakeobj primitives and the libkernel leak"
+    },
+    {
+      "stage": "ROP chain builds a syscall bridge and calls aio_multi_delete",
+      "image_visible": "the libkernel syscall stubs and aio_multi_delete are in the userland/kernel images",
+      "runtime_only": "the resolved addresses and the exact syscall sequence"
+    },
+    {
+      "stage": "aio_multi_delete double-frees the same aio_entry; Lapse reclaims it as aliased sockets and builds kernel R/W",
+      "image_visible": "the kernel image shows id_rlock, the rem_ids branch, free_queue_entry and the late NULL store",
+      "runtime_only": "the two-thread interleaving, the heap reclaim and the socket/pipe objects used for the primitives"
+    }
+  ]
+}

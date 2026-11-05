@@ -1,0 +1,108 @@
+{
+  "id": "ps5-webkit-ipv6-uaf",
+  "name": "PS5 WebKit to IPv6 pktopts UAF (CVE-2020-7457)",
+  "role": "training",
+  "burned_reason": "",
+  "platform": [
+    "ps5"
+  ],
+  "bug_class": "UAF",
+  "subsystem": "kernel/netinet6 (entry userland/browser-webkit)",
+  "root_cause": {
+    "summary": "The IPV6_2292PKTOPTIONS setsockopt handler lacks synchronization, so concurrent calls race on ip6_pktopts and can modify a packet-options object after it has been freed (CVE-2020-7457, FreeBSD-SA-20:20). On PS5 the WebKit stage first obtains arbitrary userland read/write, then triggers the race and reclaims the freed ip6_pktopts with ip6_rthdr sprays; the pktopts/rthdr overlap yields kernel read/write. XOM and the hypervisor prevent kernel code execution, so the public chain stops at read/write and data patches.",
+    "primitive": "race-condition use-after-free of ip6_pktopts (0x100 slab) reclaimed with ip6_rthdr sprays",
+    "trigger": "concurrent setsockopt(IPV6_2292PKTOPTIONS) calls from the WebKit process",
+    "consequence": "kernel arbitrary read/write; no kernel code execution on PS5 because kernel .text is XOM and the hypervisor enforces write protection"
+  },
+  "discovery_approach": {
+    "summary": "The IPv6 bug is FreeBSD CVE-2020-7457, credited to syzkaller and Andy Nguyen and fixed upstream in 2020. TheFlow adapted it to the PlayStation kernel; ChendoChap and Znullptr built the PS5 WebKit userland stage for 4.03 (CSSFontFaceSet, with a Web Worker stack pivot to bypass clang CFI), and Cryptogenic packaged the IPv6 kernel exploit for 3.00-4.51. The browser is reached through the PS5 User Manual: DNS-redirect manuals.playstation.net to a local HTTPS server and accept the untrusted certificate.",
+    "signals": [
+      "the IPV6_2292PKTOPTIONS set handler missing synchronization",
+      "ip6_pktopts freed while a racing setsockopt still references it",
+      "ip6_rthdr/pktopts overlap in the 0x100 slab",
+      "the PS5 User Manual / modal browser as the WebKit host",
+      "clang CFI is forward-edge only and there is no shadow stack, so a Web Worker return address is a viable pivot"
+    ],
+    "blind_usable": false
+  },
+  "firmware": {
+    "affected": [
+      "3.00-4.51"
+    ],
+    "fixed_in": "unknown on PS5; FreeBSD fixed CVE-2020-7457 upstream in 2020 (SA-20:20)",
+    "differences": [
+      "PS5 keeps clang CFI (forward-edge only) and XOM; the WebKit stage pivots through a Web Worker return address instead of the PS4 vtable-smash strategy (ChendoChap).",
+      "kernel .text is XOM and the hypervisor enforces write protection, so the IPv6 UAF yields kernel read/write but not code execution or kernel patches (Cryptogenic PS5-IPV6-Kernel-Exploit)."
+    ]
+  },
+  "patch_evidence": {
+    "available": true,
+    "what": "FreeBSD-SA-20:20 names the missing synchronization in the IPV6_2292PKTOPTIONS set handler, assigns CVE-2020-7457 and gives the corrected revisions; the PS5 wiki records the 3.00-4.51 affected range",
+    "limits": "no PS5-specific patch version or binary diff is public; the FreeBSD fix is upstream, not a Sony advisory"
+  },
+  "sources": [
+    {
+      "url": "https://security.freebsd.org/advisories/FreeBSD-SA-20:20.ipv6.asc",
+      "supports": "CVE-2020-7457: the IPV6_2292PKTOPTIONS set handler was missing synchronization, racing accesses could modify freed memory, impact is memory corruption/privilege escalation, corrected revisions",
+      "kind": "advisory"
+    },
+    {
+      "url": "https://github.com/ChendoChap/PS5-Webkit-Execution",
+      "supports": "PS5 4.03 browser was vulnerable to the CSSFontFaceSet WebKit bug; clang CFI blocks PS4-style vtable smashing; Web Worker stack leak and stack pivot at stack+0x7FB88; userland-only scope",
+      "kind": "repo"
+    },
+    {
+      "url": "https://github.com/Cryptogenic/PS5-IPV6-Kernel-Exploit",
+      "supports": "PS5 3.00-4.51 IPv6 UAF exploit; 5 stages (ip6_pktopts UAF, ip6_rthdr spray, kqueue/pktopts leak, IPV6_RTHDR R/W, cleanup/patch); XOM/HV prevent kernel code execution; DNS-redirect User Manual entry",
+      "kind": "repo"
+    },
+    {
+      "url": "https://www.psdevwiki.com/ps5/Vulnerabilities",
+      "supports": "IPV6_2292PKTOPTIONS UAF at PS5 3.00-4.51, and the CSSFontFaceSet WebKit exploit range 3.00-4.51",
+      "kind": "writeup",
+      "verified_via": "wayback",
+      "snapshot": "20260709162809"
+    },
+    {
+      "url": "https://www.psdevwiki.com/ps5/Exploit_Chains",
+      "supports": "the WebKit (CSSFontFaceSet/loadInSameDocument) plus IPv6 UAF chains for PS5 1.00-5.50 and 3.00-4.51",
+      "kind": "writeup",
+      "verified_via": "wayback",
+      "snapshot": "20261004220301"
+    }
+  ],
+  "confidence": "high",
+  "gaps": [
+    "No PS5-specific patch version is public; the wiki records only the affected range 3.00-4.51.",
+    "The WebKit bug used for the PS5 userland stage is described as CSSFontFaceSet in the wiki, but ChendoChap's README does not name the CVE; the exact bug identity is a gap.",
+    "The chain stops at kernel read/write because of XOM/HV, so there is no public PS5 kernel code execution from this path.",
+    "The FreeBSD advisory is the upstream bug; the PS5 kernel's exact backport state and fix version are not documented in the fetched sources."
+  ],
+  "entry_chain": [
+    {
+      "stage": "PS5 Settings -> User Manual opens the modal browser; DNS for manuals.playstation.net is redirected to an attacker HTTPS server",
+      "image_visible": "the PS5 userland/browser binaries are outside the kernel image; the kernel image shows the network stack",
+      "runtime_only": "the DNS/HTTPS setup and the untrusted-certificate acceptance"
+    },
+    {
+      "stage": "WebKit CSSFontFaceSet bug gives arbitrary read/write; a Web Worker stack pivot bypasses forward-edge CFI",
+      "image_visible": "the WebKit binaries and their CFI instrumentation are outside the kernel image",
+      "runtime_only": "the worker stack address, the return-address overwrite and the ROP chain"
+    },
+    {
+      "stage": "Concurrent setsockopt(IPV6_2292PKTOPTIONS) calls race and free ip6_pktopts while another path still references it",
+      "image_visible": "the kernel image contains ip6_setpktopt and the ip6_pktopts free path; the missing lock is a static finding",
+      "runtime_only": "the race timing and the exact interleaving that frees the object"
+    },
+    {
+      "stage": "ip6_rthdr sprays reclaim the freed pktopts and the overlap yields kernel read/write",
+      "image_visible": "the ip6_rthdr/pktopts structures and their slab sizes are visible in the kernel image",
+      "runtime_only": "the reclaim success, the leaked kqueue/pktopts addresses and the R/W primitive"
+    },
+    {
+      "stage": "Data patches / cleanup; no kernel code execution because kernel .text is XOM and the hypervisor enforces write protection",
+      "image_visible": "the XOM/HV properties and the patch targets are visible in the image",
+      "runtime_only": "the patch values and the browser-exit cleanup"
+    }
+  ]
+}

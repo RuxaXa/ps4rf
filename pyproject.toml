@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ps4rf"
+version = "0.8.1"
+description = "PS4 Research Framework core freeze candidate"
+requires-python = ">=3.12"
+dependencies = [
+  "pydantic>=2.7",
+  "cryptography>=42",
+  "PyYAML>=6",
+  "jsonschema>=4.20",
+  "rfc8785>=0.1.4",
+  "msgpack>=1.0",
+  # tools/discovery decodes kernel code; without this the discovery modules fail at
+  # import, so it is a runtime dependency of the analysis surface, not a dev nicety.
+  "capstone>=5,<6",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "datamodel-code-generator>=0.25"]
+
+[project.scripts]
+ps4rfctl = "ctl.ps4rfctl:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["core*", "ctl*", "mock*", "tools*"]

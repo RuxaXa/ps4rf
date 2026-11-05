@@ -1,0 +1,560 @@
+{
+ "boundaries": [
+  {
+   "description": "int at 2**53 violates the safe-number policy",
+   "exception": "UnsafeNumber",
+   "id": "canonical_int_2p53",
+   "outcome": "raises"
+  },
+  {
+   "description": "int at -2**53 violates the safe-number policy",
+   "exception": "UnsafeNumber",
+   "id": "canonical_int_minus_2p53",
+   "outcome": "raises"
+  },
+  {
+   "description": "largest safe integer is accepted",
+   "id": "canonical_int_2p53_minus_1_ok",
+   "outcome": "ok",
+   "result": "5b393030373139393235343734303939315d"
+  },
+  {
+   "description": "NaN is refused before serialization",
+   "exception": "UnsafeNumber",
+   "id": "canonical_float_nan",
+   "outcome": "raises"
+  },
+  {
+   "description": "Infinity is refused before serialization",
+   "exception": "UnsafeNumber",
+   "id": "canonical_float_inf",
+   "outcome": "raises"
+  },
+  {
+   "description": "1e30 is integer-valued and beyond SAFE_MAX",
+   "exception": "UnsafeNumber",
+   "id": "canonical_float_integer_valued_1e30",
+   "outcome": "raises"
+  },
+  {
+   "description": "-0.0 serializes as 0 (JCS)",
+   "id": "canonical_float_neg_zero",
+   "outcome": "ok",
+   "result": "5b305d"
+  },
+  {
+   "description": "plain fraction accepted",
+   "id": "canonical_float_4_5_ok",
+   "outcome": "ok",
+   "result": "5b342e355d"
+  },
+  {
+   "description": "non-string JSON object key is refused",
+   "exception": "TypeError",
+   "id": "canonical_nonstring_key",
+   "outcome": "raises"
+  },
+  {
+   "description": "AAD still encodable at the safe-number ceiling",
+   "id": "aad_seq_2p53_minus_1_ok",
+   "outcome": "ok",
+   "result": "7b22646972656374696f6e223a22446972656374696f6e2e4147454e545f544f5f484f5354222c226d6573736167655f74797065223a2252455155455354222c2270726f746f636f6c5f76657273696f6e223a312c2273657175656e6365223a393030373139393235343734303939312c2273657373696f6e5f6964223a225345532d30313233343536373839414243444546227d"
+  },
+  {
+   "description": "one past the ceiling: AAD becomes unencodable",
+   "exception": "UnsafeNumber",
+   "id": "aad_seq_2p53_rejected",
+   "outcome": "raises"
+  },
+  {
+   "description": "31-byte secret refused",
+   "exception": "ProtocolError",
+   "id": "derive_keys_bad_secret_len",
+   "outcome": "raises"
+  },
+  {
+   "description": "15-byte agent nonce refused",
+   "exception": "ProtocolError",
+   "id": "derive_keys_bad_nonce_len",
+   "outcome": "raises"
+  },
+  {
+   "description": "unknown AEAD suite refused",
+   "exception": "ProtocolError",
+   "id": "channel_bad_suite",
+   "outcome": "raises"
+  },
+  {
+   "description": "short channel key refused",
+   "exception": "ProtocolError",
+   "id": "channel_bad_key_len",
+   "outcome": "raises"
+  },
+  {
+   "description": "oversize reject leaves the sequence counter untouched",
+   "id": "seal_oversize_consumes_no_sequence",
+   "outcome": "ok",
+   "result": {
+    "next_ciphertext_hex": "67d084c8f630fa4d79dea8338ea4fa81f319",
+    "next_seq": 0
+   }
+  },
+  {
+   "description": "duplicate/skip detected; correct sequence still opens",
+   "id": "open_wrong_sequence_then_correct",
+   "outcome": "ok",
+   "result": {
+    "first_open": "ReplayDetected",
+    "then_seq0_ok": true
+   }
+  },
+  {
+   "description": "tag tamper refused with the PS4RF exception (D9); untampered frame still opens",
+   "id": "open_tampered_tag_then_ok",
+   "outcome": "ok",
+   "result": {
+    "tampered_open": "AuthenticationFailed",
+    "then_untampered_ok": true
+   }
+  },
+  {
+   "description": "ciphertext beyond max_frame_bytes refused",
+   "exception": "FrameLimitExceeded",
+   "id": "open_oversize_ciphertext",
+   "outcome": "raises"
+  },
+  {
+   "description": "send counter past EFFECTIVE_LAST_SEQ refused (D8; internal probe)",
+   "exception": "SequenceExhausted",
+   "id": "seal_sequence_exhausted",
+   "outcome": "raises"
+  },
+  {
+   "description": "last valid sequence seals; the next one fails closed with no wraparound (D8)",
+   "id": "seal_at_effective_ceiling_then_exhausted",
+   "outcome": "ok",
+   "result": {
+    "last_valid_sequence": 9007199254740991,
+    "then": "SequenceExhausted"
+   }
+  },
+  {
+   "description": "handshake frame beyond 64 KiB refused before the socket",
+   "exception": "ProtocolError",
+   "id": "handshake_frame_oversize",
+   "outcome": "raises"
+  }
+ ],
+ "frozen_sources": {
+  "core/canonical.py": "e35983f1c77cbea889c9b298d17ec99d1728095f8d1a800e2fe1ff80086bcb2d",
+  "core/rpc/handshake.py": "ac745544a65364623c7b41d3255f5ed5d0f601075155a6a4d3b1b53dd3d105bd"
+ },
+ "protocol": {
+  "aad": [
+   {
+    "aad_hex": "7b22646972656374696f6e223a22446972656374696f6e2e484f53545f544f5f4147454e54222c226d6573736167655f74797065223a2252455155455354222c2270726f746f636f6c5f76657273696f6e223a312c2273657175656e6365223a302c2273657373696f6e5f6964223a225345532d30313233343536373839414243444546227d",
+    "direction": "enum",
+    "id": "h2a_request_seq0",
+    "message_type": "REQUEST",
+    "sequence": 0
+   },
+   {
+    "aad_hex": "7b22646972656374696f6e223a22446972656374696f6e2e484f53545f544f5f4147454e54222c226d6573736167655f74797065223a2252455155455354222c2270726f746f636f6c5f76657273696f6e223a312c2273657175656e6365223a312c2273657373696f6e5f6964223a225345532d30313233343536373839414243444546227d",
+    "direction": "enum",
+    "id": "h2a_request_seq1",
+    "message_type": "REQUEST",
+    "sequence": 1
+   },
+   {
+    "aad_hex": "7b22646972656374696f6e223a22446972656374696f6e2e4147454e545f544f5f484f5354222c226d6573736167655f74797065223a22524553504f4e5345222c2270726f746f636f6c5f76657273696f6e223a312c2273657175656e6365223a302c2273657373696f6e5f6964223a225345532d30313233343536373839414243444546227d",
+    "direction": "enum",
+    "id": "a2h_response_seq0",
+    "message_type": "RESPONSE",
+    "sequence": 0
+   },
+   {
+    "aad_hex": "7b22646972656374696f6e223a22446972656374696f6e2e4147454e545f544f5f484f5354222c226d6573736167655f74797065223a224556454e54222c2270726f746f636f6c5f76657273696f6e223a312c2273657175656e6365223a302c2273657373696f6e5f6964223a225345532d30313233343536373839414243444546227d",
+    "direction": "enum",
+    "id": "a2h_event_seq0",
+    "message_type": "EVENT",
+    "sequence": 0
+   },
+   {
+    "aad_hex": "7b22646972656374696f6e223a22446972656374696f6e2e4147454e545f544f5f484f5354222c226d6573736167655f74797065223a22425945222c2270726f746f636f6c5f76657273696f6e223a312c2273657175656e6365223a302c2273657373696f6e5f6964223a225345532d30313233343536373839414243444546227d",
+    "direction": "enum",
+    "id": "a2h_bye_seq0",
+    "message_type": "BYE",
+    "sequence": 0
+   },
+   {
+    "aad_hex": "7b22646972656374696f6e223a22686f73742d746f2d6167656e74222c226d6573736167655f74797065223a2252455155455354222c2270726f746f636f6c5f76657273696f6e223a312c2273657175656e6365223a302c2273657373696f6e5f6964223a225345532d30313233343536373839414243444546227d",
+    "direction": "raw-value",
+    "id": "h2a_request_seq0_raw_value_string",
+    "message_type": "REQUEST",
+    "sequence": 0
+   }
+  ],
+  "constants": {
+   "EFFECTIVE_LAST_SEQ": 9007199254740991,
+   "LAST_SEQ": 18446744073709551614,
+   "MAX_HANDSHAKE_BYTES": 65536,
+   "TAG_LEN": 16,
+   "aead_suites": [
+    "AEAD_CHACHA20_POLY1305",
+    "AES_256_GCM"
+   ],
+   "default_max_frame_bytes": 1048576
+  },
+  "direction_strings": {
+   "enum_str": "Direction.AGENT_TO_HOST",
+   "enum_value": "agent-to-host",
+   "note": "frozen build_aad uses str(direction); with the Direction enum this yields \"Direction.AGENT_TO_HOST\". AAD bytes below encode the frozen behaviour; see docs/P4-W1-TESTVECTORS-SPEC.md finding F1."
+  },
+  "exchange": {
+   "agent_sent": [
+    {
+     "hex": "000000e77b226167656e745f76657273696f6e223a22766563746f722d302e312e30222c22636f6e74657874223a22766563746f722d636f6e74657874222c226c6162656c223a2270733472662d68616e647368616b652d7631222c226d7367223a2248454c4c4f222c226e6f6e6365223a223030303130323033303430353036303730383039306130623063306430653066222c2270726f7669646572223a22766563746f722d70726f7669646572222c227265636f766572795f7265717569726564223a66616c73652c227472616e73706f7274223a22766563746f722d7472616e73706f7274227d",
+     "id": "hello"
+    },
+    {
+     "hex": "000000577b226d6163223a2236313564653536373163383664663739313564313833316165363961623030646430333332383236383037663535643539356234333934633836663237353431222c226d7367223a2241555448227d",
+     "id": "auth"
+    }
+   ],
+   "auth_ack_mac_hex": "3b41f78e6e4e6b870ac99112685c11a3e83d8f4a78006895ed859ff9814caf85",
+   "auth_mac_hex": "615de5671c86df7915d1831ae69ab00dd0332826807f55d595b4394c86f27541",
+   "hello_ack_canonical_hex": "7b2261656164223a22414541445f43484143484132305f504f4c5931333035222c22617574685f7265717569726564223a747275652c226c696d697473223a7b226d61785f6368756e6b5f6279746573223a313034383537362c226d61785f69725f6279746573223a3236323134347d2c226d7367223a2248454c4c4f5f41434b222c226e6f6e6365223a223130313131323133313431353136313731383139316131623163316431653166222c2270726f746f636f6c5f76657273696f6e223a312c2273657373696f6e5f6964223a225345532d30313233343536373839414243444546227d",
+   "hello_canonical_hex": "7b226167656e745f76657273696f6e223a22766563746f722d302e312e30222c22636f6e74657874223a22766563746f722d636f6e74657874222c226c6162656c223a2270733472662d68616e647368616b652d7631222c226d7367223a2248454c4c4f222c226e6f6e6365223a223030303130323033303430353036303730383039306130623063306430653066222c2270726f7669646572223a22766563746f722d70726f7669646572222c227265636f766572795f7265717569726564223a66616c73652c227472616e73706f7274223a22766563746f722d7472616e73706f7274227d",
+   "host_sent": [
+    {
+     "hex": "000000e77b2261656164223a22414541445f43484143484132305f504f4c5931333035222c22617574685f7265717569726564223a747275652c226c696d697473223a7b226d61785f6368756e6b5f6279746573223a313034383537362c226d61785f69725f6279746573223a3236323134347d2c226d7367223a2248454c4c4f5f41434b222c226e6f6e6365223a223130313131323133313431353136313731383139316131623163316431653166222c2270726f746f636f6c5f76657273696f6e223a312c2273657373696f6e5f6964223a225345532d30313233343536373839414243444546227d",
+     "id": "hello_ack"
+    },
+    {
+     "hex": "0000005b7b226d6163223a2233623431663738653665346536623837306163393931313236383563313161336538336438663461373830303638393565643835396666393831346361663835222c226d7367223a22415554485f41434b227d",
+     "id": "auth_ack"
+    }
+   ]
+  },
+  "frames": [
+   {
+    "ciphertext_hex": "270c95a8c18bce52ff164c9b4a3920e93d616055969ffcc4b3cba4b8d65b5673e01d6dfefe11fcd7caebd91a45e37513c8a39097c5853649e32571a7dfef2ee2d7292d2f6269304c57",
+    "direction": "host-to-agent",
+    "frame_len": 73,
+    "id": "h2a_request_seq0",
+    "message_type": "REQUEST",
+    "nonce_hex": "7cf6b6e30000000000000000",
+    "plaintext_hex": "7b2270726f6265223a22616561642d6672616d65222c2273657175656e6365223a302c22746167223a22686f73742d746f2d6167656e74227d",
+    "sequence": 0
+   },
+   {
+    "ciphertext_hex": "a12aefb5e1b99ebb3aebcd7ac6aea37973c59d0047b1f85a0b3dc024b4be66acea78f59666f9240ca9d5589d57a9c7ec06f744f7f972653b9e1f6f9656aa5ec8b7f91e4a6c7166788d",
+    "direction": "host-to-agent",
+    "frame_len": 73,
+    "id": "h2a_request_seq1",
+    "message_type": "REQUEST",
+    "nonce_hex": "7cf6b6e30000000000000001",
+    "plaintext_hex": "7b2270726f6265223a22616561642d6672616d65222c2273657175656e6365223a312c22746167223a22686f73742d746f2d6167656e74227d",
+    "sequence": 1
+   },
+   {
+    "ciphertext_hex": "9b0ab113cdb923ca42b167b5654ecb64bffa400491d76191c76800b5f7fdc0f415658c1a4474299aa844e4adac0515a867fae0cdf6c669141dba7efa493fce04c8ec0c22f7ddafaafd",
+    "direction": "agent-to-host",
+    "frame_len": 73,
+    "id": "a2h_response_seq0",
+    "message_type": "RESPONSE",
+    "nonce_hex": "6470db330000000000000000",
+    "plaintext_hex": "7b2270726f6265223a22616561642d6672616d65222c2273657175656e6365223a302c22746167223a226167656e742d746f2d686f7374227d",
+    "sequence": 0
+   },
+   {
+    "ciphertext_hex": "b819c89e5fc02437fd8dc7c730fe40adc719459bfee318646a5aa802509c2a88c654d9a85be107072ee3ad149876d6ad22cc58855ca641286fd67275849cb0eaf1cc86290835fc243c",
+    "direction": "agent-to-host",
+    "frame_len": 73,
+    "id": "a2h_bye_seq1",
+    "message_type": "BYE",
+    "nonce_hex": "6470db330000000000000001",
+    "plaintext_hex": "7b2270726f6265223a22616561642d6672616d65222c2273657175656e6365223a312c22746167223a226167656e742d746f2d686f7374227d",
+    "sequence": 1
+   }
+  ],
+  "keys": {
+   "k_agent_to_host": "8a6d948229b65edf2fc138805a87a18c136fbe126102cd0bfccf3d446b155d97",
+   "k_host_to_agent": "10eca20a4a0ffa654d3c2500ffcbf380d6941987cf8e889771761bcdeee6a1a5",
+   "k_hs": "03c57c1fb7df0a5830f47d5559377c6fc6427c770d6cb1e1ade59388ca3c4196"
+  },
+  "nonce_prefixes": {
+   "agent_to_host": "6470db33",
+   "host_to_agent": "7cf6b6e3"
+  },
+  "objects": {
+   "hello": {
+    "agent_version": "vector-0.1.0",
+    "context": "vector-context",
+    "label": "ps4rf-handshake-v1",
+    "msg": "HELLO",
+    "nonce": "000102030405060708090a0b0c0d0e0f",
+    "provider": "vector-provider",
+    "recovery_required": false,
+    "transport": "vector-transport"
+   },
+   "hello_ack": {
+    "aead": "AEAD_CHACHA20_POLY1305",
+    "auth_required": true,
+    "limits": {
+     "max_chunk_bytes": 1048576,
+     "max_ir_bytes": 262144
+    },
+    "msg": "HELLO_ACK",
+    "nonce": "101112131415161718191a1b1c1d1e1f",
+    "protocol_version": 1,
+    "session_id": "SES-0123456789ABCDEF"
+   },
+   "probe_frames": {
+    "probe": "aead-frame",
+    "sequence": 0,
+    "tag": "host-to-agent"
+   }
+  },
+  "proofs": {
+   "agent": "615de5671c86df7915d1831ae69ab00dd0332826807f55d595b4394c86f27541",
+   "host": "3b41f78e6e4e6b870ac99112685c11a3e83d8f4a78006895ed859ff9814caf85"
+  },
+  "test_only_material": {
+   "agent_nonce_hex": "000102030405060708090a0b0c0d0e0f",
+   "host_nonce_hex": "101112131415161718191a1b1c1d1e1f",
+   "psk_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+   "session_id": "SES-0123456789ABCDEF",
+   "warning": "TEST-ONLY constants; never valid as production keys."
+  },
+  "transcript_sha256": "67100a45ce21f2300b89b38a756504620261af59adcd9d6c2444019c60a74ad3"
+ },
+ "rfc_vectors": {
+  "_provenance": {
+   "rfc4231": {
+    "bytes": 17725,
+    "sha256": "72178527ce93500e730bc8eb182b857e583096d652b64ece0879c52ba1df973b",
+    "url": "https://www.rfc-editor.org/rfc/rfc4231.txt"
+   },
+   "rfc5869": {
+    "bytes": 25854,
+    "sha256": "7a40eb3835b35fc947eb12a2ed614db079d43b26e50dbc537c31fba16397089c",
+    "url": "https://www.rfc-editor.org/rfc/rfc5869.txt"
+   },
+   "rfc8439": {
+    "bytes": 88847,
+    "sha256": "25bef70fbf7a07ff45c2fe4cb7c6ce954eac687413d8610603268b4e4415324c",
+    "url": "https://www.rfc-editor.org/rfc/rfc8439.txt"
+   },
+   "rfc8785": {
+    "bytes": 41879,
+    "sha256": "63d52294eb0e3f0014174288186d388b4ddbf2c67d1ce8af1d9726eb0c3ab240",
+    "url": "https://www.rfc-editor.org/rfc/rfc8785.txt"
+   }
+  },
+  "rfc4231_hmac_sha256": [
+   {
+    "case": 1,
+    "data": "4869205468657265",
+    "key": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+    "mac": "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7"
+   },
+   {
+    "case": 2,
+    "data": "7768617420646f2079612077616e7420666f72206e6f7468696e673f",
+    "key": "4a656665",
+    "mac": "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843"
+   },
+   {
+    "case": 3,
+    "data": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "mac": "773ea91e36800e46854db8ebd09181a72959098b3ef8c122d9635514ced565fe"
+   },
+   {
+    "case": 4,
+    "data": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+    "key": "0102030405060708090a0b0c0d0e0f10111213141516171819",
+    "mac": "82558a389a443c0ea4cc819899f2083a85f0faa3e578f8077a2e3ff46729665b"
+   },
+   {
+    "case": 6,
+    "data": "54657374205573696e67204c6172676572205468616e20426c6f636b2d53697a65204b6579202d2048617368204b6579204669727374",
+    "key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "mac": "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54"
+   },
+   {
+    "case": 7,
+    "data": "5468697320697320612074657374207573696e672061206c6172676572207468616e20626c6f636b2d73697a65206b657920616e642061206c6172676572207468616e20626c6f636b2d73697a6520646174612e20546865206b6579206e6565647320746f20626520686173686564206265666f7265206265696e6720757365642062792074686520484d414320616c676f726974686d2e",
+    "key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "mac": "9b09ffa71b942fcb27635fbcd5b0e944bfdc63644f0713938a7f51535c3a35e2"
+   }
+  ],
+  "rfc5869_hkdf_sha256": [
+   {
+    "L": 42,
+    "case": 1,
+    "ikm": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+    "info": "f0f1f2f3f4f5f6f7f8f9",
+    "okm": "3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865",
+    "prk": "077709362c2e32df0ddc3f0dc47bba6390b6c73bb50f9c3122ec844ad7c2b3e5",
+    "salt": "000102030405060708090a0b0c"
+   },
+   {
+    "L": 82,
+    "case": 2,
+    "ikm": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f",
+    "info": "b0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+    "okm": "b11e398dc80327a1c8e7f78c596a49344f012eda2d4efad8a050cc4c19afa97c59045a99cac7827271cb41c65e590e09da3275600c2f09b8367793a9aca3db71cc30c58179ec3e87c14c01d5c1f3434f1d87",
+    "prk": "06a6b88c5853361a06104c9ceb35b45cef760014904671014a193f40c15fc244",
+    "salt": "606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeaf"
+   },
+   {
+    "L": 42,
+    "case": 3,
+    "ikm": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+    "info": "",
+    "okm": "8da4e775a563c18f715f802a063c5a31b8a11f5c5ee1879ec3454e5f3c738d2d9d201395faa4b61a96c8",
+    "prk": "19ef24a32c717b167f33a91d6f648bdf96596776afdb6377ac434c1c293ccb04",
+    "salt": ""
+   }
+  ],
+  "rfc8439_aead": {
+   "aad": "50515253c0c1c2c3c4c5c6c7",
+   "ciphertext": "d31a8d34648e60db7b86afbc53ef7ec2a4aded51296e08fea9e2b5a736ee62d63dbea45e8ca9671282fafb69da92728b1a71de0a9e060b2905d6a5b67ecd3b3692ddbd7f2d778b8c9803aee328091b58fab324e4fad675945585808b4831d7bc3ff4def08e4b7a9de576d26586cec64b6116",
+   "key": "808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f",
+   "nonce": "070000004041424344454647",
+   "plaintext": "4c616469657320616e642047656e746c656d656e206f662074686520636c617373206f66202739393a204966204920636f756c64206f6666657220796f75206f6e6c79206f6e652074697020666f7220746865206675747572652c2073756e73637265656e20776f756c642062652069742e",
+   "source": "RFC 8439 §2.8.2",
+   "tag": "1ae10b594f09e26a7e902ecbd0600691"
+  },
+  "rfc8785_appendix_b": [
+   {
+    "ieee754": "0000000000000000",
+    "json": "0",
+    "verified": true
+   },
+   {
+    "ieee754": "8000000000000000",
+    "json": "0",
+    "verified": true
+   },
+   {
+    "ieee754": "0000000000000001",
+    "json": "5e-324",
+    "verified": true
+   },
+   {
+    "ieee754": "8000000000000001",
+    "json": "-5e-324",
+    "verified": true
+   },
+   {
+    "ieee754": "7fefffffffffffff",
+    "json": "1.7976931348623157e+308",
+    "verified": true
+   },
+   {
+    "ieee754": "ffefffffffffffff",
+    "json": "-1.7976931348623157e+308",
+    "verified": true
+   },
+   {
+    "ieee754": "4340000000000000",
+    "json": "9007199254740992",
+    "verified": true
+   },
+   {
+    "ieee754": "c340000000000000",
+    "json": "-9007199254740992",
+    "verified": true
+   },
+   {
+    "ieee754": "4430000000000000",
+    "json": "295147905179352830000",
+    "verified": true
+   },
+   {
+    "ieee754": "44b52d02c7e14af5",
+    "json": "9.999999999999997e+22",
+    "verified": true
+   },
+   {
+    "ieee754": "44b52d02c7e14af6",
+    "json": "1e+23",
+    "verified": true
+   },
+   {
+    "ieee754": "44b52d02c7e14af7",
+    "json": "1.0000000000000001e+23",
+    "verified": true
+   },
+   {
+    "ieee754": "444b1ae4d6e2ef4e",
+    "json": "999999999999999700000",
+    "verified": true
+   },
+   {
+    "ieee754": "444b1ae4d6e2ef4f",
+    "json": "999999999999999900000",
+    "verified": true
+   },
+   {
+    "ieee754": "444b1ae4d6e2ef50",
+    "json": "1e+21",
+    "verified": true
+   },
+   {
+    "ieee754": "3eb0c6f7a0b5ed8c",
+    "json": "9.999999999999997e-7",
+    "verified": true
+   },
+   {
+    "ieee754": "3eb0c6f7a0b5ed8d",
+    "json": "0.000001",
+    "verified": true
+   },
+   {
+    "ieee754": "41b3de4355555553",
+    "json": "333333333.3333332",
+    "verified": true
+   },
+   {
+    "ieee754": "41b3de4355555554",
+    "json": "333333333.33333325",
+    "verified": true
+   },
+   {
+    "ieee754": "41b3de4355555555",
+    "json": "333333333.3333333",
+    "verified": true
+   },
+   {
+    "ieee754": "41b3de4355555556",
+    "json": "333333333.3333334",
+    "verified": true
+   },
+   {
+    "ieee754": "41b3de4355555557",
+    "json": "333333333.33333343",
+    "verified": true
+   },
+   {
+    "ieee754": "becbf647612f3696",
+    "json": "-0.0000033333333333333333",
+    "verified": true
+   },
+   {
+    "ieee754": "43143ff3c1cb0959",
+    "json": "1424953923781206.2",
+    "verified": true
+   }
+  ],
+  "rfc8785_sample": {
+   "canonical": "{\"literals\":[null,true,false],\"numbers\":[333333333.3333333,1e+30,4.5,0.002,1e-27],\"string\":\"€$\\u000f\\nA'B\\\"\\\\\\\\\\\"/\"}",
+   "canonical_utf8_hex": "7b226c69746572616c73223a5b6e756c6c2c747275652c66616c73655d2c226e756d62657273223a5b3333333333333333332e333333333333332c31652b33302c342e352c302e3030322c31652d32375d2c22737472696e67223a22e282ac245c75303030665c6e4127425c225c5c5c5c5c222f227d",
+   "input_json": "{\n       \"numbers\": [333333333.33333329, 1E30, 4.50,\n                   2e-3, 0.000000000000000000000000001],\n       \"string\": \"\\u20ac$\\u000F\\u000aA'\\u0042\\u0022\\u005c\\\\\\\"\\/\",\n       \"literals\": [null, true, false]\n     }"
+  }
+ },
+ "schema": "ps4rf-crypto-vectors-v1"
+}

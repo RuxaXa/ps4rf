@@ -1,0 +1,21 @@
+---
+comment: Synthetic ps4rf fixture entry written in the upstream GTFOBins entry format; not a real GTFOBins entry and contains no real recipe.
+functions:
+  shell:
+    - code: ./synthetic-epsilon
+      contexts:
+        capabilities:
+          list:
+            - CAP_SETUID
+  file-read:
+    - code: ./synthetic-epsilon --synthetic-read
+      contexts:
+        capabilities:
+          list:
+            - CAP_DAC_OVERRIDE
+            - CAP_DAC_READ_SEARCH
+  command:
+    - code: ./synthetic-epsilon --synthetic-cmd
+      contexts:
+        capabilities:
+...

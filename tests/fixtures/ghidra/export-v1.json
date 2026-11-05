@@ -1,0 +1,85 @@
+{
+  "artifact": {
+    "sha256": "bb249eaf3b7666d21e9149147d4c7a1ef04c4695cd5b539e251094d3795e7c95"
+  },
+  "decompilations": [
+    {
+      "entry": "0x401000",
+      "function": "mock_init",
+      "text": "void mock_init(void)\n{\n  mock_table = mock_alloc(0x100);\n  mock_state = 0;\n}\n",
+      "text_sha256": "67f8085aa1cd485d00081af15b88b90796fa8b5711fa5526473f6e2275800e85"
+    },
+    {
+      "entry": "0x4010b8",
+      "function": "mock_dispatch",
+      "text": "int mock_dispatch(int opcode)\n{\n  if (opcode > 7) {\n    return -1;\n  }\n  return mock_table[opcode](mock_state);\n}\n",
+      "text_sha256": "3216cf16ce60f216023c73554622138ac0be4c3ccdd3e80790d97d0b229e887d"
+    }
+  ],
+  "functions": [
+    {
+      "body_sha256": "cf5c359532f177788f854516a1d4d336e69b647f75e3a5b26771898dd7b057b8",
+      "entry": "0x401000",
+      "name": "mock_init",
+      "size": 64
+    },
+    {
+      "body_sha256": "64db6ede47d4dc5c33622568ff0576396c559f2d106c510fa09fb2b97089140f",
+      "entry": "0x401040",
+      "name": "mock_parse_header",
+      "size": 120
+    },
+    {
+      "body_sha256": "b9662a1490b51335893ed1ce35296ed4db10d6c20aea5162caf69336e8083ddb",
+      "entry": "0x4010b8",
+      "name": "mock_dispatch",
+      "size": 288
+    },
+    {
+      "body_sha256": "4834558688ef6f3df85623683dade18fe6ac76f168235f9bd17f93d516abe1a5",
+      "entry": "0x4011d8",
+      "name": "mock_free",
+      "size": 48
+    },
+    {
+      "body_sha256": "fee5b4605a50960d9abd0099bc09b97bd5e43dd91ae106832c8665b219dad1ed",
+      "entry": "0x401208",
+      "name": "mock_helper",
+      "size": 36
+    }
+  ],
+  "generator": {
+    "script": "ps4rf_ghidra_export.py",
+    "script_sha256": "a10264395399644b03b2981de1e18b4da4113f1ac1d5b2a252be23ea0fa9a9f0",
+    "tool": "ghidra-headless",
+    "version": "11.0-mock"
+  },
+  "program": {
+    "image_base": "0x00400000",
+    "language": "x86:LE:64:default (mock)",
+    "name": "ps4rf-fixture"
+  },
+  "schema": "ps4rf.ghidra.export/v1",
+  "xrefs": [
+    {
+      "from": "0x4010c4",
+      "to": "0x401000",
+      "type": "CALL"
+    },
+    {
+      "from": "0x4010e0",
+      "to": "0x401208",
+      "type": "CALL"
+    },
+    {
+      "from": "0x401060",
+      "to": "0x401208",
+      "type": "CALL"
+    },
+    {
+      "from": "0x401118",
+      "to": "0x404020",
+      "type": "DATA"
+    }
+  ]
+}

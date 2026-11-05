@@ -1,0 +1,289 @@
+{
+  "categories": [
+    {
+      "category": "os_kernel",
+      "entries": [
+        {
+          "key": "os.name",
+          "value": "Linux (synthetic)"
+        },
+        {
+          "key": "kernel.release",
+          "value": "6.8.0-synth"
+        },
+        {
+          "key": "uname.machine",
+          "value": "x86_64"
+        }
+      ]
+    },
+    {
+      "category": "identity",
+      "entries": [
+        {
+          "key": "uid",
+          "value": "1000"
+        },
+        {
+          "key": "gid",
+          "value": "1000"
+        },
+        {
+          "key": "groups",
+          "value": "synth:synth:adm"
+        }
+      ]
+    },
+    {
+      "category": "mounts",
+      "entries": [
+        {
+          "key": "/",
+          "value": "ext4 rw,relatime"
+        },
+        {
+          "key": "/tmp",
+          "value": "tmpfs rw,nosuid,nodev"
+        },
+        {
+          "key": "/home",
+          "value": "ext4 rw"
+        }
+      ]
+    },
+    {
+      "category": "filesystem_permissions",
+      "entries": [
+        {
+          "key": "/etc",
+          "value": "drwxr-xr-x root:root"
+        },
+        {
+          "key": "/tmp",
+          "value": "drwxrwxrwt root:root"
+        },
+        {
+          "key": "/home/synth-user",
+          "value": "drwx------ synth:synth"
+        }
+      ]
+    },
+    {
+      "category": "suid",
+      "entries": [
+        {
+          "key": "/usr/bin/synth-suid-helper",
+          "value": "4755 root:root"
+        }
+      ]
+    },
+    {
+      "category": "sgid",
+      "entries": [
+        {
+          "key": "/usr/bin/synth-sgid-helper",
+          "value": "2755 root:synth"
+        }
+      ]
+    },
+    {
+      "category": "path",
+      "entries": [
+        {
+          "key": "PATH",
+          "value": "/usr/local/bin:/usr/bin:/bin"
+        }
+      ]
+    },
+    {
+      "category": "environment",
+      "entries": [
+        {
+          "key": "HOME",
+          "value": "/home/synth-user"
+        },
+        {
+          "key": "LANG",
+          "value": "C.UTF-8"
+        },
+        {
+          "key": "PATH",
+          "value": "/usr/local/bin:/usr/bin:/bin"
+        },
+        {
+          "key": "SHELL",
+          "value": "/bin/sh"
+        }
+      ]
+    },
+    {
+      "category": "processes",
+      "entries": [
+        {
+          "key": "1",
+          "value": "init"
+        },
+        {
+          "key": "4242",
+          "value": "synth-agent"
+        }
+      ]
+    },
+    {
+      "category": "services",
+      "entries": [
+        {
+          "key": "synth-agent.service",
+          "value": "enabled"
+        },
+        {
+          "key": "synth-maintenance.timer",
+          "value": "static"
+        }
+      ]
+    },
+    {
+      "category": "sockets",
+      "entries": [
+        {
+          "key": "unix:/run/synth.sock",
+          "value": "synth-agent listening"
+        },
+        {
+          "key": "tcp:127.0.0.1:8080",
+          "value": "synth-agent listening"
+        }
+      ]
+    },
+    {
+      "category": "cron",
+      "entries": [
+        {
+          "key": "/etc/crontab",
+          "value": "0 3 * * * synth-user /usr/local/bin/synth-maintenance"
+        }
+      ]
+    },
+    {
+      "category": "writable_executables",
+      "entries": [
+        {
+          "key": "/usr/local/bin/synth-tool",
+          "value": "mode 0777 owner synth"
+        }
+      ]
+    },
+    {
+      "category": "writable_libraries",
+      "entries": [
+        {
+          "key": "/usr/local/lib/libsynth.so",
+          "value": "mode 0777 owner synth"
+        }
+      ]
+    },
+    {
+      "category": "writable_configuration",
+      "entries": [
+        {
+          "key": "/etc/synth-agent.conf",
+          "value": "mode 0666 owner synth"
+        }
+      ]
+    },
+    {
+      "category": "device_nodes",
+      "entries": [
+        {
+          "key": "/dev/synth-ctl",
+          "value": "crw-rw-rw- root:root"
+        }
+      ]
+    },
+    {
+      "category": "loaded_modules",
+      "entries": [
+        {
+          "key": "synth_mod",
+          "value": "loaded refcount 1"
+        }
+      ]
+    },
+    {
+      "category": "sysctls",
+      "entries": [
+        {
+          "key": "kernel.randomize_va_space",
+          "value": "2"
+        },
+        {
+          "key": "net.ipv4.ip_forward",
+          "value": "0"
+        }
+      ]
+    },
+    {
+      "category": "procfs",
+      "entries": [
+        {
+          "key": "/proc/sys/kernel/randomize_va_space",
+          "value": "2"
+        },
+        {
+          "key": "/proc/self/status",
+          "value": "synthetic capture"
+        }
+      ]
+    },
+    {
+      "category": "systemd",
+      "entries": [
+        {
+          "key": "synth-agent.service",
+          "value": "enabled active"
+        },
+        {
+          "key": "synth-maintenance.timer",
+          "value": "enabled waiting"
+        }
+      ]
+    },
+    {
+      "category": "shells",
+      "entries": [
+        {
+          "key": "/bin/sh",
+          "value": "present"
+        },
+        {
+          "key": "/bin/bash",
+          "value": "present"
+        }
+      ]
+    },
+    {
+      "category": "installed_binaries",
+      "entries": [
+        {
+          "key": "/usr/bin/synth-tool",
+          "value": "1.0"
+        },
+        {
+          "key": "/usr/local/bin/synth-maintenance",
+          "value": "1.0"
+        }
+      ]
+    }
+  ],
+  "collector": {
+    "tool": "ps4rf-unix-collector",
+    "version": "0.1-mock"
+  },
+  "schema": "ps4rf.unix_privesc.collect/v1",
+  "target": {
+    "hostname": "synth-host",
+    "kernel": "6.8.0-synth",
+    "os": "Linux (synthetic)",
+    "platform_hint": "Linux"
+  }
+}

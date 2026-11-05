@@ -1,0 +1,88 @@
+{
+  "name": "q6-window-recipe",
+  "profile": "fw1352",
+  "version": 3,
+  "provenance": {
+    "source": "P13-v4.2 observer recipe (accepted) with the state-block addresses corrected from the FW13.52 kernel image",
+    "source_file": "kernel.bin (session-handoffs/20260921_ps4b-soc-independent-analysis)",
+    "source_sha256": "cf157ffdbae872a20bbb9a46c8518b53d96c1ed75d4e73878466a295d92eca35",
+    "note": "the pup_update state block is the static 0x50 byte object at RVA 0x2684810 (its address is cdev->si_drv1); the window pointers are state+0x30 -> RVA 0x2684840 and state+0x38 -> RVA 0x2684848, written by the driver attach (0x637537 sets window A to RVA 0x2688000, 0x63753e passes &window_B to the service init) and NULLed by the detach (0x637578/0x63758f). No code in the image references the 0x2686xxx page, which is why v2 could only ever read zero. No window backing buffer is read by absolute RVA: window bytes come only from the root chain.",
+    "supersedes": "q6-recipe-v2 (window roots 0x2686840/0x2686848, a dead page)"
+  },
+  "limits": {
+    "max_entries": 16,
+    "max_entry_len": 4096,
+    "max_disp": 4096
+  },
+  "entries": [
+    {
+      "i": 0,
+      "name": "CDEV_SLOT",
+      "type": "RVA_READ",
+      "rva": "0x2684810",
+      "length": 8,
+      "role": "resolved authority (cdev pointer); its own address is state+0x00"
+    },
+    {
+      "i": 1,
+      "name": "SOFTC_A_ROOT",
+      "type": "RVA_READ",
+      "rva": "0x2684840",
+      "length": 8,
+      "role": "resolved authority (window A pointer = state+0x30) or 0"
+    },
+    {
+      "i": 2,
+      "name": "SOFTC_B_ROOT",
+      "type": "RVA_READ",
+      "rva": "0x2684848",
+      "length": 8,
+      "role": "resolved authority (window B pointer = state+0x38) or 0"
+    },
+    {
+      "i": 3,
+      "name": "A_HEAD",
+      "type": "FOLLOW_ONCE",
+      "root_index": 1,
+      "disp": 0,
+      "length": 768,
+      "role": "window A head + status"
+    },
+    {
+      "i": 4,
+      "name": "A_STATUS",
+      "type": "FOLLOW_ONCE",
+      "root_index": 1,
+      "disp": 352,
+      "length": 260,
+      "role": "window A status region"
+    },
+    {
+      "i": 5,
+      "name": "A_CHUNK",
+      "type": "FOLLOW_ONCE",
+      "root_index": 1,
+      "disp": 640,
+      "length": 1024,
+      "role": "window A chunk"
+    },
+    {
+      "i": 6,
+      "name": "B_HEAD",
+      "type": "FOLLOW_ONCE",
+      "root_index": 2,
+      "disp": 0,
+      "length": 768,
+      "role": "window B head + status"
+    },
+    {
+      "i": 7,
+      "name": "B_STATUS",
+      "type": "FOLLOW_ONCE",
+      "root_index": 2,
+      "disp": 352,
+      "length": 260,
+      "role": "window B status region"
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+# linPEAS fixture report (SYNTHETIC)
+# generated offline by tools/recon/peass/mock/linpeas_mock.py
+# scanner: linPEAS 20231115-mock
+# synthetic: true
+# no real host was contacted and no credentials are present
+
+╔══════════╣ System Information ╚ offline fixture ╝
+╚ hostname: ps4-fixture-console
+╚ uname -a: FreeBSD ps4-fixture-console 9.0-RELEASE-p12 FreeBSD 9.0-RELEASE-p12 #1 r284361: aarch64
+╚ model: PS4-family console (SYNTHETIC fixture)
+╚ Orbis OS: FreeBSD-derived console OS (SYNTHETIC fixture)
+
+╔══════════╣ Filesystem ╚ offline fixture ╝
+╚ writable directory: /data/self (fixture)
+╚ world-writable file: /data/app0/tmp.sock (mode 0777, fixture)
+
+╔══════════╣ Mounts ╚ offline fixture ╝
+╚ ufs on / (rw, fixture)
+╚ devfs on /dev (fixture)
+╚ /dev/md0 on /system (ro, fixture)
+
+╔══════════╣ Permissions ╚ offline fixture ╝
+╚ directory owned by console user: /user (fixture)
+╚ world-writable directory: /data/tmp (fixture)
+
+╔══════════╣ Services ╚ offline fixture ╝
+╚ system daemon with elevated context observed (SYNTHETIC fixture, not a real console sample)
+╚ background daemon observed (fixture)
+
+╔══════════╣ Active Sockets ╚ offline fixture ╝
+╚ tcp 127.0.0.1:2222 LISTEN (fixture)
+╚ unix socket /data/app0/control.sock (fixture)
+
+╔══════════╣ Credentials Search ╚ offline fixture ╝
+╚ /user/app/.netrc: credential-like directives observed (values never copied)
+
+╔══════════╣ Interesting Binaries ╚ offline fixture ╝
+╚ /usr/bin/console-tool present (SYNTHETIC fixture name)
+╚ /data/self/bootstrap present (SYNTHETIC fixture)

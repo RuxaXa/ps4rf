@@ -1,0 +1,199 @@
+{
+  "base_rva": "0x1000",
+  "cases": {
+    "callee_conditional_free": "a release on one arm is conditional, so must becomes may",
+    "callee_deref": "parameter 0 is dereferenced at +0x10, width 4",
+    "callee_drop_guarded": "a lock xadd of -1 followed by cmp 1 is a guarded refcount drop",
+    "callee_drop_unguarded": "a lock xadd of -1 with no count test is an unguarded drop",
+    "callee_escape_global": "a store to a global is an escape, not a release",
+    "callee_indirect": "an indirect call forces every postcondition to UNKNOWN",
+    "callee_lea_interior": "an interior pointer keeps the base object identity",
+    "callee_return_alloc": "returning a callee result is an object of unknown ownership",
+    "callee_return_arg": "returning the argument is an alias, not a new reference",
+    "callee_return_field": "returning a field load is not an alias of the argument",
+    "callee_take": "a lock xadd of +1 is a reference take, not a drop",
+    "callee_two_args_same_field": "two parameters touch the same offset and stay distinct effects",
+    "caller_escape": "an escaping argument keeps postcondition LIVE",
+    "caller_lea_arg": "an interior pointer is still placed as the object",
+    "caller_no_setup": "a call with no argument setup proves nothing",
+    "caller_redefined_arg": "the nearest write to an argument register decides the placement",
+    "caller_return_alias_chain": "a returned alias composes into a two-hop ownership proof",
+    "caller_return_field_chain": "a returned field is a different object and must not compose",
+    "caller_subregister": "a 32-bit write to edi still places the object"
+  },
+  "image_hex": "c3534889d85bc38b4710c3488b4710483b4610c3b8fffffffff00fc1472883f8017505e8d8ffffffc3b8fffffffff00fc14728e8c8ffffffc3b801000000f00fc14728c348837f08007405e8b0ffffffc348893da80f0000c34889f8c3488b4708c34883ec08e896ffffff4883c408c3488d47108b00c3ffd0c3488b47304889c7e87affffffc3534889fb488b7b30e86cffffff488b7b30e863ffffff5bc3534889fb488b7b30e854ffffff488b7b38e84bffffff5bc3488b3d4a0f0000e83dffffffc3488b3d3d0f0000e830ffffff488b3d310f0000e824ffffffc34889c74889cfe81fffffffc389c7e817ffffffc3488d7810e80dffffffc3e807ffffffc34883ec08e84fffffff4889c7e817ffffff4883c408c34883ec08e83dffffff4889c7e801ffffff4883c408c34883ec08e81bffffff4883c408c34889c7e8e6feffffc34889c7e8bbfeffffc34889c7e8effeffffc3488b04f74889c7e89efeffffc35341544889fb4989f44a8b3ce3e88bfeffff4a8b3ce3e882feffff415c5bc353415441554889fb4989f44989d54a8b3ce3e867feffff4a8b3cebe85efeffff415d415c5bc35341544889fb4989f44a8b3ce3e846feffff488b43084a8904e34a8b3ce3e835feffff415c5bc35341544889fb4c8b63104a8b3ce3e81efeffff4c8b63104a8b3ce3e811feffff415c5bc3534889fb488b7b18e800feffff488b7b18e8f7fdffff5bc35341544889fb4189f44181e4ff0000004a8b3ce3e8dcfdffff4a8b3ce3e8d3fdffff415c5bc353415441554889fb4189f44181e4ff0000004189d54181e5ff0000004a8b3ce3e8aafdffff4a8b3cebe8a1fdffff415d415c5bc35341544889fb4c63e649c1e4044a8b3c23e885fdffff4a8b3c23e87cfdffff415c5bc353415441554889fb4c63e649c1e4044c63ee49c1e5054a8b3c23e859fdffff4a8b3c2be850fdffff415d415c5bc3534889fb31ff488b7b104885ff7407e836fdffffebf05bc3534889fb488b7b184885ff740be820fdffff488b7b10ebf05bc3534889fb488b7b10ffd0e809fdffff5bc3",
+  "image_sha256": "c0ee26b3ed79a23d2dec688d1ac5f0a4924d68550418b7b103772e99b922ac50",
+  "release_roots": [
+    "own_release"
+  ],
+  "symbols": {
+    "callee_clobbered_by_call": {
+      "rva": "0x12e8",
+      "size": "0x11"
+    },
+    "callee_conditional_free": {
+      "rva": "0x1044",
+      "size": "0xd"
+    },
+    "callee_deref": {
+      "rva": "0x1007",
+      "size": "0x4"
+    },
+    "callee_double_drop_field": {
+      "rva": "0x1087",
+      "size": "0x18"
+    },
+    "callee_double_drop_global": {
+      "rva": "0x10c4",
+      "size": "0x19"
+    },
+    "callee_drop_field_pointer": {
+      "rva": "0x107a",
+      "size": "0xd"
+    },
+    "callee_drop_global_pointer": {
+      "rva": "0x10b7",
+      "size": "0xd"
+    },
+    "callee_drop_guarded": {
+      "rva": "0x1014",
+      "size": "0x15"
+    },
+    "callee_drop_unguarded": {
+      "rva": "0x1029",
+      "size": "0x10"
+    },
+    "callee_escape_global": {
+      "rva": "0x1051",
+      "size": "0x8"
+    },
+    "callee_index_constant": {
+      "rva": "0x11f3",
+      "size": "0x18"
+    },
+    "callee_index_double_drop": {
+      "rva": "0x1163",
+      "size": "0x1f"
+    },
+    "callee_index_drop": {
+      "rva": "0x1156",
+      "size": "0xd"
+    },
+    "callee_index_masked": {
+      "rva": "0x120b",
+      "size": "0x26"
+    },
+    "callee_index_masked_other_input": {
+      "rva": "0x1231",
+      "size": "0x34"
+    },
+    "callee_index_reallocated": {
+      "rva": "0x11a8",
+      "size": "0x27"
+    },
+    "callee_index_struct_other_stride": {
+      "rva": "0x1288",
+      "size": "0x2e"
+    },
+    "callee_index_struct_scaled": {
+      "rva": "0x1265",
+      "size": "0x23"
+    },
+    "callee_index_two_indices": {
+      "rva": "0x1182",
+      "size": "0x26"
+    },
+    "callee_index_unknown_index": {
+      "rva": "0x11cf",
+      "size": "0x24"
+    },
+    "callee_indirect": {
+      "rva": "0x1077",
+      "size": "0x3"
+    },
+    "callee_lea_interior": {
+      "rva": "0x1070",
+      "size": "0x7"
+    },
+    "callee_may_release_in_loop": {
+      "rva": "0x12b6",
+      "size": "0x18"
+    },
+    "callee_may_two_objects": {
+      "rva": "0x12ce",
+      "size": "0x1a"
+    },
+    "callee_return_alloc": {
+      "rva": "0x1062",
+      "size": "0xe"
+    },
+    "callee_return_arg": {
+      "rva": "0x1059",
+      "size": "0x4"
+    },
+    "callee_return_field": {
+      "rva": "0x105d",
+      "size": "0x5"
+    },
+    "callee_take": {
+      "rva": "0x1039",
+      "size": "0xb"
+    },
+    "callee_two_args_same_field": {
+      "rva": "0x100b",
+      "size": "0x9"
+    },
+    "callee_two_fields_one_drop_each": {
+      "rva": "0x109f",
+      "size": "0x18"
+    },
+    "caller_escape": {
+      "rva": "0x112d",
+      "size": "0xe"
+    },
+    "caller_hop_conditional": {
+      "rva": "0x114d",
+      "size": "0x9"
+    },
+    "caller_hop_negative": {
+      "rva": "0x1144",
+      "size": "0x9"
+    },
+    "caller_hop_positive": {
+      "rva": "0x113b",
+      "size": "0x9"
+    },
+    "caller_lea_arg": {
+      "rva": "0x10f1",
+      "size": "0xa"
+    },
+    "caller_no_setup": {
+      "rva": "0x10fb",
+      "size": "0x6"
+    },
+    "caller_redefined_arg": {
+      "rva": "0x10dd",
+      "size": "0xc"
+    },
+    "caller_return_alias_chain": {
+      "rva": "0x1101",
+      "size": "0x16"
+    },
+    "caller_return_field_chain": {
+      "rva": "0x1117",
+      "size": "0x16"
+    },
+    "caller_subregister": {
+      "rva": "0x10e9",
+      "size": "0x8"
+    },
+    "own_alloc": {
+      "rva": "0x1001",
+      "size": "0x6"
+    },
+    "own_release": {
+      "rva": "0x1000",
+      "size": "0x1"
+    }
+  }
+}

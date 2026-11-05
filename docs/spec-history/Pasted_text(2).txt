@@ -1,0 +1,911 @@
+PS4RF v0.3 — Korrekturen K1–K12, Metasploit-Integration, OrbisProbe-Vorbereitung
+0. Status
+Punkt
+	
+Entscheidung
+	
+Schema-Auswirkung
+K1 Dotted Capability Names	verbindlich	Katalog + Registry-Updates
+K2 Availability × Assurance	verbindlich, zweidimensional	capability.schema.json neu geschrieben
+K3 Getrennte Kontext-Enums	verbindlich	target_execution_context / exploit_execution_context
+K4 Session Key Hardening	verbindlich, HKDF + mutual proof + AEAD	rpc.schema.json Handshake neu
+K5 RFC 8785 (JCS)	verbindlich	ir_encoding, Hash-Regel, Golden Vectors
+K6 Snapshot Reihenfolge	korrigiert wie vorgeschlagen	Operation-Vertrag
+K7 Experiment Budget	verbindlich	budget in IR + Compiler-Regeln
+K8 Resource Refs	verbindlich	Prefix-Tabelle, xsession:
+K9 RECOVERY_REQUIRED	verbindlich	Session State Machine + Error Codes
+K10/K11 OrbisProbe	Blockiert: kein Repo-Zugriff — Template + Extraktor + Mapping-Skelett geliefert	—
+K12 Reihenfolge	bestätigt, Mock-first	—
+Metasploit	als Host-Adapter + Provider-Klasse spezifiziert	Evidence-Def + Authority-Regel
+ 
+ 
+
+Vetovorbehalt wie üblich: alles außer K2/K4 ist mechanisch änderbar.
+1. K1 — Capability Naming
+
+Pattern in common.schema.json bleibt unverändert (Pflicht-Punkt ist bereits korrekt). Verbindlich ist ab jetzt der Katalog; alle alten Underscore-Namen sind verboten.
+
+Canonical Capability Catalog v1 (core/capabilities/catalog.json):
+text
+ 
+  
+ 
+ 
+userland.exec      userland.read     userland.write
+kernel.exec        kernel.read       kernel.write
+kernel.copyout     kernel.transition kernel.dump.full
+gpuvm.map          gpuvm.unmap       gpuvm.lookup
+keymgr.claim       keymgr.release    keymgr.snapshot
+ccp.submit         samu.access
+memory.alloc       memory.free
+network.socket     filesystem.read   filesystem.write
+ioctl.open         syscall.available jit.available
+shared_memory.create
+pup.access         eap.access        sbram.access     emc.access     secure.access
+rpc.transport
+ 
+ 
+
+Migrationstabelle (alt → neu, verbindlich für alle bestehenden Dokumente):
+text
+ 
+  
+ 
+ 
+kernel_exec        → kernel.exec        kernel_read   → kernel.read
+kernel_write       → kernel.write       userland_exec → userland.exec
+userland_read      → userland.read      userland_write→ userland.write
+copyout            → kernel.copyout     gpuvm         → gpuvm.map
+keymgr             → keymgr.claim       ccp           → ccp.submit
+samu               → samu.access        pup           → pup.access
+kernel_full_dump   → kernel.dump.full
+ 
+ 
+
+Namensraum-Regel: Operationen und Capabilities sind getrennte Namespaces und dürfen identisch benannt sein (gpuvm.map existiert als Operation und Capability). Disambiguierung nur über das Feld: operation (RPC body) vs. requires_capability (Registry) vs. requires (Experiment IR).
+
+Registry-Update: kernel.snapshot → requires_capability: "kernel.read"; kernel.dump.full → requires_capability: "kernel.dump.full".
+
+Privilegierte Namespaces (Grant nur mit assurance = PROVEN):
+text
+ 
+  
+ 
+ 
+kernel.*  gpuvm.*  keymgr.*  ccp.*  samu.*  pup.*  eap.*  sbram.*  emc.*  secure.*
+ 
+ 
+2. K2 — Capability State: Availability × Assurance
+
+Die eindimensionale Rangliste wird gestrichen. Zwei orthogonale Achsen:
+text
+ 
+  
+ 
+ 
+Availability (aktueller Session-Befund):  UNKNOWN, AVAILABLE, DEGRADED, UNAVAILABLE
+Assurance   (Beleggrad der Aussage):      UNVERIFIED, OBSERVED, PROVEN
+ 
+ 
+
+Normative Conflict Resolution — angewendet pro Capability, nur zwischen Records mit gleichem scope und gleichem context:
+text
+ 
+  
+ 
+ 
+1. MANUAL            manuelle Entscheidung gewinnt immer, wird geloggt
+2. SESSION_SCOPE     fremde Scopes/Contexte kollidieren nicht (Separation, kein Konflikt)
+3. PROVIDER_AUTHORITY pro Achse: Provider mit höherer Authority gewinnt für seine Achse
+4. AVAILABILITY_OVERRIDE  bei gleicher Authority: aktueller Runtime-Befund
+                     (UNAVAILABLE/DEGRADED, neuerer created_at) schlägt älteres
+                     AVAILABLE — Availability ist immer "Session-Wahrheit jetzt"
+5. EVIDENCE          für Assurance: PROVEN(mit verified_by) > OBSERVED > UNVERIFIED;
+                     Assurance verfällt NICHT durch Recency allein innerhalb der Session
+6. RECENCY           letzter Tie-Breaker
+ 
+ 
+
+Effektive Grant-Regel:
+text
+ 
+  
+ 
+ 
+granted  ⇔  context match
+        ∧  availability == AVAILABLE  (∨ DEGRADED && allow_degraded)
+        ∧  assurance >= min_assurance_for_grant (Namespace-Regel, privilegiert: PROVEN)
+ 
+ 
+
+Wichtige Konsequenz, explizit festgehalten: PROVEN + aktuelles UNAVAILABLE = nicht granted. Assurance ist die historische Belegqualität, Availability die aktuelle Verwendbarkeit — genau der Fall „alter Exploit-Befund vs. aktuelles Probe-Ergebnis".
+
+Schema-ä.forceerbare Regeln:
+text
+ 
+  
+ 
+ 
+assurance == PROVEN            → evidence + verified_by Pflicht (if/then)
+verified_by.operation          → Pattern "^verify\."  (Verifikation nur durch
+                                 dedizierte PS4RF verify.*-Primitive; §76/K-Metasploit)
+provider_type == RUNTIME_PROBE → assurance nur UNVERIFIED|OBSERVED (if/then)
+ 
+ 
+2.1 schemas/capability.schema.json — vollständig neu (ersetzt v0.2-Fassung)
+json
+ 
+  
+ 
+ 
+          "description": "Dotted-Prefix-Match; spezifischster Eintrag gewinnt" },
+        "min_assurance_for_grant": { "$ref": "#/$defs/assurance" },
+        "providers": { "type": "array", "minItems": 1,
+          "items": { "$ref": "#/$defs/provider_authority" } }
+      }
+    },
+
+    "capability_conflict": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "records", "resolution", "resolved"],
+      "properties": {
+        "name": { "$ref": "common.schema.json#/$defs/capability_name" },
+        "records": { "type": "array", "minItems": 2,
+          "items": { "$ref": "#/$defs/capability_record" } },
+        "resolution": {
+          "type": "object", "additionalProperties": false,
+          "required": ["factor"],
+          "properties": {
+            "factor": { "$ref": "#/$defs/conflict_factor" },
+            "detail": { "type": "string" }
+          }
+        },
+        "resolved": {
+          "type": "object", "additionalProperties": false,
+          "required": ["availability", "assurance"],
+          "properties": {
+            "availability": { "$ref": "#/$defs/availability" },
+            "assurance": { "$ref": "#/$defs/assurance" }
+          }
+        }
+      }
+    },
+
+    "capability_requirement": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "min_assurance"],
+      "properties": {
+        "name": { "$ref": "common.schema.json#/$defs/capability_name" },
+        "min_assurance": { "$ref": "#/$defs/assurance" },
+        "allow_degraded": { "type": "boolean", "default": false }
+      }
+    },
+
+    "grant_decision": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "granted"],
+      "properties": {
+        "name": { "$ref": "common.schema.json#/$defs/capability_name" },
+        "granted": { "type": "boolean" },
+        "reason": { "enum": ["OK", "CAPABILITY_MISSING", "CONTEXT_MISMATCH",
+          "AUTHORITY_INVALID", "PROFILE_MISMATCH", "ASSURANCE_INSUFFICIENT",
+          "DEGRADED_NOT_ALLOWED", "RECOVERY_REQUIRED"] },
+        "effective": {
+          "type": "object", "additionalProperties": false,
+          "required": ["availability", "assurance"],
+          "properties": {
+            "availability": { "$ref": "#/$defs/availability" },
+            "assurance": { "$ref": "#/$defs/assurance" } } },
+        "detail": { "type": "string" }
+      }
+    },
+
+    "capability_set": {
+      "type": "object", "additionalProperties": false,
+      "required": ["session_id", "context", "records"],
+      "properties": {
+        "session_id": { "$ref": "common.schema.json#/$defs/session_id" },
+        "context": { "$ref": "common.schema.json#/$defs/target_execution_context" },
+        "records": { "type": "array", "items": { "$ref": "#/$defs/capability_record" } },
+        "conflicts": { "type": "array", "items": { "$ref": "#/$defs/capability_conflict" } }
+      }
+    },
+
+    "negotiation_request": {
+      "type": "object", "additionalProperties": false,
+      "required": ["context", "requires"],
+      "properties": {
+        "context": { "$ref": "common.schema.json#/$defs/target_execution_context" },
+        "requires": { "type": "array", "minItems": 1,
+          "items": { "$ref": "#/$defs/capability_requirement" } }
+      }
+    },
+    "negotiation_result": {
+      "type": "object", "additionalProperties": false,
+      "required": ["session_id", "context", "granted", "denied"],
+      "properties": {
+        "session_id": { "$ref": "common.schema.json#/$defs/session_id" },
+        "context": { "$ref": "common.schema.json#/$defs/target_execution_context" },
+        "granted": { "type": "array", "items": { "$ref": "#/$defs/capability_record" } },
+        "denied": { "type": "array", "items": { "$ref": "#/$defs/grant_decision" } }
+      }
+    }
+  }
+}
+ 
+ 
+2.2 Authority-Tabelle als Daten (core/capabilities/authority.json, Auszug)
+json
+ 
+  
+ 
+ 
+[
+  { "namespace": "kernel", "min_assurance_for_grant": "PROVEN", "providers": [
+    { "provider_type": "EXPLOIT",        "max_assurance": "PROVEN",    "availability_write": true },
+    { "provider_type": "RUNTIME_PROBE",  "max_assurance": "OBSERVED",  "availability_write": true },
+    { "provider_type": "FIRMWARE_PROFILE","max_assurance": "UNVERIFIED","availability_write": false },
+    { "provider_type": "BOOTSTRAP",      "max_assurance": "OBSERVED",  "availability_write": true },
+    { "provider_type": "MOCK",           "max_assurance": "PROVEN",    "availability_write": true },
+    { "provider_type": "OPERATOR",       "max_assurance": "PROVEN",    "availability_write": true }
+  ]},
+  { "namespace": "metasploit-annotated", "x-note": "kein eigener Namespace; gilt via provider_pattern", "providers": [
+    { "provider_type": "EXPLOIT", "provider_pattern": "^metasploit:",
+      "max_assurance": "PROVEN", "availability_write": true,
+      "x-rule": "PROVEN nur mit separatem PS4RF-Verifikationslauf: verified_by.operation muss verify.* sein und verification_run != trigger_run" }
+  ]}
+]
+ 
+ 
+
+Gleiche Struktur für gpuvm, keymgr, ccp, samu, pup, eap, sbram, emc, secure (jeweils PROVEN-Pflicht) sowie userland, memory, network, filesystem, ioctl, rpc (je OBSERVED-Pflicht).
+3. K3 — Getrennte Kontext-Enums
+
+common.schema.json, ersetze execution_context durch:
+json
+ 
+  
+ 
+ 
+"target_execution_context": {
+  "enum": ["BROWSER", "MEDIA_PLAYER", "SYSTEM_SERVICE", "HOMEBREW",
+           "JAILBROKEN_PROCESS", "UNKNOWN"] },
+"exploit_execution_context": {
+  "enum": ["HOST", "WEB_CONTENT", "USERLAND_AGENT", "SYSTEM_SERVICE",
+           "KERNEL_CONTEXT", "BOOTSTRAP_PROVIDER", "MULTI_STAGE"] }
+ 
+ 
+
+Zuordnungsliste (verbindlich):
+Feld
+	
+Enum
+capability_record.context, Negotiation, RPC HELLO.context, evidence.bootstrap_info.execution_context	target_execution_context
+Exploit Manifest execution.{prepare,trigger,verify}, Metasploit-Kontextzuordnung	exploit_execution_context
+ 
+ 
+
+Alle Referenzen in rpc/evidence/capability werden auf target_execution_context umbenannt. exploit.schema.json (Lieferung 2) nutzt ausschließlich exploit_execution_context.
+4. K4 — Session Key Transport (gehärtet)
+
+Normativ:
+text
+ 
+  
+ 
+ 
+1. Secret: 256 Bit CSPRNG, genau einmal vom Bootstrap Provider injiziert
+   (Payload-Argumentblock bzw. WebKit-Content-Parameter).
+   VERBOTEN: URL, Query-String, Dateiname, Log, Evidence, Crash-Dump (x-secret).
+
+2. Nonces: agent_nonce, host_nonce je 128 Bit Zufall (HELLO / HELLO_ACK).
+
+3. Transcript T  = "ps4rf-handshake-v1" || session_id || nonce_agent || nonce_host
+   k_hs          = HKDF-SHA256(ikm=secret, salt=nonce_agent||nonce_host,
+                               info="ps4rf/handshake-v1", L=32)
+   proof_agent   = HMAC-SHA256(k_hs, T || 0x41)
+   proof_host    = HMAC-SHA256(k_hs, T || 0x48)
+   Mutual Proof: Agent weist sich in AUTH, Host in AUTH_ACK.
+   Session gilt erst nach beidseitigem Proof als ACTIVE.
+
+4. Schlüssableitung (Rohkey wird danach NIE direkt verwendet):
+   k_aead = HKDF-SHA256(secret, salt, "ps4rf/rpc-aead-v1", 32)
+   HKDF-Info-Registry für künftige Schlüssel; keine Wiederverwendung desselben
+   Rohkeys für MAC und Verschlüsselung.
+
+5. Wire: AEAD-framed. v1 Default AEAD_CHACHA20_POLY1305 (RFC 8439),
+   optional AES_256_GCM. Nonce = 96 Bit = 32-Bit-Richtungspräfix (aus HKDF,
+   "ps4rf/nonce-prefix-v1", je Richtung) || 64-Bit-Sequence (BE).
+   AAD = kanonischer Header (protocol_version, session_id, sequence, direction).
+   Die Sequence ist damit authentifizierte Daten. Replay → REPLAY_DETECTED
+   und Session-Abbruch (AUTH_FAILED).
+ 
+ 
+
+rpc.schema.json — geänderte/neue Defs:
+json
+ 
+  
+ 
+ 
+"aead_suite": { "enum": ["AEAD_CHACHA20_POLY1305", "AES_256_GCM"] },
+
+"hello": {
+  "type": "object", "additionalProperties": false,
+  "required": ["msg", "agent_version", "transport", "context", "nonce"],
+  "properties": {
+    "msg": { "const": "HELLO" },
+    "agent_version": { "type": "string" },
+    "transport": { "$ref": "common.schema.json#/$defs/transport" },
+    "context": { "$ref": "common.schema.json#/$defs/target_execution_context" },
+    "provider": { "type": "string" },
+    "nonce": { "$ref": "common.schema.json#/$defs/hex32" },
+    "artifact_sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+    "recovery_required": { "type": "boolean", "default": false }
+  }
+},
+"hello_ack": {
+  "type": "object", "additionalProperties": false,
+  "required": ["msg", "protocol_version", "session_id", "nonce", "auth_required", "aead"],
+  "properties": {
+    "msg": { "const": "HELLO_ACK" },
+    "protocol_version": { "const": 1 },
+    "session_id": { "$ref": "common.schema.json#/$defs/session_id" },
+    "nonce": { "$ref": "common.schema.json#/$defs/hex32" },
+    "auth_required": { "const": true },
+    "aead": { "$ref": "#/$defs/aead_suite" },
+    "limits": { "type": "object", "additionalProperties": false,
+      "properties": {
+        "max_ir_bytes": { "type": "integer", "default": 262144 },
+        "max_chunk_bytes": { "type": "integer", "default": 1048576 } } }
+  }
+},
+"auth": {
+  "type": "object", "additionalProperties": false,
+  "required": ["msg", "mac"],
+  "properties": { "msg": { "const": "AUTH" },
+    "mac": { "$ref": "common.schema.json#/$defs/hex64" } }
+},
+"auth_ack": {
+  "type": "object", "additionalProperties": false,
+  "required": ["msg", "mac"],
+  "properties": { "msg": { "const": "AUTH_ACK" },
+    "mac": { "$ref": "common.schema.json#/$defs/hex64" } }
+},
+"ready": {
+  "type": "object", "additionalProperties": false,
+  "required": ["msg", "session_id", "capabilities", "session_state"],
+  "properties": {
+    "msg": { "const": "READY" },
+    "session_id": { "$ref": "common.schema.json#/$defs/session_id" },
+    "capabilities": { "$ref": "capability.schema.json#/$defs/negotiation_result" },
+    "session_state": { "$ref": "common.schema.json#/$defs/session_state" }
+  }
+}
+ 
+ 
+
+message.oneOf um auth_ack erweitern. Reihenfolge: HELLO → HELLO_ACK → AUTH → AUTH_ACK → READY.
+5. K5 — Canonicalization: RFC 8785 (JCS)
+
+Verbindlich:
+text
+ 
+  
+ 
+ 
+Alle kanonischen Hashes (Experiment, Profile bundle.canonical_sha256,
+Evidence-Kanonisierung, IR) = SHA-256 über die RFC 8785 (JCS) Serialisierung
+(UTF-8, Keys sortiert nach UTF-16 Code Units, ES6-Zahlenformat).
+
+ir_encoding / canonical_encoding v1 = "jcs-rfc8785". Kein eigenes Format.
+ 
+ 
+json
+ 
+  
+ 
+ 
+"canonical_encoding": { "enum": ["jcs-rfc8785"] }
+ 
+ 
+
+experiment.schema.json: "ir_encoding": { "$ref": "common.schema.json#/$defs/canonical_encoding" }.
+
+Cross-Implementierungs-Pflicht (Tests, Schritt d): Golden Vectors mit mindestens: verschachtelte Key-Sortierung, Unicode-Keys (BMP + Non-BMP), Float-Edgecases (1.0, 1e21, -0.0 → JCS-Normalform), leere Container, große Integers. Python-Seite Referenzimplementierung rfc8785 (PyPI); jede künftige C-Implementierung im Agent-build muss gegen dieselben Vectors bestehen, bevor sie Hash-Autorität erhält.
+6. K6 — Snapshot Reihenfolge korrigiert
+
+Verbindlicher Vertrag für kernel.snapshot mit explicit-Range:
+text
+ 
+  
+ 
+ 
+1. Adress-/Range-Policy prüfen (Profilregionen, Alignment, Size-Cap, Overlap)
+2. Read in agent-internen Buffer
+3. SHA-256 über Buffer
+4. Vergleich gegen expected_sha256
+5. Nur bei Match: Daten chunked an den normalen Experimentpfad freigeben
+   Mismatch → PROFILE_MISMATCH; Buffer zeroizen und verwerfen;
+   gelesene Bytes verlassen den Agent NIEMALS; Telemetry state.snapshot
+   mit outcome=HASH_MISMATCH.
+ 
+ 
+
+Bei region_ref bleibt expected_sha256 optional (Live-Daten haben naturgemäß keinen Fixwert); bei explicit ist er Pflicht (bleibt schema-seitig so). Keine bytes-in-error-details — wird im Validator geprüft.
+7. K7 — Experiment Budget
+
+Compiler-Regeln (statisch, vor Upload):
+text
+ 
+  
+ 
+ 
+cost(step)      = 1 für CALL/ASSERT/SET/MUTATE/SNAPSHOT/SLEEP_BOUNDED/
+                  BARRIER/WAIT_BARRIER
+cost(IF)        = max(cost(then), cost(else))
+cost(REPEAT)    = count * cost(body)
+cost(PARALLEL)  = Σ cost(branch_i);   tasks = Anzahl branches
+expanded_steps  = Σ über alle Top-Level-Steps;  nesting depth ≤ 8
+max_runtime     = min(global_ms, Σ step-timeout-Bounds über Expansion)
+ 
+ 
+
+Harte Caps (Host-Defaults; Profile dürfen nur verschärfen):
+Budget
+	
+Cap
+max_expanded_steps	100 000
+max_parallel_tasks	64
+max_nesting_depth	8
+max_runtime_budget_ms	3 600 000
+max_snapshot_bytes	268 435 456
+max_rpc_bytes	1 073 741 824
+ 
+ 
+
+experiment.schema.json — neues budget-Def, Referenz in experiment_ir:
+json
+ 
+  
+ 
+ 
+"budget": {
+  "type": "object", "additionalProperties": false,
+  "required": ["max_expanded_steps", "max_parallel_tasks",
+               "max_runtime_budget_ms", "max_snapshot_bytes", "max_rpc_bytes"],
+  "properties": {
+    "max_expanded_steps":   { "type": "integer", "minimum": 1, "maximum": 100000 },
+    "max_parallel_tasks":   { "type": "integer", "minimum": 1, "maximum": 64 },
+    "max_runtime_budget_ms":{"type": "integer", "minimum": 1, "maximum": 3600000 },
+    "max_snapshot_bytes":   { "type": "integer", "minimum": 1, "maximum": 268435456 },
+    "max_rpc_bytes":        { "type": "integer", "minimum": 1, "maximum": 1073741824 }
+  }
+}
+ 
+ 
+
+Regeln: Compiler berechnet computed aus dem IR; computed > cap oder computed > deklariert → EXPERIMENT_INVALID/BUDGET_EXCEEDED, vor jedem Upload. common.error_code erweitern um BUDGET_EXCEEDED. Evidence run_record bekommt optionales budget_computed.
+8. K8 — Resource Refs konsistent
+
+Mapping-Tabelle (resource_decl.type → Prefix), verbindlich:
+text
+ 
+  
+ 
+ 
+memory         → mem:        gpu_mapping   → gpumap:
+key_slot       → slot:       shared_memory → shm:
+fd             → fd:         exploit_session → xsession:
+ 
+ 
+json
+ 
+  
+ 
+ 
+"resource_ref": { "type": "string",
+  "pattern": "^(mem|gpumap|slot|shm|fd|xsession):[0-9A-Fa-f]{8,64}(@[0-9]+)?$" }
+ 
+ 
+
+Validator-Regel: jeder resource_ref in Steps/Assertions muss auf eine resource_decl des passenden Typs auflösen (statisch prüfbar, gehört in den Experiment-Compiler).
+9. K9 — Session States inkl. RECOVERY_REQUIRED
+
+Verbindliche Session State Machine:
+text
+ 
+  
+ 
+ 
+NEW → HANDSHAKE → ACTIVE → DRAINING → CLEANUP → CLOSED
+                       │          │
+                       └──────────┴──→ RECOVERY_REQUIRED → (Recovery/Reboot) → CLOSED
+ 
+ 
+json
+ 
+  
+ 
+ 
+"session_state": { "enum": ["NEW", "HANDSHAKE", "ACTIVE", "DRAINING",
+  "CLEANUP", "RECOVERY_REQUIRED", "CLOSED"] }
+ 
+ 
+
+Regeln:
+text
+ 
+  
+ 
+ 
+Übergang nach RECOVERY_REQUIRED: Cleanup wegen blockierendem Kernel Call,
+Hang-Suspect oder nicht wiederherstellbarem Resource-Zustand nicht möglich.
+
+In RECOVERY_REQUIRED (konsoleweit, überlebt Session-Ende):
+  - HELLO wird akzeptiert, nur Read-Only-Operationen erlaubt
+    (session.ping, session.status, Telemetry-Lesezugriff)
+  - jede mutierende Operation → SESSION_RECOVERY_REQUIRED
+  - KEINE neue mutierende Session bis Recovery bzw. Reboot und neuer
+    Capability Negotiation (volatile Capabilities sind ohnehin fällig)
+ 
+ 
+
+Schema-Folgen: common.error_code += SESSION_RECOVERY_REQUIRED; bye.reason += RECOVERY_REQUIRED; neues session_status_result:
+json
+ 
+  
+ 
+ 
+"session_status_result": {
+  "type": "object", "additionalProperties": false,
+  "required": ["session_state", "mutating_allowed"],
+  "properties": {
+    "session_state": { "$ref": "common.schema.json#/$defs/session_state" },
+    "console_recovery": { "type": "boolean" },
+    "mutating_allowed": { "type": "boolean" },
+    "held_resources": { "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/resource_ref" } }
+  }
+}
+ 
+ 
+
+evidence.hang_record um session_state erweitern.
+10. K10/K11 — OrbisProbe Integration
+
+Ehrliche Einschränkung vorab: Ich kann in dieser Umgebung keine URLs oder GitHub-Repositories öffnen — der Link wurde nicht geladen. Ich erfinde deshalb kein Inventar: Ein ORBISPROBE-INVENTORY.md mit ausgedachten Modulnamen wäre wertlos und gefährlich für die Integrationsentscheidung. Drei Wege, das zu lösen:
+
+    Du fügst die relevanten Dateien direkt ein (Repo-Struktur + Kernmodule: Candidate/Experiment/Evidence-Modelle, CLI-Entry, Safety/Reporting, Tests).
+    Du lieferst das Repo als Archiv/Textdump.
+    Du führst den folgenden statischen Extraktor lokal aus und lieferst den Draft-Output zurück — ich fülle daraus beide Dokumente.
+
+10.1 Extraktor (tools/inventory/extract_orbisprobe_inventory.py)
+
+Statisch, nur stdlib, keine Ausführung des OrbisProbe-Codes:
+python
+ 
+  
+ 
+ 
+#!/usr/bin/env python3
+"""ORBP-INV: statischer Inventar-Extraktor für OrbisProbe (kein Code wird ausgeführt)."""
+import ast, re, sys
+from pathlib import Path
+
+HEX    = re.compile(r"\b0x[0-9a-fA-F]{6,16}\b")
+FWVER  = re.compile(r"(?i)\b(fw|firmware)[\s_-]?([0-9]{1,2}\.[0-9]{2})\b")
+PS4KW  = re.compile(r"(?i)\b(orbis|ps4|libkernel|app0|cdev|sce\w+|sysctl|/dev/)\b")
+LIVE   = re.compile(r"(?i)(subprocess|os\.system|os\.popen|socket\.|ptrace|ctypes|CDLL|mmap)")
+SAFETY = re.compile(r"(?i)(safety|guard|dry[_-]?run|confirm|abort|risk)")
+REPORT = re.compile(r"(?i)(report|markdown|jinja|\.md\b|html)")
+TOOLS  = re.compile(r"(?i)(ghidra|rizin|radare2?|angr|unicorn|afl|syzkaller|boofuzz|scapy|tshark|wireshark|mitmproxy)")
+SECRET = re.compile(r"(?i)(password|token|secret|api[_-]?key)")
+
+TAGS = ((HEX, "hexconst"), (FWVER, "fwversion"), (PS4KW, "ps4keyword"),
+        (LIVE, "liveexec"), (SAFETY, "safety"), (REPORT, "reporting"),
+        (TOOLS, "tool"), (SECRET, "secret"))
+
+def scan_py(p: Path, acc: dict):
+    src = p.read_text(errors="replace")
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        acc["hits"].append(f"{p}:0 [PARSE_ERROR]")
+        return
+    acc["modules"].append(str(p))
+    for n in ast.walk(tree):
+        if isinstance(n, ast.ClassDef):
+            bases = ",".join(ast.unparse(b) for b in n.bases)
+            acc["classes"].append(f"{p}:{n.lineno} class {n.name}({bases})")
+        elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            args = ", ".join(a.arg for a in n.args.args)
+            acc["functions"].append(f"{p}:{n.lineno} def {n.name}({args})")
+        elif isinstance(n, ast.Import):
+            acc["imports"] |= {a.name for a in n.names}
+        elif isinstance(n, ast.ImportFrom) and n.module:
+            acc["imports"].add(n.module)
+    for i, line in enumerate(src.splitlines(), 1):
+        for rx, tag in TAGS:
+            if rx.search(line):
+                acc["hits"].append(f"{p}:{i} [{tag}] {line.strip()[:140]}")
+    if "__main__" in src:
+        acc["entrypoints"].append(str(p))
+
+def scan_generic(p: Path, acc: dict):
+    src = p.read_text(errors="replace")
+    for i, line in enumerate(src.splitlines(), 1):
+        for rx, tag in TAGS:
+            if rx.search(line):
+                acc["hits"].append(f"{p}:{i} [{tag}] {line.strip()[:140]}")
+
+def main(root: str):
+    root = Path(root)
+    acc = {k: [] for k in ("modules", "entrypoints", "classes", "functions",
+                           "imports", "hits")}
+    tests = []
+    for p in sorted(root.rglob("*")):
+        if not p.is_file() or any(x in p.parts for x in (".git", "venv", "__pycache__")):
+            continue
+        if p.name.startswith("test_") or p.name.endswith("_test.py"):
+            tests.append(str(p))
+        if p.suffix == ".py":
+            scan_py(p, acc)
+        elif p.suffix in (".c", ".h", ".cpp", ".hpp", ".sh", ".yaml", ".yml", ".json"):
+            scan_generic(p, acc)
+    for p, keys in ((root / "pyproject.toml", ("scripts",)),
+                    (root / "setup.py", ("entry_points",)),
+                    (root / "setup.cfg", ("console_scripts",))):
+        if p.exists():
+            acc["entrypoints"].append(f"[manifest] {p}")
+    out = Path("ORBISPROBE-INVENTORY.draft.md")
+    with out.open("w") as f:
+        f.write("# ORBISPROBE-INVENTORY (draft, statisch extrahiert)\n\n")
+        for title, key in (("Module", "modules"), ("Entry Points", "entrypoints"),
+                           ("Klassen", "classes"), ("Funktionen", "functions")):
+            f.write(f"## {title} ({len(acc[key])})\n\n```\n" +
+                    "\n".join(acc[key]) + "\n```\n\n")
+        f.write("## Imports (extern)\n\n```\n" +
+                "\n".join(sorted(i for i in acc["imports"]
+                                 if i.split(".")[0] not in sys.stdlib_module_names)) +
+                "\n```\n\n")
+        f.write("## Befunde (Hex/FW/PS4/Live/Safety/Tools/Secrets)\n\n```\n" +
+                "\n".join(acc["hits"]) + "\n```\n\n")
+        f.write(f"## Tests ({len(tests)})\n\n```\n" + "\n".join(tests) + "\n```\n")
+    print(f"OK -> {out}")
+
+if __name__ == "__main__":
+    main(sys.argv[1] if len(sys.argv) > 1 else ".")
+ 
+ 
+10.2 ORBISPROBE-INVENTORY.md — Struktur (wird mit echten Befunden gefüllt)
+text
+ 
+  
+ 
+ 
+1. Module               Baum + Zweck je Modul (aus Extraktor + Code-Lektüre)
+2. CLI / Entry Points   console_scripts, __main__, argparse-Subcommands
+3. Datenmodelle         Klassen/Dataclasses/Dict-Formate, Serialisierung
+4. Candidate Modell     Felder, IDs, Statuswerte, Übergänge
+5. Experiment Modell    Beschreibformat, Ausführungslogik, wo implementiert
+6. Evidence Modell      Speicherorte, Formate, Persistenz (eigene DB?)
+7. Tool Abhängigkeiten  direkte Aufrufe von Ghidra/Rizin/angr/... (Versionen)
+8. Firmware Hardcodes   RVAs, Konstanten, Versionsvergleiche  ← K1-Risiko
+9. PS4 Hardcodes        Device-Pfade, syscalls, Prozessnamen, Pfade
+10. Live Execution      alle Funktionen mit Hardware-/Netz-I/O  ← Kernrisiko
+11. Safety Gates        vorhandene Prüfungen vor Ausführung (oder deren Fehlen)
+12. Reporting           Ausgabeformate, Templates
+13. Tests               Umfang, Mock vs. Hardware-abhängig
+ 
+ 
+10.3 ORBISPROBE-PS4RF-MAPPING.md — Skelett mit verbindlicher PS4RF-Seite
+
+Entscheidungskriterien:
+text
+ 
+  
+ 
+ 
+REUSE          reine Logik, kein Hardware-I/O, keine eigene Wahrheit → als Library im Adapter
+ADAPT          Konzept richtig, Kopplung falsch → Wrapper + Datenkonvertierung
+REPLACE        dupliziert PS4RF-Subsystem (Profiles/Evidence/Execution) → PS4RF gewinnt;
+               Alter Code erst deprecated nach Parity-Tests (K11)
+KEEP_EXTERNAL  eigenständig sinnvoll, keine Überlappung → via Adapter optional nutzbar
+ 
+ 
+
+Source-of-Truth-Split (verbindlich, unverhandelbar):
+text
+ 
+  
+ 
+ 
+PS4RF     = profiles, capabilities, experiments, runs, evidence, resources
+OrbisProbe= discovery, reasoning, ranking, hypotheses, assessment,
+            experiment proposals, classification
+ 
+ 
+
+Vorbefüllte Zielzeilen (OrbisProbe-Seite = TBD bis Inventar):
+OrbisProbe Konzept
+	
+PS4RF Konzept
+	
+Vorläufig
+	
+Offen bis Inventar
+Candidate/Findings	candidate.schema.json	ADAPT (ID- und Status-Mapping auf K/U-NNN + §44-Stati)	Feldabdeckung
+Experiment-Vorschlag	experiment.schema.json IR + Proposal-Pfad	ADAPT	erzeugt OrbisProbe fertiges IR oder nur Absicht?
+Evidence-Auswertung	Evidence Store (nur lesend)	ADAPT/REPLACE	eigene Persistenz?
+Firmware-Wissen	profile.schema.json via PS4RF API	REPLACE bei Hardcodes	K1-RVA-Treffer
+Tool-Aufrufe	tools/{ghidra,rizin,angr,...} Adapter	ADAPT	direkte Subprocess-Aufrufe?
+Ranking	discovery/ranking	REUSE/ADAPT	Abhängigkeiten
+Safety-Logik	Live Safety Gates (v0.1 §48)	REPLACE — Gates nur in PS4RF	vorhandene Checks
+Reporting	Evidence + ps4rfctl show	ADAPT	Templates behaltbar?
+Payload-Delivery / Live-Exec	in OrbisProbe verboten	REPLACE durch PS4RF-Primitive	alle liveexec-Treffer
+CLI	ps4rfctl + Adapter	KEEP_EXTERNAL	—
+ 
+ 
+
+Konflikt-Hypothesen (C-1…C-8, im Inventar zu verifizieren): C-1 Firmware-RVAs in OrbisProbe → Profil-Pflicht. C-2 eigene Evidence-Persistenz → PS4RF-SoT. C-3 Tool-Subprocess ohne Adapter. C-4 eigene Experiment-Ausführung/Hardwareaufrufe. C-5 eigene Candidate-IDs/-Stati. C-6 fehlende oder abweichende Safety-Checks. C-7 Abhängigkeits-/Versionskonflikte. C-8 hardwareabhängige Tests ohne Mock.
+
+Zielinterface v0.1 (ps4rf/orbisprobe/adapter.py):
+python
+ 
+  
+ 
+ 
+class OrbisProbeAdapter(Protocol):
+    def discover(self, context: DiscoveryContext) -> list[Candidate]: ...
+    def rank(self, candidates: Sequence[Candidate]) -> RankedCandidates: ...
+    def prove(self, candidate: Candidate) -> ProofReport: ...
+    def propose_experiment(self, candidate: Candidate,
+                           context: SessionContext) -> ExperimentIR: ...
+    def consume_evidence(self, run: RunRecord) -> None: ...
+    def reclassify(self, candidate: Candidate,
+                   evidence: EvidenceBundle) -> Candidate: ...
+    def minimize(self, candidate: Candidate,
+                 evidence: EvidenceBundle) -> Reproducer: ...
+ 
+ 
+
+Harte Adapter-Regeln: Profile/Candidates/Evidence nur über PS4RF-APIs; Proposals durchlaufen immer das Safety Gate; der Adapter führt nichts selbst aus; keine neuen RVAs; keine Payload-Delivery.
+11. K12 — Reihenfolge
+
+Bestätigt, mit Metasploit an der mock-kompatiblen Stelle:
+text
+ 
+  
+ 
+ 
+a. Schemas fertigstellen (K1–K9 eingearbeitet, exploit/surface/candidate vollständig)
+b. Pydantic Modelle
+c. Schema Tests
+d. Canonicalization/Hash Tests (JCS Golden Vectors)
+e. Repository Skeleton
+f. Mock ps4rfd
+g. Experiment Round Trip (YAML → IR → JCS → Hash → Mock-Run → Evidence)
+h. OrbisProbe Adapter gegen Mock (nur wenn Inventar + Mapping vorliegen)
+i. MetasploitAdapter gegen Mock-Msfrpcd (DoD-Punkt 8)
+ 
+ 
+
+Kein echter PS4 Agent Code, kein Kernel Code, keine neuen Payloads.
+12. Metasploit Integration — verbindliche Spezifikation
+12.1 Rolle und Grenzen
+
+Metasploit ist externes Exploit/Auxiliary/Session-Backend. Nicht Source of Truth für Profiles, Capabilities, Experiments, Evidence, Resources, Candidate-Status. Kein msfconsole-Parsing — ausschließlich msfrpcd/MessagePack-RPC (TLS oder localhost, Login via Token aus Umgebungsvariable, nie in Dateien/Logs).
+12.2 Adapter-Vertrag (tools/metasploit/)
+text
+ 
+  
+ 
+ 
+tools/metasploit/
+    adapter.py         # MetasploitAdapter: health, list_modules, module_info,
+                       # module_check, module_run, list_jobs, stop_job,
+                       # list_sessions, session_info, session_command, session_close
+    provider.py        # MsfExploitProvider -> exploit.schema Manifest-Brücke
+    mock/msfrpcd_mock.py
+    modules/*.exploit.yaml
+    tests/
+ 
+ 
+
+health() = Erreichbarkeit + core.version (Framework-Revision wird je Run in Evidence geschrieben).
+12.3 Provider-Registrierung
+
+Exploit-Name: metasploit:<msf-refname>. Das PS4RF-Manifest (exploit.schema, Lieferung 2) definiert weiterhin vollständig: requires, provides, target/profile_bindings, execution (aus exploit_execution_context), preconditions (§75), verification (verify.*-Operation), cleanup, reliability, side_effects. Kontext-Mapping:
+text
+ 
+  
+ 
+ 
+exploit/ps4/browser/*  → prepare HOST, trigger WEB_CONTENT, verify USERLAND_AGENT
+auxiliary/ps4/*        → HOST
+post/ps4/*             → USERLAND_AGENT | SYSTEM_SERVICE (je Session-Typ, deklariert)
+ 
+ 
+
+Capability-Regel (schema- und datengetrieben): Ein MSF-Module-Run erzeugt höchstens assurance = OBSERVED (Availability-Signale erlaubt). PROVEN entsteht nur durch einen separaten PS4RF-Verifikationslauf mit verified_by.operation ∈ verify.* und verification_run != trigger_run — durchgesetzt via provider_pattern: "^metasploit:" in authority.json plus dem globalen ^verify\.-Pattern auf verified_by.operation (K2). Beispielfluss:
+text
+ 
+  
+ 
+ 
+exploit.run metasploit:exploit/ps4/browser/example
+→ Safety Gates → module_check → module_run → SUCCESS + Session
+→ userland.exec, assurance=OBSERVED, provider=metasploit:…
+→ START_AGENT / EXECUTE_BUFFER-Nonce über Session
+→ verify.userland.exec PASS → userland.exec, PROVEN (neuer Record, neuer Run)
+ 
+ 
+12.4 Evidence
+
+evidence.schema.json ergänzt:
+json
+ 
+  
+ 
+ 
+"metasploit_run_record": {
+  "type": "object", "additionalProperties": false,
+  "required": ["module", "framework_revision", "started_at", "ended_at", "exploit_result"],
+  "properties": {
+    "module": { "type": "string",
+      "pattern": "^(exploit|auxiliary|post|payload)/[a-z0-9_/]+$" },
+    "framework_revision": { "type": "string" },
+    "options": { "type": "object",
+      "description": "Secret-Keys (pass|token|secret|key) entfernt; Wert = <redacted:sha256-8>" },
+    "job_id": {}, "session_id": {},
+    "check_result": { "enum": ["NOT_RUN","VULNERABLE","PATCHED","UNKNOWN","ERROR"] },
+    "exploit_result": { "enum": ["NOT_RUN","SUCCESS","FAILED","DEAD_TARGET",
+      "TIMEOUT","ERROR"] },
+    "output_sha256": { "$ref": "common.schema.json#/$defs/sha256" },
+    "output_path": { "type": "string" },
+    "ps4rf_verification": { "$ref": "common.schema.json#/$defs/evidence_ref" },
+    "candidate_id": { "$ref": "common.schema.json#/$defs/candidate_id" },
+    "related_run_id": { "$ref": "common.schema.json#/$defs/run_id" }
+  }
+}
+ 
+ 
+
+MSF-DB-Importe sind Referenzmaterial, ersetzen den PS4RF Evidence Store nie.
+12.5 Safety
+
+Identische Safety Gates wie native Provider (§48, §75). dry_run → module_check. Kein automatischer Exploit-Run aus Scanner-Ergebnissen. Kein automatischer Retry nach crash/hang/panic/unexpected target state (§49 gilt ungeändert). session_command nur auf PS4RF-eigenen Sessions, vollständig geloggt. MCP optional, nie interner Transport.
+12.6 Operations (Host-Core-Namespace, nie an ps4rfd gesendet)
+text
+ 
+  
+ 
+ 
+msf.health  msf.modules.list  msf.modules.info
+msf.job.list  msf.job.stop
+msf.session.list  msf.session.info  msf.session.command  msf.session.close
+exploit.list  exploit.info  exploit.check  exploit.run
+exploit.status  exploit.verify
+chain.plan  chain.run  agent.deploy
+ 
+ 
+12.7 Definition of Done → Testabbildung
+DoD
+	
+Test (Mock)
+1 RPC-Server erkennen	MockMsfRpc startet, health() liefert Version
+2 Module suchen/lesen	fester Katalog, list_modules/module_info
+3 Auxiliary ausführen	module_run → Job-ID, Evidence-Record
+4 Exploit als Provider	Manifest-Brücke metasploit:… → exploit.schema validiert
+5 Resultate in Evidence	metasploit_run_record + Hash-Bindung
+6 Sessions listen	list_sessions/session_info
+7 Capability erst nach PS4RF-Verify	OBSERVED-Record; PROVEN erst nach verify.*-Run; Authority-Verletzung = Testfall
+8 Mock ohne echtes MSF	ganze Suite offline
+ 
+ 
+13. Offene Punkte für die nächste Runde
+
+    OrbisProbe-Code über einen der drei Wege aus §10.1 liefern — erst dann INVENTORY + MAPPING + Konfliktliste final.
+    Veto-Prüfung: K2-Conflict-Order (insbesondere AVAILABILITY_OVERRIDE vor EVIDENCE) und K4-AEAD-Wahl (ChaCha20-Poly1305 als Default).
+    Nach Freigabe: Lieferung 2 — exploit/surface/candidate als vollständige Schemas (mit exploit_execution_context, verify.*-Verifikationsfeldern, provider_pattern-Unterstützung), dann Pydantic + Tests (b–d).

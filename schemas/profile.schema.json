@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ps4rf.invalid/schemas/profile.schema.json",
+  "title": "PS4RF target profile (ps4rf.profile.v1)",
+  "description": "Persistent target facts (platform, firmware build, module locators) for one PS4 target. Runtime addresses are never stored: a runtime address is locator + runtime base at bind time. The key allowlist below makes an absolute-address field inexpressible. Unknown on-site values are the string UNRESOLVED; fixture values must be marked with fixture=true. W5 is decision-only: a profile grants nothing.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "fixture",
+    "profile_id",
+    "profile_version",
+    "target",
+    "modules",
+    "locators",
+    "operation_policy"
+  ],
+  "properties": {
+    "schema": { "const": "ps4rf.profile.v1" },
+    "fixture": {
+      "type": "boolean",
+      "description": "true when any fact is a fixture or unresolved value; false requires every fact to be evidence-backed"
+    },
+    "profile_id": { "type": "string", "minLength": 1 },
+    "profile_version": { "type": "integer", "minimum": 1 },
+    "canonical_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "sha256 over the canonical (JCS) form of this document without this field"
+    },
+    "notes": { "type": "string" },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "platform",
+        "model_family",
+        "firmware_version",
+        "firmware_build_id",
+        "architecture",
+        "hardware_revision"
+      ],
+      "properties": {
+        "platform": { "type": "string" },
+        "model_family": { "type": "string" },
+        "firmware_version": { "type": "string" },
+        "firmware_build_id": { "type": "string" },
+        "architecture": { "type": "string" },
+        "hardware_revision": { "type": "string" }
+      }
+    },
+    "modules": {
+      "type": "object",
+      "description": "module/image name -> locator kind; the runtime base of a module is a bind-time fact, never a profile field",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["image", "locator_kind"],
+        "properties": {
+          "image": { "type": "string" },
+          "locator_kind": { "enum": ["rva", "relative"] }
+        }
+      }
+    },
+    "locators": {
+      "type": "object",
+      "description": "operation name -> locator fact (relative, never absolute)",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["module", "locator", "section", "permissions", "expected_bytes", "provenance", "confidence"],
+        "properties": {
+          "module": { "type": "string" },
+          "locator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "value"],
+            "properties": {
+              "kind": { "enum": ["rva", "relative"] },
+              "value": {
+                "oneOf": [
+                  { "type": "integer", "minimum": 0 },
+                  { "const": "UNRESOLVED" }
+                ]
+              }
+            }
+          },
+          "section": { "type": "string" },
+          "permissions": { "enum": ["r--", "r-x", "rw-", "rwx", "UNRESOLVED"] },
+          "expected_bytes": {
+            "oneOf": [
+              { "type": "null" },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["offset", "hex"],
+                "properties": {
+                  "offset": { "type": "integer", "minimum": 0 },
+                  "hex": { "type": "string" }
+                }
+              }
+            ]
+          },
+          "provenance": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "source", "sha256"],
+            "properties": {
+              "kind": { "enum": ["evidence", "fixture"] },
+              "source": { "type": ["string", "null"] },
+              "sha256": { "type": ["string", "null"], "pattern": "^([0-9a-f]{64})?$" }
+            }
+          },
+          "confidence": { "enum": ["UNVERIFIED", "OBSERVED", "PROVEN"] },
+          "policy": {
+            "description": "W10 window policy: STRICT_FINGERPRINT results must equal the expected bytes and may support an identity decision; STRUCTURAL_ONLY results are observations only and are never used as an exact fingerprint (optional key; the W5 fixtures predate it)",
+            "enum": ["STRICT_FINGERPRINT", "STRUCTURAL_ONLY"]
+          }
+        }
+      }
+    },
+    "operation_policy": {
+      "type": "object",
+      "description": "every gated operation has an explicit entry: profile_required with a locator_ref, or an explicit profile_not_required with a reason",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["profile_required", "locator_ref", "profile_fields", "reason"],
+        "properties": {
+          "profile_required": { "type": "boolean" },
+          "locator_ref": {
+            "type": ["string", "null"],
+            "description": "W10: null together with profile_required true means this profile carries no evidence-backed locator for the operation yet; it fails closed as LOCATOR_MISSING"
+          },
+          "profile_fields": { "type": "array", "items": { "type": "string" } },
+          "reason": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,179 @@
+{
+  "base_rva": "0x1000",
+  "case_notes": {
+    "fixture_d1_alias": "two live aliases, one released, the other used",
+    "fixture_d1_direct": "release through one alias, use through a stale slot copy",
+    "fixture_d1_invalidated": "NO_CLAIM: the slot is zeroed, so the later load is not stale",
+    "fixture_d1_path": "release on one arm only: unproven, must not be confirmed",
+    "fixture_d1_slot_reuse": "NO_CLAIM: the slot is reused for a different object (the old address-keyed rule fired here)",
+    "fixture_d1_unknown_effect": "NO_CLAIM: an unknown call may free, which is not evidence that it did",
+    "fixture_d4_cleared": "NO_CLAIM: the slot is cleared before it is read again",
+    "fixture_d4_lea_equal": "same slot via lea instead of an index operand",
+    "fixture_d4_other_index": "different index expression: may-alias, never confirmed",
+    "fixture_d4_same_index": "released through a slot, reloaded with the same index",
+    "fixture_d4_shift_equal": "same slot via shl+add instead of a hardware scale",
+    "fixture_indirect_call": "an indirect call through a field, then a release and a use",
+    "fixture_p0_1_approx_may_set": "a merged slot holds one of two live objects: a may-set, never a definite release",
+    "fixture_p0_1_never_vs_merged": "NO_CLAIM: the never-written slot identity and the merged one stay distinct (store kill)",
+    "fixture_p0_2_may_release": "the released pointer is one of two objects: a may-release only",
+    "fixture_p0_3_cond_caller": "call into a conditional wrapper, then a read: a may-release, so an observation",
+    "fixture_p0_3_tail_cond": "NO_CLAIM: a tail jump into a conditional wrapper is not a definite release",
+    "fixture_p0_4_loop_carried": "read in block A, free in block B, back edge A->B->A: the use of iteration n+1 follows the free of n",
+    "fixture_p0_4_loop_recycle": "NO_CLAIM: one call site allocates per iteration, so the freshly allocated object is a different object",
+    "fixture_p1_outparam": "the slot address escapes to an unknown call, so the stored object stays a candidate",
+    "fixture_p1_store_kill": "NO_CLAIM: the slot is overwritten with a live object after the release"
+  },
+  "cases": {
+    "fixture_d1_alias": "USE_AFTER_RELEASE",
+    "fixture_d1_direct": "USE_AFTER_RELEASE",
+    "fixture_d1_invalidated": "NO_CLAIM",
+    "fixture_d1_path": "PATH_DEPENDENT_USE_AFTER_RELEASE",
+    "fixture_d1_slot_reuse": "NO_CLAIM",
+    "fixture_d1_unknown_effect": "NO_CLAIM",
+    "fixture_d4_cleared": "NO_CLAIM",
+    "fixture_d4_lea_equal": "USE_AFTER_RELEASE",
+    "fixture_d4_other_index": "MAY_ALIAS_REUSE",
+    "fixture_d4_same_index": "USE_AFTER_RELEASE",
+    "fixture_d4_shift_equal": "USE_AFTER_RELEASE",
+    "fixture_indirect_call": "USE_AFTER_RELEASE",
+    "fixture_p0_1_approx_may_set": "MAY_USE_AFTER_RELEASE",
+    "fixture_p0_1_never_vs_merged": "NO_CLAIM",
+    "fixture_p0_2_may_release": "PATH_DEPENDENT_USE_AFTER_RELEASE",
+    "fixture_p0_3_cond_caller": "PATH_DEPENDENT_USE_AFTER_RELEASE",
+    "fixture_p0_3_tail_cond": "NO_CLAIM",
+    "fixture_p0_4_loop_carried": "MAY_USE_AFTER_RELEASE",
+    "fixture_p0_4_loop_recycle": "NO_CLAIM",
+    "fixture_p1_outparam": "MAY_USE_AFTER_RELEASE",
+    "fixture_p1_store_kill": "NO_CLAIM"
+  },
+  "catalog": {
+    "own_cond_free": "conditional",
+    "own_forward": "free",
+    "own_thunk": "free",
+    "own_unknown": null,
+    "own_wrapper_bad": null
+  },
+  "image_hex": "c366662e0f1f8400000000000f1f4000c366662e0f1f8400000000000f1f4000c366662e0f1f8400000000000f1f4000ebce66662e0f1f8400000000000f1f00554889e5e8b7ffffff5dc30f1f440000554889e531ffe8a5ffffff5dc30f1f00554889e54885f67405e892ffffff5dc3554889e5534883ec184889fb48895de84889dfe878ffffff488b45e8488b50084883c4185b5dc3660f1f840000000000554889e548897df8e853ffffff48c745f800000000488b45f84885c07404488b50085dc366662e0f1f84000000000090554889e548897df8e823ffffff488975f8488b45f8488b50085dc30f1f440000554889e55341544889fb4989fc4889dfe8fbfeffff498b442410415c5b5dc390554889e548897df84885f67405e8defeffff488b45f8488b50085dc30f1f4000554889e553e8e6feffff4889c34889c7e8dbfeffff488b53085b5dc30f1f4000554889e553415441554989fc4c8b6d304b8b1cec4889dfe894feffff4b8b04ec488b5008415d415c5b5dc30f1f440000554889e553415441554989fc4c8b6d304b8b1cec4889dfe864feffff4b8d0cec488b01488b5008415d415c5b5dc36690554889e553415441554989fc4c8b6d304b8b1cec4889dfe834feffff4c89e848c1e0034c01e0488b10488b4a08415d415c5b5dc366662e0f1f84000000000090554889e5534154415541564989fc4c8b6d304c8b75384b8b1cec4889dfe8eefdffff4b8b04f4488b5008415e415d415c5b5dc366662e0f1f8400000000006690554889e5534889fb488b4310ffd04889dfe8bafdffff488b53085b5dc30f1f00554889e553415441554989fc4c8b6d304b8b1cec4889dfe894fdffff4bc704ec000000004b8b04ec488b5008415d415c5b5dc366662e0f1f8400000000006690554889e55341544889fb4989f44885d274054889dfeb034c89e7e851fdffff488b4308415c5b5dc30f1f840000000000554889e5534889fb48895df0488b7df048c7c6010000005b5de982fdffff6690554889e5534889fb48c7c601000000e86cfdffff488b43085b5dc30f1f440000554889e5534889fb31c9488b4308ffc183f9037c02eb0a4889dfe8e1fcffffebe95b5dc366662e0f1f84000000000090554889e553415431c9e8d2fcffff4889c34989dc4889dfe8b4fcffffe8bffcffff4889c3488b5308ffc183f9037ce2415c5b5dc366662e0f1f84000000000090554889e553415441554889fb4989f44989d54885c974064c896318eb044c896b18488b43184889c7e863fcffff498b542408415d415c5b5dc30f1f8000000000554889e553415441554889fb4989f44989d5488b43184889c7e832fcffff4885c974064c896318eb044c896b18488b4318488b5008415d415c5b5dc30f1f4000554889e553415441554889fb4989f44c8bab180100004c89efe8f2fbffff4c89a318010000488b8318010000488b5008415d415c5b5dc3660f1f840000000000554889e553415441554889fb4989f44c896310488d7b10e8d4fbffff488b43104889c7e8a8fbffff498b542408415d415c5b5dc3",
+  "image_sha256": "bd861e4c5241507b86a77e2e8eca5a2b2dcd94e18be4079f2490373162a3d345",
+  "roots": {
+    "alloc": "0x1010",
+    "free": "0x1000"
+  },
+  "schema": "ps4rf.discovery.lifecycle-fixtures/1",
+  "source": "lifecycle-fixtures.S",
+  "source_sha256": "4f18d026ed9890d72dbe64d90dfa3fca500dbe0fe962677931d5afc9ab04bc96",
+  "symbols": {
+    "fixture_d1_alias": {
+      "rva": "0x10f0",
+      "size": "0x1f"
+    },
+    "fixture_d1_direct": {
+      "rva": "0x1070",
+      "size": "0x27"
+    },
+    "fixture_d1_invalidated": {
+      "rva": "0x10a0",
+      "size": "0x24"
+    },
+    "fixture_d1_path": {
+      "rva": "0x1110",
+      "size": "0x1c"
+    },
+    "fixture_d1_slot_reuse": {
+      "rva": "0x10d0",
+      "size": "0x1b"
+    },
+    "fixture_d1_unknown_effect": {
+      "rva": "0x1130",
+      "size": "0x1c"
+    },
+    "fixture_d4_cleared": {
+      "rva": "0x1250",
+      "size": "0x33"
+    },
+    "fixture_d4_lea_equal": {
+      "rva": "0x1180",
+      "size": "0x2e"
+    },
+    "fixture_d4_other_index": {
+      "rva": "0x11f0",
+      "size": "0x33"
+    },
+    "fixture_d4_same_index": {
+      "rva": "0x1150",
+      "size": "0x2b"
+    },
+    "fixture_d4_shift_equal": {
+      "rva": "0x11b0",
+      "size": "0x34"
+    },
+    "fixture_indirect_call": {
+      "rva": "0x1230",
+      "size": "0x1d"
+    },
+    "fixture_p0_1_approx_may_set": {
+      "rva": "0x1370",
+      "size": "0x39"
+    },
+    "fixture_p0_1_never_vs_merged": {
+      "rva": "0x13b0",
+      "size": "0x3c"
+    },
+    "fixture_p0_2_may_release": {
+      "rva": "0x1290",
+      "size": "0x28"
+    },
+    "fixture_p0_3_cond_caller": {
+      "rva": "0x12e0",
+      "size": "0x1b"
+    },
+    "fixture_p0_3_tail_cond": {
+      "rva": "0x12c0",
+      "size": "0x1e"
+    },
+    "fixture_p0_4_loop_carried": {
+      "rva": "0x1300",
+      "size": "0x24"
+    },
+    "fixture_p0_4_loop_recycle": {
+      "rva": "0x1330",
+      "size": "0x34"
+    },
+    "fixture_p1_outparam": {
+      "rva": "0x1430",
+      "size": "0x34"
+    },
+    "fixture_p1_store_kill": {
+      "rva": "0x13f0",
+      "size": "0x37"
+    },
+    "own_alloc": {
+      "rva": "0x1010",
+      "size": "0x1"
+    },
+    "own_cond_free": {
+      "rva": "0x1060",
+      "size": "0x10"
+    },
+    "own_forward": {
+      "rva": "0x1040",
+      "size": "0xb"
+    },
+    "own_free": {
+      "rva": "0x1000",
+      "size": "0x1"
+    },
+    "own_thunk": {
+      "rva": "0x1030",
+      "size": "0x2"
+    },
+    "own_unknown": {
+      "rva": "0x1020",
+      "size": "0x1"
+    },
+    "own_wrapper_bad": {
+      "rva": "0x1050",
+      "size": "0xd"
+    }
+  }
+}

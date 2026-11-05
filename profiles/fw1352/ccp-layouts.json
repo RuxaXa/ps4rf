@@ -1,0 +1,245 @@
+{
+  "schema": "ps4rf.ccp-layouts.v1",
+  "purpose": "CCP/keymgr layout facts + provider binding for the ps4rfd CCP acceptance (P4 pull-forward). Companion data to profiles/fw1352/profile-13.52.json; the acceptance spec is docs/P4-CCP-ACCEPTANCE-REQ.md.",
+  "profile_id": "fw1352-real-13.52",
+  "target": {
+    "platform": "ORBIS",
+    "model_family": "PS4 Slim CUH-2116A",
+    "hardware_revision": "B01Y",
+    "firmware_version": "13.52",
+    "architecture": "x86-64"
+  },
+  "evidence_base": {
+    "dump": {
+      "path": "/home/hermes/audits/playstation-ps4/fw1352-ps4b-20260920/kernel-dump/kernel.bin",
+      "sha256": "cf157ffdbae872a20bbb9a46c8518b53d96c1ed75d4e73878466a295d92eca35",
+      "size_bytes": 44040192,
+      "image_base": "0xffffffffd00d0000",
+      "convention": "RVA == file offset == VA - image_base (probe-verified; see A-keymgr-lifetime.md section 0)"
+    },
+    "campaign": "ps4b-soc-workbench/campaign-ccp-20261007 (Track A: keymgr + CCP offline research)",
+    "artifacts": [
+      {"name": "work/A-keymgr-lifetime.md", "sha256": "0a5e8d01be6470a8cc182283a979281dde4add9cf1ee5ea6757916e5ecef0f09", "content": "slot pool layout, claim/release/bind/dequeue RVAs, tag semantics, defect analysis"},
+      {"name": "work/A-keymgr-lifetime.json", "sha256": "021f76a84d8278514ecdfe06e1902d70a69a8b5600dfb307d7bdc5bf9bc99e71", "content": "structured form + live_read_proposal K-L1-poolstate"},
+      {"name": "work/a2c-submit-cluster.txt", "sha256": "eb25a271f36093", "content": "submit-site census (60 site->submit pairs, enclosing-function attribution)"},
+      {"name": "work/a2c_out_cluster2.txt", "sha256": "a672191befb4c9", "content": "full v2 census output"},
+      {"name": "work/A-out-64de_npdrm.txt / work/npdrm_decode3.txt", "sha256": null, "content": "npdrm ioctl path (claim -> msg -> submit -> release) raw disassembly"}
+    ],
+    "note": "hash values marked with a trailing short form are quoted exactly as produced in the campaign; no hash is invented here.",
+    "marks": {
+      "[B]": "proven from dump bytes (linear decode from the instruction's own offset + raw byte dump)",
+      "[V]": "verified by full-text census (RIP-relative sweep) or by reading the consuming code",
+      "[O]": "open / not proven"
+    }
+  },
+  "provider_binding": {
+    "declared": {
+      "kind": "KERNEL_EXEC_SYMBOL",
+      "locator_ref": "ccp.submit.entry",
+      "rva": 6443824,
+      "rva_hex": "0x625330",
+      "call": "rdi = pointer to the request envelope (0x40 bytes, first qword = message pointer); returns int (0 = OK)",
+      "why": [
+        "every byte needed for this binding is verifiable offline against the pinned image ([B] prologue + two independent call sites)",
+        "the framework's privileged providers are target-side modules (resident ps4rfd + provider entry); KERNEL_EXEC_SYMBOL matches that model",
+        "the device path depends on an opened device object and an exact attribute gate that are not proven on a live boot ([O])"
+      ],
+      "requires": [
+        "capability ccp.submit PROVEN (REQ-CCP section 1: verify.ccp.submit in the registry, separate run)",
+        "session-claimed framework slot only, framework test key only (REQ-CCP section 2 C)",
+        "profile-bound values: slot, command (+ the layout below)"
+      ],
+      "evidence": [
+        "[B] prologue 0x625330 = 55 48 89 e5 41 57 41 56 41 55 41 54 53 48 83 ec",
+        "[B] call sites: npdrm 0x64E2C8 and 0x64E32C, keymgr swap-key 0x62D2F6; census 60 site->submit pairs",
+        "[B] the function names '\\Build\\J02697906\\sys\\internal\\modules\\sbl\\service\\service.c' and 'req_ctxt'"
+      ]
+    },
+    "alternative": {
+      "kind": "DEVICE_IOCTL",
+      "ioctl": "0xC0144E10",
+      "locator_ref": "ccp.device_gate",
+      "rva": 3878624,
+      "rva_hex": "0x3B2EE0",
+      "gate": "movabs rcx, 0x3800000000000010; cmp qword [rdi+0x58], rcx; sete al; ret (called with rdi = [obj+0x130] from 0x64DF69)",
+      "status": "UNRESOLVED",
+      "why_unresolved": [
+        "no device node / no registration state proven on a live boot",
+        "the attribute constant 0x3800000000000010 must be present on the calling object; obtainable only with a live observation",
+        "the ioctl path is a differential-research axis (W16), not the first binding"
+      ]
+    }
+  },
+  "struct_layouts": {
+    "ccp_message": {
+      "size_bytes": 136,
+      "size_hex": "0x88",
+      "lifecycle": "zeroed with memset(.,0,0x88) before each build and again after each submit at every observed call site [B]",
+      "fields": [
+        {"offset": "0x00", "size": 4, "type": "u32", "name": "command", "observed": ["0xC1000 (slot/key op family, npdrm msg1 + keymgr swap-key)", "0x41000 (npdrm msg2)"], "mark": "[B]"},
+        {"offset": "0x08", "size": 4, "type": "u32", "name": "length", "observed": ["0x10 (npdrm msg1/msg2)", "0x20 (swap-key)"], "mark": "[B]"},
+        {"offset": "0x10", "size": 8, "type": "ptr", "name": "data_ptr", "observed": ["npdrm: 16-byte key blob pointer from object at global 0x266C010", "swap-key: 0x2740020 (direct-memory object)", "npdrm msg2: same pointer as +0x18"], "mark": "[B]"},
+        {"offset": "0x18", "size": 8, "type": "union", "name": "field_18", "observed": ["npdrm msg1: u16 slot (0x50..0xCE)", "npdrm msg2: qword pointer", "swap-key: u16 selector 0x14C / 0x14E"], "mark": "[B]"},
+        {"offset": "0x20", "size": 2, "type": "u16", "name": "field_20", "observed": ["npdrm msg1: 0x4B", "swap-key: 0x4D", "npdrm msg2: slot"], "rule": "role is command-dependent; the values 0x4B/0x4D are the only ones observed so far", "mark": "[B]"}
+      ],
+      "observed_instances": [
+        {"name": "npdrm slot op 1", "site": "0x64E29D..0x64E2C8", "values": {"command": "0xC1000", "length": 16, "data": "sm key blob", "f18": "slot", "f20": "0x4B"}, "mark": "[B]"},
+        {"name": "npdrm op 2", "site": "0x64E303..0x64E32C", "values": {"command": "0x41000", "length": 16, "data": "same ptr", "f18": "ptr", "f20": "slot"}, "mark": "[B]"},
+        {"name": "keymgr swap-key A", "site": "0x62D255..0x62D25E", "values": {"f18": "0x14C", "f20": "0x4D"}, "mark": "[B]"},
+        {"name": "keymgr swap-key B", "site": "0x62D2AC..0x62D2F6", "values": {"command": "0xC1000", "length": 32, "data": "0x2740020", "f18": "0x14E", "f20": "0x4D"}, "mark": "[B]"}
+      ],
+      "open": [
+        "the subtype/selector vocabulary (0x4B, 0x4D, 0x14C, 0x14E) is not yet mapped to operations; it is the first differential question of W16",
+        "semantic of command 0x41000 [O]"
+      ]
+    },
+    "request_envelope": {
+      "size_bytes": 64,
+      "size_hex": "0x40",
+      "lifecycle": "zeroed with memset(.,0,0x40) before use [B]",
+      "fields": [
+        {"offset": "0x00", "size": 8, "name": "message_ptr", "written_by": "caller", "observed": "&message area (e.g. rbp-0x520 in npdrm, rbp-0xE8 in swap-key)", "mark": "[B]"},
+        {"offset": "0x08", "size": 8, "name": "queue_head", "written_by": "caller", "observed": "address of a locally initialised list head", "mark": "[B]"},
+        {"offset": "0x10", "size": 8, "name": "completion_callback", "written_by": "submit wrapper 0x625330", "observed": "0x625460", "mark": "[B]"},
+        {"offset": "0x18", "size": 8, "name": "request_context", "written_by": "submit wrapper 0x625330", "observed": "internal req context (the wrapper's local; the file-local name string is 'req_ctxt')", "mark": "[B]"},
+        {"offset": "0x20", "size": 8, "name": "engine_field", "written_by": "caller", "observed": "copied by the wrapper into message+0xA0 before the virtual submit call", "mark": "[B]"}
+      ],
+      "submit_path": [
+        "0x62534C r14 = rdi (envelope)",
+        "0x62537E/0x625388 envelope[0x10] = 0x625460",
+        "0x62538C envelope[0x18] = wrapper-local request context",
+        "0x62539C rbx = envelope[0] (message pointer)",
+        "0x62539F..0x6253A3 message+0xA0 = envelope[0x20]",
+        "0x6253AE call 0x6F2AB0 (class lookup) -> virtual call [rax+0x18][+0x20] with rdi = message, rsi = class object",
+        "0x6253D6 result = local dword [rbp-0x58]; returns it"
+      ],
+      "mark": "[B]"
+    }
+  },
+  "walkthrough_npdrm": {
+    "purpose": "the only fully observed end-to-end CCP/keymgr transaction: claim -> submit x2 -> release",
+    "steps": [
+      "0x64E21C lea rdi,[rbp-0x70]; 0x64E220 word [rbp-0x70]=0",
+      "0x64E226 call 0x62C570            # keymgr claim; u16 slot lands in [rbp-0x70]",
+      "0x64E235 rcx=[0x266C010]; 0x64E27D r15=[rcx+8]   # 16-byte key blob pointer",
+      "0x64E23C rbx=&msg (rbp-0x520); 0x64E24A r13=&envelope (rbp-0x118)",
+      "0x64E268 envelope[0]=msg; 0x64E26F/0x64E276 queue head",
+      "0x64E289/0x64E291 memset(msg,0,0x88)",
+      "0x64E29D..0x64E2BF msg fields (0xC1000 / 0x10 / r15 / slot / 0x4B)",
+      "0x64E2C8 call 0x625330            # submit",
+      "0x64E2E7..0x64E2F3 memset(msg,0,0x88)",
+      "0x64E303..0x64E325 msg fields (0x41000 / 0x10 / r15 / r15 / slot)",
+      "0x64E32C call 0x625330            # submit",
+      "0x64E34D..0x64E355 movzx edi,ax; call 0x62C610   # release by id (edi = slot)",
+      "0x64E395 memcpy(out, msg area, 0x200)"
+    ],
+    "mark": "[B]",
+    "release_note": "the release is skipped when the slot value is 0 (0x64E34D test ax,ax / je)"
+  },
+  "operations": [
+    {
+      "op": "keymgr.claim",
+      "binding": {"kind": "KERNEL_EXEC_SYMBOL", "rva": 6473072, "rva_hex": "0x62C570", "call": "rdi = pointer to a u16 out slot; returns 0 on success, error code in eax"},
+      "observed": "npdrm 0x64E226; EAP/key builders 0x62067D, 0x6208A9; CCP client 0x3CCB3C",
+      "semantics": "dequeue-free-slot round robin over a 64-record TAILQ; tag := 0xFFFFFFFF; count 0->1; pool occupancy counter ++; the id is a u16 out",
+      "confidence": "OBSERVED",
+      "mark": "[B]"
+    },
+    {
+      "op": "keymgr.release",
+      "binding": {"kind": "KERNEL_EXEC_SYMBOL", "rva": 6473232, "rva_hex": "0x62C610", "call": "edi = slot id (u16); returns 0 on success, 0xFFFFFFFE when the id is not found"},
+      "observed": "npdrm 0x64E355; 0x620812, 0x62097E, 0x620A27, 0x3CCD54",
+      "semantics": "count decrement; on count 1->0 the occupancy counter -- and a channel wake unless the slot's skip flag is set; INV_SLOT_001 (a released slot must not be usable) is an agent assertion, not a kernel refusal",
+      "confidence": "OBSERVED",
+      "mark": "[B]"
+    },
+    {
+      "op": "keymgr.load_test_key",
+      "binding": {"kind": "KERNEL_EXEC_SYMBOL", "rva": 6471504, "rva_hex": "0x62BF50", "call": "bind entry (tag = key handle); candidate route for the framework test key"},
+      "observed": "bind call sites 0x624007, 0x6244B3, 0x62451B (client family)",
+      "semantics": "existing-tag path: rotate + count++ only; fresh path: cache-tree lookup of the key handle, then bind (tag write, count++, skip-flag, occupancy ++, sm storage calls)",
+      "confidence": "OBSERVED",
+      "open": [
+        "the exact primitive that stores NEW key material into a slot is not proven; candidates are the sm storage helper 0x630230 with the {0x101/0x102, handle} request and a 0xC1000-family submit message",
+        "framework test key only: the provider must never touch a protected slot (REQ-CCP section 2 C)"
+      ],
+      "mark": "[B] for the bind path; [O] for the store primitive"
+    },
+    {
+      "op": "ccp.submit",
+      "binding": {"kind": "KERNEL_EXEC_SYMBOL", "rva": 6443824, "rva_hex": "0x625330", "call": "rdi = request envelope (first qword = message); returns int"},
+      "observed": "npdrm 0x64E2C8 and 0x64E32C; swap-key 0x62D2F6; 58 further sites (census)",
+      "semantics": "builds the wrapper-side callback/context, maps the caller's engine field into message+0xA0 and invokes the engine's virtual submit; blocking variant",
+      "confidence": "OBSERVED",
+      "mark": "[B]"
+    },
+    {
+      "op": "keymgr.snapshot",
+      "binding": {"kind": "READ_ONLY_REGION", "rva": 2566368, "rva_hex": "0x266C8E0", "windows": [{"rva_hex": "0x2668008", "length": 88}, {"rva_hex": "0x266C800", "length": 96}, {"rva_hex": "0x266C8E0", "length": 2048}], "total_bytes": 2232},
+      "semantics": "pool telemetry: lock/name pointers, sm gate, occupancy counter, 64 slot records (id/count/tag/flags/links)",
+      "confidence": "OBSERVED",
+      "policy": "STRUCTURAL_ONLY (no exact fingerprint)",
+      "mark": "[B] for the layout, [O] for the live values"
+    }
+  ],
+  "slot_semantics": {
+    "pool_base": "0x266C8E0",
+    "record_size": 32,
+    "record_count": 64,
+    "slot_ids": "even 0x50..0xCE (id = 0x50 + 2i)",
+    "fields": {
+      "id": "+0x00 u16", "count": "+0x04 u32", "tag_key_handle": "+0x08 u32 (0xFFFFFFFF = unbound)",
+      "flags": "+0x0C u32 (bit0 = skip: not dequeueable, wake suppressed)",
+      "next": "+0x10 qword", "prev": "+0x18 qword"
+    },
+    "globals": {
+      "lock": "0x2668008 (SblKeyMgr:keyMgrCtx)", "channel": "0x2668028 (+8 waiter count 0x2668030)",
+      "occupancy": "0x2668038", "cache_counter": "0x266803C", "tailq": "0x2668040/0x2668048",
+      "tree_root": "0x2668050", "sm_gate": "0x266C800", "sm_lock": "0x266C810",
+      "hdl_table": "0x266C860 (16 x {u16 id 0xD0..0xEE, u32 status})"
+    },
+    "capture_state": "idle: all counts 0, all tags 0xFFFFFFFF, occupancy 0, list rotated (head = record 0xBE)",
+    "invariants": [
+      "INV_SLOT_001: after keymgr.release the slot must not be usable again until a new claim (agent-side assertion; the kernel itself reports rc=0 for a release of an already-released record)",
+      "INV_CCP_002: after a failed submit N the state for N+1 is treated as new (experiment assertion)"
+    ],
+    "source": "work/A-keymgr-lifetime.md (sha256 0a5e8d01..ef0f09), sections 2 and 6"
+  },
+  "profile_delta": {
+    "note": "exact fragments to promote into a profile revision (schema ps4rf.profile.v1); the prepared revision is profiles/fw1352/profile-13.52-ccp1.json",
+    "locators": {
+      "ccp.submit.entry": {"module": "kernel", "locator": {"kind": "rva", "value": 6443824}, "section": "text", "permissions": "r-x", "expected_bytes": {"offset": 0, "hex": "554889e54157415641554154534883ec"}, "confidence": "OBSERVED", "policy": "STRICT_FINGERPRINT"},
+      "keymgr.claim.entry": {"module": "kernel", "locator": {"kind": "rva", "value": 6473072}, "section": "text", "permissions": "r-x", "expected_bytes": {"offset": 0, "hex": "554889e54157415653504989fe488d3d"}, "confidence": "OBSERVED", "policy": "STRICT_FINGERPRINT"},
+      "keymgr.release.entry": {"module": "kernel", "locator": {"kind": "rva", "value": 6473232}, "section": "text", "permissions": "r-x", "expected_bytes": {"offset": 0, "hex": "554889e541565389fb488d3de8b90302"}, "confidence": "OBSERVED", "policy": "STRICT_FINGERPRINT"},
+      "keymgr.bind.entry": {"module": "kernel", "locator": {"kind": "rva", "value": 6471504}, "section": "text", "permissions": "r-x", "expected_bytes": {"offset": 0, "hex": "554889e54157415641554154534881ec"}, "confidence": "OBSERVED", "policy": "STRICT_FINGERPRINT"},
+      "keymgr.snapshot.pool": {"module": "kernel", "locator": {"kind": "rva", "value": 2566368}, "section": "data", "permissions": "rw-", "expected_bytes": null, "confidence": "OBSERVED", "policy": "STRUCTURAL_ONLY"},
+      "ccp.device_gate": {"module": "kernel", "locator": {"kind": "rva", "value": 3878624}, "section": "text", "permissions": "r-x", "expected_bytes": {"offset": 0, "hex": "554889e548b9100000000000003831c0"}, "confidence": "OBSERVED", "policy": "STRICT_FINGERPRINT"}
+    },
+    "operation_policy": {
+      "ccp.submit": {"locator_ref": "ccp.submit.entry", "profile_fields": ["slot", "command"], "profile_required": true},
+      "keymgr.claim": {"locator_ref": "keymgr.claim.entry", "profile_fields": ["slot"], "profile_required": true},
+      "keymgr.release": {"locator_ref": "keymgr.release.entry", "profile_fields": ["claim_ref"], "profile_required": true},
+      "keymgr.snapshot": {"locator_ref": "keymgr.snapshot.pool", "profile_fields": ["scope"], "profile_required": true}
+    }
+  },
+  "validation": {
+    "validated": true,
+    "what": [
+      "all six locator fingerprints were read from the pinned image at the stated RVAs and matched byte for byte (2026-10-07)",
+      "the message layout was confirmed at two independent call sites (npdrm and keymgr swap-key) [B]",
+      "the claim/submit/release sequence was decoded end to end in the npdrm handler [B]",
+      "the submit-store census (60 site->submit pairs) agrees with the binding entry"
+    ],
+    "not_validated": [
+      "no live attestation of these six windows yet (confidence OBSERVED, not PROVEN)",
+      "the semantic vocabulary of the command subtypes is unmapped [O]",
+      "the device ioctl binding is UNRESOLVED [O]"
+    ]
+  },
+  "unresolved": [
+    "subtype/selector vocabulary (0x4B, 0x4D, 0x14C, 0x14E) and command 0x41000 [O]",
+    "primitive that stores new key material into a slot (sm storage 0x630230 vs submit message) [O]",
+    "device node + registration state for the ioctl binding [O]",
+    "promotion of this revision (review + live byte-match in W16) [O]"
+  ]
+}

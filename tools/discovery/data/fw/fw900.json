@@ -1,0 +1,51 @@
+{
+  "firmware": "9.00",
+  "role": "reference",
+  "image": {
+    "path": "/home/hermes/audits/playstation-ps4/sflash0/cuh-1116a-fw900/kernel-48m-dump-20260910/fw900-kernel-48m.bin",
+    "sha256": "ffe0ec65ec0ffaadf9e18675121e7df80bdddbb83a8824b3414e4cc53cbd69f8",
+    "base": "0xffffffffc536c000",
+    "size": "0x3000000",
+    "purity": "UNKNOWN",
+    "purity_evidence": "no kpatch triple recorded for this image; sysent[11] still resolves to kbase+0x4c7ad, which is the value PSFree's 900.c itself writes, so a patch of the same technique cannot be excluded from the table alone"
+  },
+  "text_twin": {
+    "path": "/home/hermes/session-handoffs/20260921_ps4b-soc-independent-analysis/kernel/fw900-kernel-rx.bin",
+    "sha256": "af3178da72e351368588d30d1ea6e6e1bdc5e6f909cd8226ec7d579dc0255dd4",
+    "note": "RX segment only (13,623,480 B = 0xcfe0b8); byte-identical to the 48 MiB image over [0,0xcfe0b8)"
+  },
+  "tables": {
+    "sysent": {
+      "rva": "0x1100310",
+      "stride": 48,
+      "narg_offset": 0,
+      "sy_call_offset": 8,
+      "thrcnt_offset": 44,
+      "entries_checked": 700,
+      "source": "derived from two independent published constants and re-verified in the image: PSFree lapse.mjs offset_sysent_661 = 0x1107f00 and kpatch/900.c syscall-11 slot 0x1100520 both imply base 0x1100310 (0x1107f00 - 661*0x30 = 0x1100520 - 11*0x30)"
+    }
+  },
+  "gadgets": {
+    "kbase_from_lstar": "0x1c0",
+    "jmp_qword_rsi": {
+      "rva": "0x4c7ad",
+      "bytes": "ff26",
+      "source": "PSFree kpatch/900.c writes kbase+0x4c7ad into sysent[11]; the image's sysent[11].sy_call reads back exactly that value"
+    }
+  },
+  "anchors": {
+    "free": "0x301ce0",
+    "fdrop_release": "0x45a350",
+    "printf": "0xb7a30"
+  },
+  "anchor_provenance": {
+    "free": "no inventory exists for this firmware; translated from 13.52 free=0x96e0 by callee signature matching inside the aligned aio_multi_delete pair (76 instructions, 0 lock-prefixed, 0 repeat ops, 1 indirect; unique on both sides) and corroborated by direct call-site count (2202 here vs 2211 on 13.52)",
+    "fdrop_release": "same method; 69 instructions, 2 repeat ops, 2 indirect; 3 calls in the aio_multi_delete pair on both sides",
+    "printf": "same method then confirmed by shape: variadic log prologue saving rsi/rdx/rcx/r8/r9 with movabs 0x3000000008; 8929 direct call sites here vs 8917 on 13.52"
+  },
+  "inventory": {
+    "hint": null,
+    "kind": "sweep",
+    "note": "no Ghidra inventory exists for the reference firmware; the engine derives starts from call targets and prologues"
+  }
+}

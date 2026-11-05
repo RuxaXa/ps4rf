@@ -1,0 +1,202 @@
+{
+ "fixture": true,
+ "operations": {
+  "ccp.submit": {
+   "locator": {
+    "kind": "rva",
+    "module": "kernel",
+    "permissions": "r-x",
+    "section": ".text",
+    "value": 4096
+   },
+   "profile_policy": "profile-bound values required",
+   "profile_required": true,
+   "requirement": "ccp.submit",
+   "verification_requirement": "verify.kernel.read"
+  },
+  "gpuvm.lookup": {
+   "locator": {
+    "kind": "rva",
+    "module": "kernel",
+    "permissions": "r-x",
+    "section": ".text",
+    "value": 4096
+   },
+   "profile_policy": "needs section 70 approval; the frozen core still marks it mutating (F8/F10)",
+   "profile_required": true,
+   "requirement": "gpuvm.lookup",
+   "verification_requirement": "verify.kernel.read"
+  },
+  "gpuvm.map": {
+   "locator": {
+    "kind": "rva",
+    "module": "kernel",
+    "permissions": "r-x",
+    "section": ".text",
+    "value": "UNRESOLVED"
+   },
+   "profile_policy": "needs section 70 approval; mapping values come from the profile",
+   "profile_required": true,
+   "requirement": "gpuvm.map",
+   "verification_requirement": "verify.kernel.read"
+  },
+  "gpuvm.unmap": {
+   "locator": {
+    "kind": "rva",
+    "module": "kernel",
+    "permissions": "r-x",
+    "section": ".text",
+    "value": 4096
+   },
+   "profile_policy": "needs section 70 approval; must release the mapping acquired by gpuvm.map",
+   "profile_required": true,
+   "requirement": "gpuvm.unmap",
+   "verification_requirement": "verify.kernel.read"
+  },
+  "ioctl.invoke": {
+   "locator": {
+    "kind": "rva",
+    "module": "kernel",
+    "permissions": "r-x",
+    "section": ".text",
+    "value": 4096
+   },
+   "profile_policy": "device, command allowlist and sizes are target-side policy; no host pointer",
+   "profile_required": true,
+   "requirement": "ioctl.invoke",
+   "verification_requirement": "verify.kernel.read"
+  },
+  "kernel.dump.full": {
+   "locator": {
+    "kind": "rva",
+    "module": "kernel",
+    "permissions": "r-x",
+    "section": ".text",
+    "value": 4096
+   },
+   "profile_policy": "needs section 70 approval; full dump is a P5 privilege level",
+   "profile_required": true,
+   "requirement": "kernel.dump.full",
+   "verification_requirement": "verify.kernel.copyout"
+  },
+  "kernel.read": {
+   "locator": {
+    "kind": "rva",
+    "module": "kernel",
+    "permissions": "r-x",
+    "section": ".text",
+    "value": 4096
+   },
+   "profile_policy": "needs section 70 approval; range/alignment come from the profile",
+   "profile_required": true,
+   "requirement": "kernel.read",
+   "verification_requirement": "verify.kernel.read"
+  },
+  "kernel.snapshot": {
+   "locator": {
+    "kind": "rva",
+    "module": "kernel",
+    "permissions": "r-x",
+    "section": ".text",
+    "value": 4096
+   },
+   "profile_policy": "needs section 70 approval; hash mismatch zeroizes and never releases bytes",
+   "profile_required": true,
+   "requirement": "kernel.read",
+   "verification_requirement": "verify.kernel.copyout"
+  },
+  "kernel.snapshot.recipe": {
+   "locator": {
+    "kind": "rva",
+    "module": "kernel",
+    "permissions": "r-x",
+    "section": ".text",
+    "value": 4096
+   },
+   "profile_policy": "recipe and roots come from the generated profile table; no host address",
+   "profile_required": true,
+   "requirement": "kernel.read",
+   "verification_requirement": "verify.kernel.read"
+  },
+  "keymgr.claim": {
+   "locator": {
+    "kind": "rva",
+    "module": "kernel",
+    "permissions": "r-x",
+    "section": ".text",
+    "value": 4096
+   },
+   "profile_policy": "needs section 70 approval; slot indices come from the profile",
+   "profile_required": true,
+   "requirement": "keymgr.claim",
+   "verification_requirement": "verify.kernel.read"
+  },
+  "keymgr.release": {
+   "locator": {
+    "kind": "rva",
+    "module": "kernel",
+    "permissions": "r-x",
+    "section": ".text",
+    "value": 4096
+   },
+   "profile_policy": "needs section 70 approval; must release the claim",
+   "profile_required": true,
+   "requirement": "keymgr.release",
+   "verification_requirement": "verify.kernel.read"
+  },
+  "keymgr.snapshot": {
+   "locator": {
+    "kind": "rva",
+    "module": "kernel",
+    "permissions": "r-x",
+    "section": ".text",
+    "value": 4096
+   },
+   "profile_policy": "needs section 70 approval; bulk data leaves the agent only via copyout",
+   "profile_required": true,
+   "requirement": "keymgr.snapshot",
+   "verification_requirement": "verify.kernel.copyout"
+  },
+  "verify.kernel.copyout": {
+   "locator": {
+    "kind": "rva",
+    "module": "kernel",
+    "permissions": "r-x",
+    "section": ".text",
+    "value": 4096
+   },
+   "profile_policy": "needs section 70 approval; expected values must be evidence-backed",
+   "profile_required": true,
+   "requirement": "kernel",
+   "verification_requirement": "verify.kernel.copyout"
+  },
+  "verify.kernel.exec": {
+   "locator": {
+    "kind": "rva",
+    "module": "kernel",
+    "permissions": "r-x",
+    "section": ".text",
+    "value": 4096
+   },
+   "profile_policy": "needs section 70 approval; execution evidence comes from a real run",
+   "profile_required": true,
+   "requirement": "kernel",
+   "verification_requirement": "verify.kernel.exec"
+  },
+  "verify.kernel.read": {
+   "locator": {
+    "kind": "rva",
+    "module": "kernel",
+    "permissions": "r-x",
+    "section": ".text",
+    "value": 4096
+   },
+   "profile_policy": "needs section 70 approval; observes an expected/observed pair",
+   "profile_required": true,
+   "requirement": "kernel",
+   "verification_requirement": "verify.kernel.read"
+  }
+ },
+ "path": "tests/fixtures/differential/operation-inventory-before.json",
+ "schema": "ps4rf.differential.operation-inventory.v1"
+}

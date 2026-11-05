@@ -1,0 +1,300 @@
+PS4RF FINAL FREEZE PATCH — Quelltext-Korrekturen + ehrliche Ausführungsangabe
+
+Vorab die entscheidende Angabe: Ich kann in dieser Umgebung keinen Code ausführen — kein pytest, kein git, keine Suite. Die Punkte 7–9 verlangen real ausgeführte Tests und einen Report mit echtem Commit-Hash. Einen solchen Report zu erfinden wäre gefälschte Test-Evidence und verstößt exakt gegen die eigene Regel aus v0.1 §47 („Keine Behauptung … wenn der Hash nicht mit dem Run übereinstimmt"). Deshalb liefere ich: (a) die Patches 1–6 als verbindlichen, drop-in-fertigen Quelltext, (b) einen Gate-Runner, der Punkte 7–9 mechanisch erzwingt (Ausführung, Report-Generierung, Tag nur bei Grün), und (c) die exakte Ausführungsanweisung. Die Zahlen im Report stammen aus dem Lauf — nicht von mir.
+§1 Fix A — submit() ersetzt die alte Implementierung vollständig
+
+core/rpc/pool.py enthält danach genau diese eine submit()-Definition (die Variante mit Poison-Check vor Token-Acquire ist aus dem ausführbaren Code entfernt):
+python
+ 
+  
+ 
+ 
+def submit(self, rid: str, op: str, fn) -> str:
+    if not self._tokens.acquire(blocking=False):
+        return "TOO_MANY_INFLIGHT"
+
+    with self._lock:
+        if self._poisoned:
+            self._tokens.release()
+            return "POISONED"
+
+        self._tasks[rid] = {
+            "state": TaskState.QUEUED,
+            "op": op,
+        }
+
+    self._queue.put((rid, op, fn))
+    return "OK"
+ 
+ 
+
+Integritätsinvariante (dokumentiert, kein neuer Code): rid-Eindeutigkeit garantiert RequestIdRegistry.register() vor submit() im Reader-Loop; Doppel-rid erreicht submit() daher nie (sonst Session-Close via PROTOCOL_ERROR).
+§2 Fix B — exception-safe Cancel-Pfad
+python
+ 
+  
+ 
+ 
+def _on_canceled(self, rid: str, op: str) -> None:
+    try:
+        if not self._transport_dead:
+            self._respond_now(
+                rid,
+                op,
+                {
+                    "status": "ERROR",
+                    "error": {
+                        "code": "SESSION_RECOVERY_REQUIRED"
+                    },
+                },
+            )
+    finally:
+        self._reqs.complete(rid)
+ 
+ 
+
+Gleichzeitig definiert (damit Fix B wirklich exception-safe ist und kein Worker-Thread stirbt):
+python
+ 
+  
+ 
+ 
+def _respond_now(self, rid: str, op: str, resp: dict) -> None:
+    """Minimaler Response-Pfad für Cancellation. Verschluckt Transportfehler
+    (→ _transport_dead=True). Wird NICHT auf das RPC-Budget angerechnet
+    (Protokoll-Kontrollframe, analog BYE)."""
+    try:
+        with self._send_lock:
+            _send_frame(self._conn, self._ch_out, "RESPONSE", resp)
+    except OSError:
+        self._transport_dead = True
+ 
+ 
+
+Zusätzlich: self._transport_dead = False in MockAgent.__init__; beim Session-Loop-Abbruch (ConnectionError-Pfad, R8) auf True. Und als Absicherung der cancel-Branch im Worker (ein Argument von Fix B — keine Thread-Tötung durch einen Callback-Fehler):
+python
+ 
+  
+ 
+ 
+if canceled:
+    if self._finalize(rid) and self._on_canceled:
+        try:
+            self._on_canceled(rid, op)
+        except BaseException as e:            # Fix B: Worker überlebt jeden Fault
+            if self._on_worker_crash:
+                self._on_worker_crash(rid, op, type(e).__name__)
+    continue
+ 
+ 
+
+Neue Regression: test_cancel_transport_failure_still_completes_rid — _respond_now wirft (simulierter OSError), trotzdem: rid completed, kein pending RID, kein Token-Leak (available_tokens == max_inflight).
+§3 Keine Semaphore-Internals in Tests
+
+BoundedPool erhält eine rein funktionale, öffentliche Property (nur acquire/release, keine CPython-Felder — nicht einmal innerhalb der Klasse):
+python
+ 
+  
+ 
+ 
+@property
+def available_tokens(self) -> int:
+    """Read-only Bestand via öffentlicher API: zählt reservierbare Tokens
+    und gibt sie exakt zurück. Nur im quiescenten Zustand (Tests, kein
+    In-Flight-Task) verwenden — während des Zählens sind Tokens kurz belegt."""
+    n = 0
+    while self._tokens.acquire(blocking=False):
+        n += 1
+    for _ in range(n):
+        self._tokens.release()
+    return n
+ 
+ 
+
+Alle Tests nutzen ausschließlich pool.available_tokens; pool._tokens._value ist aus der Suite entfernt.
+python
+ 
+  
+ 
+ 
+def test_submit_after_poison_rejected_no_token_leak():
+    pool = BoundedPool(size=2, max_inflight=4)
+    pool.poison("test")
+    assert pool.submit("REQ-" + "0" * 32, "memory.alloc",
+                       lambda r, o: None) == "POISONED"
+    assert pool.available_tokens == 4            # öffentliche API
+ 
+ 
+§4 Tag-Name korrigiert
+
+Überall (Dokumente, Runner, Statusausgaben) vereinheitlicht auf:
+bash
+ 
+  
+ 
+ 
+git tag PS4RF-CORE-1.0-MOCK-READY
+ 
+ 
+
+Der Befehl git tag PS4RF CORE 1.0-MOCK-READY ist ungültig und kommt in keinem Dokument/Script mehr vor.
+§5 B12 bereinigt — kein Callback mit leerem Ref
+
+Finale Reihenfolge für Sync-Ressourcen (beide, Gate und Barrier identisch):
+python
+ 
+  
+ 
+ 
+if op_name == "sync.gate.create":
+    gate = Gate(int(args["parties"]))
+    ref = self.resources.acquire("gate")            # 1. acquire OHNE cleanup-Arg
+    self.resources.attach_cleanup(                  # 2. korrekter Ref gebunden
+        ref, self._make_sync_cleanup(ref, self._gates, gate))
+    with self._agent_lock:                          # 3. Registry-Registrierung
+        self._gates[ref] = gate
+    return {"status": "OK", "result": {"gate": ref}}  # 4. Ref nach außen sichtbar
+ 
+ 
+
+ResourceManager.acquire behält seinen optionalen cleanup-Parameter nur für intern Ref-generierte Mock-Ressourcen; Sync-Objekte nutzen ausschließlich attach_cleanup(correct_ref, …). Der temporäre acquire(..., cleanup=_make_sync_cleanup("", …))-Aufruf existiert nicht mehr. Gesichert durch test_sync_cleanup_removes_registry_entry.
+§6 Gemeinsamer MockHangReleased-Typ
+
+Neues Modul core/rpc/hang.py (bewusst kein RPC-Wire-Element):
+python
+ 
+  
+ 
+ 
+"""Gemeinsamer internes Exception-Typ für den Mock-Hang-Testpfad (F8/B8).
+Nicht im RPC-Namespace, kein Wire-Code, erzeugt nie eine Response."""
+class MockHangReleased(Exception):
+    """Vom Test-Hook (hang_event.set()) freigegebener Mock-Worker."""
+ 
+ 
+
+mock.agent.dispatch() und mock.agent._worker_run() importieren ausschließlich diese Klasse:
+python
+ 
+  
+ 
+ 
+from core.rpc.hang import MockHangReleased
+ 
+ 
+
+Regression test_mock_hang_uses_shared_exception_type:
+python
+ 
+  
+ 
+ 
+def test_mock_hang_uses_shared_exception_type():
+    import sys
+    from core.rpc import hang
+    from mock import agent as agent_mod
+    assert agent_mod.MockHangReleased is hang.MockHangReleased   # Identität, kein Name-Zufall
+    assert sum(1 for m in sys.modules.values()
+               if getattr(m, "MockHangReleased", None) is not None
+               and getattr(m, "MockHangReleased") is not hang.MockHangReleased) == 0
+ 
+ 
+
+Funktional abgesichert durch die bestehende G3-Regel: mock.hang → Hook → exakt MockHangReleased → Evidence HANG / NO_RESPONSE → niemals INTERNAL_ERROR.
+§7 Gate-Runner — Punkte 7–9 mechanisch erzwungen
+
+tools/freeze/run_gate_suite.py — führt die Suite real aus, schreibt den Report, taggt nur bei Grün und sauberem Worktree:
+python
+ 
+  
+ 
+ 
+#!/usr/bin/env python3
+"""PS4RF Freeze Gate Runner. Tag nur wenn ALLE Gates grün UND Worktree sauber.
+Bei Fehlern: FAILED + Testname + Exception (Punkt 8) — kein Tag."""
+import json, subprocess, sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+TAG = "PS4RF-CORE-1.0-MOCK-READY"
+GATES = [
+    ("G1", ["python", "-m", "pytest", "tests/", "-q", "--tb=short"]),
+    ("G2", ["python", "-m", "pytest", "tests/test_roundtrip.py", "-q"]),
+    ("G3", ["python", "-m", "pytest", "tests/test_mock_recovery.py", "-q"]),
+    ("G4", ["python", "-m", "pytest", "tests/test_stress.py",
+            "tests/test_concurrency.py", "tests/test_pool.py", "-q"]),
+    ("G5", ["python", "-m", "pytest", "tests/test_gate.py", "tests/test_sync.py", "-q"]),
+    ("G6", ["python", "-m", "pytest", "tests/test_verification.py", "-q"]),
+    ("G7", ["python", "-m", "pytest", "tests/test_framing.py",
+            "tests/test_handshake_roles.py", "-q"]),
+    ("G8", ["python", "-m", "pytest", "tests/test_rpc_budget.py", "-q"]),
+]
+
+def sh(cmd):
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    return r.returncode, (r.stdout + r.stderr).strip()
+
+def main():
+    results, failures = {}, []
+    for gate, cmd in GATES:
+        rc, out = sh(cmd)
+        summary = out.splitlines()[-1] if out else ""
+        results[gate] = {"cmd": " ".join(cmd), "rc": rc, "summary": summary}
+        if rc != 0:
+            failures.append((gate, out))
+    commit = sh(["git", "rev-parse", "HEAD"])[1]
+    dirty = sh(["git", "status", "--porcelain"])[1]
+    report = {"tag_candidate": TAG, "commit": commit, "worktree_dirty": bool(dirty),
+              "python": sys.version, "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+              "gates": results, "all_green": not failures and not dirty}
+    Path("FREEZE-REPORT.json").write_text(json.dumps(report, indent=2))
+    print(json.dumps(report, indent=2))
+    for gate, out in failures:                      # Punkt 8: FAILED-Report
+        print(f"\nFAILED gate={gate}\n{out[-4000:]}")
+    if report["all_green"]:
+        subprocess.run(["git", "tag", TAG], check=True)   # Punkt 4: korrekter Tag
+        print(f"\nTAG gesetzt: {TAG} @ {commit}")
+        return 0
+    print("\nNICHT getaggt: Gate-Fehler oder dirty worktree.")
+    return 1
+
+if __name__ == "__main__":
+    sys.exit(main())
+ 
+ 
+
+Ausführung (auf deiner Maschine / CI):
+bash
+ 
+  
+ 
+ 
+git add -A && git commit -m "PS4RF final freeze patch: Fix A/B, token API, tag, B12, MockHangReleased"
+python tools/freeze/run_gate_suite.py
+ 
+ 
+
+Report-Struktur (vom Runner gefüllt, Platzhalter bis zum Lauf):
+text
+ 
+  
+ 
+ 
+commit hash:            <git rev-parse — aus dem Lauf>
+tag:                    PS4RF-CORE-1.0-MOCK-READY   (nur bei all_green gesetzt)
+Python version:         <sys.version aus dem Lauf>
+pytest summary:         <letzte Zeile je Gate aus dem Lauf>
+Anzahl Tests:           <aus G1-Summary>
+G1–G8:                  PASS/FAIL aus rc
+Round Trip:             G2 · Fault Injection: G3 · Concurrency: G4
+TOCTOU Gate:            G5 · Verification Binding: G6 · Framing/Fuzz: G7 · Budget: G8
+ 
+ 
+§8 Was ich hier nicht liefern kann — und warum
+
+Einen ausgefüllten Report mit Commit-Hash, Testzahlen und „G1–G8 PASS" kann ich nicht ehrlich erzeugen: Es existiert hier keine Ausführungsumgebung. Fingierte Werte wären genau die Hash-ohne-Run-Behauptung, die dieses Framework ausschließt. Die Suite muss einmal real laufen (Kommandos in §7); bei Fehlern liefern mir die FAILED-Blöcke des Runners Testname + Exception + Traceback, und ich liefere Root Cause + minimalen Fix — ohne neue Architektur, wie in Punkt 8 gefordert.
+§9 Danach — ohne weitere Core-Arbeit
+
+OrbisProbe-Phase in fester Reihenfolge, ausschließlich mit echtem Code — der steht weiterhin aus über einen der drei Wege aus v0.3 §10: Dateien einfügen, Archiv/Textdump liefern, oder tools/inventory/extract_orbisprobe_inventory.py lokal laufen lassen und den Draft zurückspielen. Danach Metasploit-Adapter, dann Ghidra/Rizin/angr/AFL++.
+
+Weiterhin ausgeschlossen: echter PS4 Agent Code, Kernel Code, Payloads.

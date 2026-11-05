@@ -1,0 +1,71 @@
+{
+  "id": "relapse-aio-multi-wait",
+  "name": "Relapse - aio_multi_wait() mode-0 waiter node use-after-free",
+  "role": "training",
+  "burned_reason": "",
+  "platform": [
+    "ps5"
+  ],
+  "bug_class": "UAF",
+  "subsystem": "kernel/sceaio (aio_multi_wait)",
+  "root_cause": {
+    "summary": "aio_multi_wait() caches the waiter-array base once and walks it with a per-index stride for mode 1 and mode 2, but the mode-0 dispatch always takes element 0 of the array. With num_ids >= 2 the same waiter node is therefore linked onto every request's waiter list and each link overwrites node->owner. The cleanup path unlinks the node using the owner recorded for the last request only and then frees the waiter array, while requests 0..N-2 keep req->waiters pointing into the freed array. When one of those requests later completes, the waker dereferences the stale node: a 32-bit write at node+0x20, an mtx_lock() on a pointer taken from node+0x10, and two 32-bit decrements through node+0x0 and node+0x8.",
+    "primitive": "use-after-free of the waiter array (0x70, 0xA8 or 0xE0 allocation depending on num_ids) yielding a controlled 32-bit write, a lock on an attacker-chosen pointer and arbitrary 32-bit decrements",
+    "trigger": "raw aio_multi_wait (syscall 663) with num_ids >= 2 and mode = 0, followed by completion of one of the other requests; the libkernel wrapper sceKernelAioWaitRequests rejects mode 0 with EINVAL, so the unexported raw stub inside libkernel_sys must be called",
+    "consequence": "kernel use-after-free with attacker-influenced write/decrement primitives; the public chain converts it into kernel ROP by pairing the decrement with the osem refcount object and a kernel address leak"
+  },
+  "discovery_approach": {
+    "summary": "Jordy found the bug by reverse-engineering the aio_multi_wait dispatch and published a write-up on 2026-09-06 describing the mode-0 node sharing, the cleanup that unlinks only the last owner and the waker's write/decrement behaviour. An implementation chained with the slopkit WebKit exploit followed on 2026-09-16, and ports to Y2JB and BD-JB appeared afterwards; the address leak used to break ASLR came from get_aio_debug_request_info() (or, in later ports, a routing-socket leak).",
+    "signals": [
+      "one mode branch indexes the waiter array with a constant element 0 while the other branches use base + i*stride",
+      "the same node pointer is registered on several request lists in a loop that overwrites node->owner each iteration",
+      "cleanup unlinks by node->owner without checking that the owner belongs to the request being cleaned up",
+      "the waiter array is freed while other request list heads still reference the node inside it"
+    ],
+    "blind_usable": false
+  },
+  "firmware": {
+    "affected": [
+      "7.00",
+      "9.00",
+      "11.00",
+      "13.60"
+    ],
+    "fixed_in": "14.00",
+    "differences": [
+      "the PS5 dev wiki records the use-after-free as present up to 13.60 and only 'maybe' fixed in 14.00; no public diff naming the changed check was fetched",
+      "the mode-0 path is gated in userland by the exported wrapper (EINVAL), so reachability depends on calling the raw syscall stub rather than on a kernel-side version difference",
+      "the companion address leak in get_aio_debug_request_info() is a separate defect with its own version range (PS4 >= 13.00-13.52, PS5 >= 5.00) and is not the memory-corruption primitive"
+    ]
+  },
+  "patch_evidence": {
+    "available": false,
+    "what": "only a dev-wiki statement that 14.00 probably fixes it, plus the write-up's description of the vulnerable dispatch",
+    "limits": "no 14.00 diff, vendor advisory or fixed-version decompilation was found; the fix mechanism is unknown in the fetched sources"
+  },
+  "sources": [
+    {
+      "url": "https://pastebin.com/hrRgDXLL",
+      "supports": "mode-0 dispatch always uses element 0; node linked N times with owner overwritten; cleanup unlinks only the last request then frees the array; waker performs a 32-bit write, mtx_lock on a controlled pointer and two decrements; claim that the PS4 13.52 implementation takes three arguments and has no mode",
+      "kind": "writeup"
+    },
+    {
+      "url": "https://www.psdevwiki.com/ps5/Vulnerabilities",
+      "supports": "affected up to 13.60, 'maybe' fixed in 14.00, mode 0 rejected by the sceKernelAioWaitRequests wrapper with EINVAL, and the statement that the first bug does not affect PS4 because PS4 lacks the multi-mode set_waiter feature",
+      "kind": "writeup"
+    },
+    {
+      "url": "https://www.psdevwiki.com/ps4/Vulnerabilities",
+      "supports": "contradicting claim: a PS4 'relapse' implementation for 13.02-13.52 exists (raw13g) and the text says the aio_multi_wait vulnerability also affects PS4",
+      "kind": "writeup"
+    }
+  ],
+  "confidence": "medium",
+  "gaps": [
+    "PS4 applicability is contradictory in the public record: Jordy's write-up and one PS5-wiki sentence say the mode/set_waiter machinery is PS5-only, while the PS4 wiki lists a PS4 13.02-13.52 'relapse' implementation and elsewhere says the bug affects PS4; this entry therefore records PS5 only",
+    "the lower bound is uncertain: the PS5 dev wiki writes '?5.00?' while the public port's offset tables cover 7.00-13.60",
+    "the 14.00 fix is stated as 'maybe' and no changed check or diff was found",
+    "the write-up quotes kernel virtual addresses from one specific dump; they are intentionally not reproduced here",
+    "the exact relation between this UAF and the later 14.20 generation-revalidation fix on the aio_multi_delete path is not documented in the fetched sources"
+  ]
+}

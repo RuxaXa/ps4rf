@@ -1,0 +1,69 @@
+# PS4RF acceptance experiment: CCP known-answer (HMAC-SHA256)
+#
+# Source: owner message "CCP-Test - Anforderungen an den Agent (ps4rfd)" (2026-10-07),
+# section 4 (Acceptance experiment, Stufe 2). Stored verbatim; only this header added.
+#
+# Resolution rule (REQ-CCP 2 D): the ASSERT right-hand side is NOT a literal here. The host
+# harness resolves "<EXPECTED_DIGEST aus Test-Config>" at load time from
+# profiles/fw1352/test_config.json (expected.digest_hex). The agent must never embed a digest.
+#
+# Registry prerequisites (additive, frozen core untouched):
+#   - keymgr.load_test_key   (new operation; REQ-CCP A)
+#   - verify.ccp.submit      (new operation; REQ-CCP A + D, mutating=false, recovery_safe=false)
+#   - ccp.submit is registered already and stays capability-gated (ccp.submit -> PROVEN).
+#
+# Stage 0 (offline) runs this experiment against the mock agent: MockAgent gets ccp.submit
+# (HMAC over the vector via hashlib) and the two new operations; hardware stages need the
+# profile binding (profiles/fw1352/ccp-layouts.json) and the gates of REQ-CCP section 1.
+
+schema_version: 1
+name: ccp-known-answer-hmac
+framework_min_version: "1.0.0"
+ir_encoding: jcs-rfc8785
+requires:
+  memory.alloc: OBSERVED
+  memory.free: OBSERVED
+  gpuvm.map: PROVEN
+  keymgr.claim: PROVEN
+  ccp.submit: PROVEN
+resources:
+  - {name: buf,  type: memory,      sm: memory@1}
+  - {name: map,  type: gpu_mapping, sm: gpu_mapping@1}
+  - {name: slot, type: key_slot,    sm: key_slot@1}
+timeouts: {default_step_ms: 2000, global_ms: 60000}
+budget:
+  max_expanded_steps: 200
+  max_parallel_tasks: 2
+  max_runtime_budget_ms: 60000
+  max_snapshot_bytes: 1048576
+  max_rpc_bytes: 262144
+cleanup_policy: {on_assert_fail: CLEANUP, on_disconnect: REQUIRED}
+steps:
+  - op: CALL
+    call: {operation: memory.alloc, arguments: {size: 4096, purpose: ccp_test_buffer}, save: buf}
+  - op: CALL
+    call: {operation: gpuvm.map, arguments: {ref: {var: buf}}, save: map}
+  - op: CALL
+    call: {operation: keymgr.claim, arguments: {purpose: ccp_known_answer}, save: slot}
+  - op: CALL
+    call: {operation: keymgr.load_test_key, arguments: {slot: {var: slot}, test_key_id: PS4RF-TEST-KEY-1}}
+  - op: CALL
+    call:
+      operation: ccp.submit
+      arguments: {buffer: {var: buf}, slot: {var: slot},
+                  algorithm: HMAC_SHA256, data_id: ps4rf-known-answer-v1}
+      save: result
+  - op: ASSERT
+    assert: {cmp: eq, left: {var: result}, right: "<EXPECTED_DIGEST aus Test-Config>"}
+    message: "Known-Answer HMAC stimmt"
+  # Negativ-Tests:
+  - op: CALL
+    call:
+      operation: keymgr.release
+      arguments: {slot: {var: slot}}
+  - op: CALL
+    call:
+      operation: ccp.submit
+      arguments: {buffer: {var: buf}, slot: {var: slot},
+                  algorithm: HMAC_SHA256, data_id: ps4rf-known-answer-v1}
+      expect_error: RESOURCE_STATE_INVALID    # INV_SLOT_001

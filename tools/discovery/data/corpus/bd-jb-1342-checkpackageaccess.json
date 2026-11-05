@@ -1,0 +1,95 @@
+{
+  "id": "bd-jb-1342-checkpackageaccess",
+  "name": "BD-JB-13.42 - missing checkPackageAccess check on PS5",
+  "role": "training",
+  "burned_reason": "",
+  "platform": [
+    "ps5"
+  ],
+  "bug_class": "SANDBOX_ESCAPE",
+  "subsystem": "userland/bd-j (checkPackageAccess)",
+  "root_cause": {
+    "summary": "PS5 13.42's BD-J checkPackageAccess omits a check that is present in 13.60. The gap lets an Xlet use sun.launcher.LauncherHelper and export a custom jdk.internal.misc.Unsafe class, escaping the Java sandbox without the earlier BDJO path traversal. Gezine found it by diffing the PS5 13.42 and 13.60 BD-J modules.",
+    "primitive": "missing authorization check in BD-J checkPackageAccess, allowing a custom jdk.internal.misc.Unsafe class to be exported",
+    "trigger": "BD-J Xlet on a burned Blu-ray on PS5 13.42 or below",
+    "consequence": "Java sandbox escape to native userland code execution"
+  },
+  "discovery_approach": {
+    "summary": "Gezine diffed the PS5 13.42 and 13.60 BD-J modules in 2026 and found the missing check in checkPackageAccess. He implemented the variant in BD-JB5 (commit 4c28ff2, 2026-08-04), extending the exploit's support to 13.42; 13.60 is the first fixed release.",
+    "signals": [
+      "checkPackageAccess differs between the 13.42 and 13.60 BD-J modules",
+      "sun.launcher.LauncherHelper and jdk.internal.misc.Unsafe references in the Xlet",
+      "a package-access check that is present in 13.60 but absent in 13.42"
+    ],
+    "blind_usable": false
+  },
+  "firmware": {
+    "affected": [
+      "PS5 <= 13.42"
+    ],
+    "fixed_in": "13.60",
+    "differences": [
+      "13.60 adds the missing check in checkPackageAccess; Gezine found it by diffing the 13.42 and 13.60 BD-J modules (PS5 wiki).",
+      "13.60 also breaks BD-JB5's stock path; on 13.60+ BD-J requires bdj_unpatch.elf from an already-jailbroken console, which backs up and replaces bdjstack.jar (BD-JB5 README)."
+    ]
+  },
+  "patch_evidence": {
+    "available": true,
+    "what": "the PS5 dev wiki records the 13.42-to-13.60 BD-J module diff and the missing check; BD-JB5's README records the 13.42 support ceiling and the 13.60+ workaround",
+    "limits": "no firmware bytes and no quoted patched function are stored or linked here"
+  },
+  "sources": [
+    {
+      "url": "https://www.psdevwiki.com/ps5/Vulnerabilities",
+      "supports": "BD-JB-13.42 at PS5 <=13.42, the missing check in checkPackageAccess, sun.launcher.LauncherHelper plus jdk.internal.misc.Unsafe, discovery by diffing 13.42/13.60, fixed in 13.60",
+      "kind": "writeup",
+      "verified_via": "wayback",
+      "snapshot": "20260709162809"
+    },
+    {
+      "url": "https://github.com/Gezine/BD-JB5",
+      "supports": "PS5 BD-J sandbox escape supported up to 13.42; on 13.60+ it needs an already-jailbroken PS5 and bdj_unpatch.elf, which backs up and replaces bdjstack.jar",
+      "kind": "repo"
+    },
+    {
+      "url": "https://www.psdevwiki.com/ps4/Vulnerabilities",
+      "supports": "the BD-JB-EX system_ex injection context (PS4 <=13.52 / PS5 <=13.60) that explains why 13.60+ still has a BD-J path once a kernel exploit exists",
+      "kind": "writeup",
+      "verified_via": "wayback",
+      "snapshot": "20260710164118"
+    },
+    {
+      "url": "https://gist.github.com/TheOfficialFloW/7174351201b5260d7780780f4059bebf",
+      "supports": "a BD-J kernel payload implemented as Java (com.bdjb.exploit.kernel.ExploitNetControlImpl) that dlsyms libkernel symbols and drives __sys_netcontrol, showing the BD-J entry can directly carry a netcontrol kernel exploit",
+      "kind": "repo"
+    }
+  ],
+  "confidence": "medium",
+  "gaps": [
+    "The wiki's bug description is one sentence; no full technical writeup of the 13.42 chain was fetched.",
+    "The exact checkPackageAccess condition and the LauncherHelper call sequence are not quoted.",
+    "BD-JB5 supports 'up to 13.42', but versions between 13.42 and 13.60 are not enumerated in the fetched sources."
+  ],
+  "entry_chain": [
+    {
+      "stage": "Burned Blu-ray inserted; the player starts a BD-J Xlet",
+      "image_visible": "BDMV/BDJO and the JAR on the disc; the BD-J stack classes are in system_ex, not the kernel image",
+      "runtime_only": "the Xlet entry point and the JVM policy state"
+    },
+    {
+      "stage": "The Xlet uses sun.launcher.LauncherHelper and exports a custom jdk.internal.misc.Unsafe class",
+      "image_visible": "bytecode references to LauncherHelper and Unsafe; the checkPackageAccess implementation in the BD-J modules",
+      "runtime_only": "the missing check as actually reached at run time and the exported class's protection domain"
+    },
+    {
+      "stage": "Java sandbox escape; native syscalls through libkernel",
+      "image_visible": "no kernel-image signature; the native bridge is in the BD-J/userland libraries",
+      "runtime_only": "symbol resolution and the native call primitive"
+    },
+    {
+      "stage": "Chain to a kernel payload; TheFlow's BD-J netcontrol implementation shows the Java-to-__sys_netcontrol route, and BD-JB5 carries a Poops payload tree",
+      "image_visible": "the kernel image contains the netcontrol entry points and the usual kernel bug sites",
+      "runtime_only": "which kernel bug matches 13.42-13.60 and the required heap/offset state"
+    }
+  ]
+}

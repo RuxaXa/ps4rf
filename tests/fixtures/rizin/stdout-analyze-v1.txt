@@ -1,0 +1,4 @@
+__PS4RF_:info__
+{"arch": "x86", "bintype": "elf", "bits": 64, "core": {"type": "DYN (mock)"}, "endian": "little", "os": "linux", "stripped": false}
+__PS4RF_:functions__
+[{"cc": 12, "edges": 0, "maxbound": "0x401048", "minbound": "0x401000", "name": "sym.mock_open", "nbbs": 1, "offset": "0x401000", "size": 72, "type": "sym"}, {"cc": 17, "edges": 1, "maxbound": "0x4010cc", "minbound": "0x401048", "name": "sym.mock_read", "nbbs": 2, "offset": "0x401048", "size": 132, "type": "sym"}, {"cc": 14, "edges": 2, "maxbound": "0x40112c", "minbound": "0x4010cc", "name": "sym.mock_write", "nbbs": 3, "offset": "0x4010cc", "size": 96, "type": "sym"}, {"cc": 5, "edges": 0, "maxbound": "0x401158", "minbound": "0x40112c", "name": "sym.mock_close", "nbbs": 1, "offset": "0x40112c", "size": 44, "type": "sym"}, {"cc": 4, "edges": 0, "maxbound": "0x401174", "minbound": "0x401158", "name": "sym.mock_helper", "nbbs": 1, "offset": "0x401158", "size": 28, "type": "sym"}]

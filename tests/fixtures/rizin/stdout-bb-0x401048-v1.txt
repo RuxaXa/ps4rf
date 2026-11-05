@@ -1,0 +1,2 @@
+__PS4RF_:bb__
+[{"fail": null, "jump": "0x401088", "ninstr": 9, "offset": "0x401048", "opaddr": "0x401048", "size": 64, "traced": false}, {"fail": null, "jump": null, "ninstr": 8, "offset": "0x401088", "opaddr": "0x401088", "size": 68, "traced": false}]

@@ -1,0 +1,441 @@
+{
+  "fixture": false,
+  "locators": {
+    "kernel.attest.amd_iommu": {
+      "confidence": "OBSERVED",
+      "expected_bytes": {
+        "hex": "414d4420494f4d4d5500696f6d6d7520",
+        "offset": 0
+      },
+      "locator": {
+        "kind": "rva",
+        "value": 8186345
+      },
+      "module": "kernel",
+      "permissions": "r-x",
+      "policy": "STRICT_FINGERPRINT",
+      "provenance": {
+        "kind": "evidence",
+        "sha256": "cf157ffdbae872a20bbb9a46c8518b53d96c1ed75d4e73878466a295d92eca35",
+        "source": "kernel.bin (pinned FW13.52 image) + W9 live attestation (byte-exact match)"
+      },
+      "section": "text"
+    },
+    "kernel.attest.aperture_global": {
+      "confidence": "OBSERVED",
+      "expected_bytes": {
+        "hex": "000080e4da82ffff",
+        "offset": 0
+      },
+      "locator": {
+        "kind": "rva",
+        "value": 37567992
+      },
+      "module": "kernel",
+      "permissions": "r--",
+      "policy": "STRUCTURAL_ONLY",
+      "provenance": {
+        "kind": "evidence",
+        "sha256": "cf157ffdbae872a20bbb9a46c8518b53d96c1ed75d4e73878466a295d92eca35",
+        "source": "kernel.bin (pinned FW13.52 image) + W9 live attestation (byte-exact match)"
+      },
+      "section": "outside-loaded-image"
+    },
+    "kernel.attest.code_anchor": {
+      "confidence": "OBSERVED",
+      "expected_bytes": {
+        "hex": "554889e54157415641545383ff0f0f876d0100004989f689",
+        "offset": 0
+      },
+      "locator": {
+        "kind": "rva",
+        "value": 5043872
+      },
+      "module": "kernel",
+      "permissions": "r-x",
+      "policy": "STRICT_FINGERPRINT",
+      "provenance": {
+        "kind": "evidence",
+        "sha256": "cf157ffdbae872a20bbb9a46c8518b53d96c1ed75d4e73878466a295d92eca35",
+        "source": "kernel.bin (pinned FW13.52 image) + W9 live attestation (byte-exact match)"
+      },
+      "section": "text"
+    },
+    "kernel.attest.copyout_prologue": {
+      "confidence": "OBSERVED",
+      "expected_bytes": {
+        "hex": "554889e565488b04",
+        "offset": 0
+      },
+      "locator": {
+        "kind": "rva",
+        "value": 2872992
+      },
+      "module": "kernel",
+      "permissions": "r-x",
+      "policy": "STRICT_FINGERPRINT",
+      "provenance": {
+        "kind": "evidence",
+        "sha256": "cf157ffdbae872a20bbb9a46c8518b53d96c1ed75d4e73878466a295d92eca35",
+        "source": "kernel.bin (pinned FW13.52 image) + W9 live attestation (byte-exact match)"
+      },
+      "section": "text"
+    },
+    "kernel.attest.gbase_vtophys": {
+      "confidence": "OBSERVED",
+      "expected_bytes": {
+        "hex": "67626173655f76746f70687973006762",
+        "offset": 0
+      },
+      "locator": {
+        "kind": "rva",
+        "value": 8477628
+      },
+      "module": "kernel",
+      "permissions": "r-x",
+      "policy": "STRICT_FINGERPRINT",
+      "provenance": {
+        "kind": "evidence",
+        "sha256": "cf157ffdbae872a20bbb9a46c8518b53d96c1ed75d4e73878466a295d92eca35",
+        "source": "kernel.bin (pinned FW13.52 image) + W9 live attestation (byte-exact match)"
+      },
+      "section": "text"
+    },
+    "kernel.attest.image_elf": {
+      "confidence": "OBSERVED",
+      "expected_bytes": {
+        "hex": "7f454c46020101090000000000000000",
+        "offset": 0
+      },
+      "locator": {
+        "kind": "rva",
+        "value": 0
+      },
+      "module": "kernel",
+      "permissions": "r-x",
+      "policy": "STRICT_FINGERPRINT",
+      "provenance": {
+        "kind": "evidence",
+        "sha256": "cf157ffdbae872a20bbb9a46c8518b53d96c1ed75d4e73878466a295d92eca35",
+        "source": "kernel.bin (pinned FW13.52 image) + W9 live attestation (byte-exact match)"
+      },
+      "section": "text"
+    },
+    "kernel.attest.prison0_static": {
+      "confidence": "OBSERVED",
+      "expected_bytes": {
+        "hex": "c0c0b2d1ffffffff",
+        "offset": 0
+      },
+      "locator": {
+        "kind": "rva",
+        "value": 17955352
+      },
+      "module": "kernel",
+      "permissions": "rw-",
+      "policy": "STRICT_FINGERPRINT",
+      "provenance": {
+        "kind": "evidence",
+        "sha256": "cf157ffdbae872a20bbb9a46c8518b53d96c1ed75d4e73878466a295d92eca35",
+        "source": "kernel.bin (pinned FW13.52 image) + W9 live attestation (byte-exact match)"
+      },
+      "section": "data"
+    },
+    "kernel.attest.xfast_entry": {
+      "confidence": "OBSERVED",
+      "expected_bytes": {
+        "hex": "0f01f86548892425",
+        "offset": 0
+      },
+      "locator": {
+        "kind": "rva",
+        "value": 448
+      },
+      "module": "kernel",
+      "permissions": "r-x",
+      "policy": "STRICT_FINGERPRINT",
+      "provenance": {
+        "kind": "evidence",
+        "sha256": "cf157ffdbae872a20bbb9a46c8518b53d96c1ed75d4e73878466a295d92eca35",
+        "source": "kernel.bin (pinned FW13.52 image) + W9 live attestation (byte-exact match)"
+      },
+      "section": "text"
+    },
+    "ccp.submit.entry": {
+      "module": "kernel",
+      "locator": {
+        "kind": "rva",
+        "value": 6443824
+      },
+      "section": "text",
+      "permissions": "r-x",
+      "expected_bytes": {
+        "offset": 0,
+        "hex": "554889e54157415641554154534883ec"
+      },
+      "provenance": {
+        "kind": "evidence",
+        "source": "CCP message submit wrapper (sbl key service; the function names '\\Build\\J02697906\\sys\\internal\\modules\\sbl\\service\\service.c'). campaign-ccp-20261007 (Track A / keymgr+CCP offline research): work/A-keymgr-lifetime.md, work/a2c-submit-cluster.txt, work/A-out-64de_npdrm.txt; prologue bytes extracted from the pinned FW13.52 kernel image 2026-10-07",
+        "sha256": "cf157ffdbae872a20bbb9a46c8518b53d96c1ed75d4e73878466a295d92eca35"
+      },
+      "confidence": "OBSERVED",
+      "policy": "STRICT_FINGERPRINT"
+    },
+    "keymgr.claim.entry": {
+      "module": "kernel",
+      "locator": {
+        "kind": "rva",
+        "value": 6473072
+      },
+      "section": "text",
+      "permissions": "r-x",
+      "expected_bytes": {
+        "offset": 0,
+        "hex": "554889e54157415653504989fe488d3d"
+      },
+      "provenance": {
+        "kind": "evidence",
+        "source": "keymgr slot pool claim (takes a u16 out slot; npdrm call site 0x64E226). campaign-ccp-20261007 (Track A / keymgr+CCP offline research): work/A-keymgr-lifetime.md, work/a2c-submit-cluster.txt, work/A-out-64de_npdrm.txt; prologue bytes extracted from the pinned FW13.52 kernel image 2026-10-07",
+        "sha256": "cf157ffdbae872a20bbb9a46c8518b53d96c1ed75d4e73878466a295d92eca35"
+      },
+      "confidence": "OBSERVED",
+      "policy": "STRICT_FINGERPRINT"
+    },
+    "keymgr.release.entry": {
+      "module": "kernel",
+      "locator": {
+        "kind": "rva",
+        "value": 6473232
+      },
+      "section": "text",
+      "permissions": "r-x",
+      "expected_bytes": {
+        "offset": 0,
+        "hex": "554889e541565389fb488d3de8b90302"
+      },
+      "provenance": {
+        "kind": "evidence",
+        "source": "keymgr release by slot id (edi = slot id u16; npdrm call site 0x64E355). campaign-ccp-20261007 (Track A / keymgr+CCP offline research): work/A-keymgr-lifetime.md, work/a2c-submit-cluster.txt, work/A-out-64de_npdrm.txt; prologue bytes extracted from the pinned FW13.52 kernel image 2026-10-07",
+        "sha256": "cf157ffdbae872a20bbb9a46c8518b53d96c1ed75d4e73878466a295d92eca35"
+      },
+      "confidence": "OBSERVED",
+      "policy": "STRICT_FINGERPRINT"
+    },
+    "keymgr.bind.entry": {
+      "module": "kernel",
+      "locator": {
+        "kind": "rva",
+        "value": 6471504
+      },
+      "section": "text",
+      "permissions": "r-x",
+      "expected_bytes": {
+        "offset": 0,
+        "hex": "554889e54157415641554154534881ec"
+      },
+      "provenance": {
+        "kind": "evidence",
+        "source": "keymgr slot bind (tag = key handle; existing-tag path 0x62C026, fresh path 0x62C1D2). campaign-ccp-20261007 (Track A / keymgr+CCP offline research): work/A-keymgr-lifetime.md, work/a2c-submit-cluster.txt, work/A-out-64de_npdrm.txt; prologue bytes extracted from the pinned FW13.52 kernel image 2026-10-07",
+        "sha256": "cf157ffdbae872a20bbb9a46c8518b53d96c1ed75d4e73878466a295d92eca35"
+      },
+      "confidence": "OBSERVED",
+      "policy": "STRICT_FINGERPRINT"
+    },
+    "keymgr.snapshot.pool": {
+      "module": "kernel",
+      "locator": {
+        "kind": "rva",
+        "value": 40290528
+      },
+      "section": "data",
+      "permissions": "rw-",
+      "expected_bytes": null,
+      "provenance": {
+        "kind": "evidence",
+        "source": "keymgr slot pool: 64 records, stride 0x20, ids 0x50..0xCE step 2 (base 0x266C8E0); telemetry windows in work/A-keymgr-lifetime.json (live_read_proposal K-L1-poolstate: 0x2668008+0x58, 0x266C800+0x60, 0x266C8E0+0x800). campaign-ccp-20261007 (Track A / keymgr+CCP offline research): work/A-keymgr-lifetime.md, work/a2c-submit-cluster.txt, work/A-out-64de_npdrm.txt; prologue bytes extracted from the pinned FW13.52 kernel image 2026-10-07",
+        "sha256": "cf157ffdbae872a20bbb9a46c8518b53d96c1ed75d4e73878466a295d92eca35"
+      },
+      "confidence": "OBSERVED",
+      "policy": "STRUCTURAL_ONLY"
+    },
+    "ccp.device_gate": {
+      "module": "kernel",
+      "locator": {
+        "kind": "rva",
+        "value": 3878624
+      },
+      "section": "text",
+      "permissions": "r-x",
+      "expected_bytes": {
+        "offset": 0,
+        "hex": "554889e548b9100000000000003831c0"
+      },
+      "provenance": {
+        "kind": "evidence",
+        "source": "device-ioctl alternative binding: access gate comparing qword [obj+0x58] against the exact attribute 0x3800000000000010 (caller: npdrm ioctl 0xC0144E10, gate call 0x64DF69). campaign-ccp-20261007 (Track A / keymgr+CCP offline research): work/A-keymgr-lifetime.md, work/a2c-submit-cluster.txt, work/A-out-64de_npdrm.txt; prologue bytes extracted from the pinned FW13.52 kernel image 2026-10-07",
+        "sha256": "cf157ffdbae872a20bbb9a46c8518b53d96c1ed75d4e73878466a295d92eca35"
+      },
+      "confidence": "OBSERVED",
+      "policy": "STRICT_FINGERPRINT"
+    }
+  },
+  "modules": {
+    "kernel": {
+      "image": "kernel",
+      "locator_kind": "rva"
+    }
+  },
+  "notes": "Real FW13.52 profile promoted from W9 live attestation evidence (2026-10-05) plus the pinned FW13.52 research. Identity basis: seven STRICT_FINGERPRINT windows of the kernel image matched the live kernel byte for byte (host-verified), so the firmware family 13.52 is derived from kernel evidence and NOT from the userland kern.sdk_version value. No runtime address (LSTAR, kbase, KASLR slide, aperture value) is stored here: those live in runtime evidence and runtime bindings only. aperture_global is STRUCTURAL_ONLY by agreement and is never part of the identity. Console identity from the capture dossier (/home/hermes/audits/playstation-ps4/fw1352-ps4b-20260920/README.md, sha256 9563bc80304707310027a0c6d64351d7dfab16e08e526e27e98270265402cc39). SCOPE: this profile evidences the kernel attestation windows only. Gated operations whose locator is not evidenced here carry profile_required=true with locator_ref=null (explicitly pending) and refuse with LOCATOR_MISSING; the binding authority for them stays the W4 requirement table, and no boot binding exists yet either, so privileged providers remain deferred. REVISION 2 (CCP/P4 pull-forward, 2026-10-07, candidate): adds the keymgr/CCP binding locators (ccp.submit.entry 0x625330, keymgr.claim.entry 0x62C570, keymgr.release.entry 0x62C610, keymgr.bind.entry 0x62BF50, keymgr.snapshot.pool 0x266C8E0 structural, ccp.device_gate 0x3B2EE0) and binds ccp.submit / keymgr.claim / keymgr.release / keymgr.snapshot to them. All new facts are offline byte fingerprints of the pinned image (confidence OBSERVED): they are NOT live-attested, so this revision is a candidate and grants nothing until review + promotion; identity windows, target block and every other operation policy entry are unchanged from revision 1. Layouts and the provider binding rationale live in profiles/fw1352/ccp-layouts.json; the acceptance spec is docs/P4-CCP-ACCEPTANCE-REQ.md.",
+  "operation_policy": {
+    "ccp.submit": {
+      "locator_ref": "ccp.submit.entry",
+      "profile_fields": [
+        "slot",
+        "command"
+      ],
+      "profile_required": true,
+      "reason": "offline byte-verified submit entry (0x625330) with profile-owned message layout; field roles are command-dependent and bound in profiles/fw1352/ccp-layouts.json. No live attestation of this window yet: confidence OBSERVED, promotion needs review"
+    },
+    "gpuvm.lookup": {
+      "locator_ref": null,
+      "profile_fields": [
+        "gvm_id",
+        "va"
+      ],
+      "profile_required": true,
+      "reason": "profile-bound values required (W4 matrix); this profile carries no evidence-backed locator for this operation yet (fail closed)"
+    },
+    "gpuvm.map": {
+      "locator_ref": null,
+      "profile_fields": [
+        "gvm_id",
+        "va",
+        "prot"
+      ],
+      "profile_required": true,
+      "reason": "profile-bound values required (W4 matrix); this profile carries no evidence-backed locator for this operation yet (fail closed)"
+    },
+    "gpuvm.unmap": {
+      "locator_ref": null,
+      "profile_fields": [
+        "mapping_ref"
+      ],
+      "profile_required": true,
+      "reason": "profile-bound values required (W4 matrix); this profile carries no evidence-backed locator for this operation yet (fail closed)"
+    },
+    "ioctl.invoke": {
+      "locator_ref": null,
+      "profile_fields": [
+        "command"
+      ],
+      "profile_required": true,
+      "reason": "selector bound by the native device/command policy (no locator; fail closed)"
+    },
+    "kernel.dump.full": {
+      "locator_ref": null,
+      "profile_fields": [
+        "region_map"
+      ],
+      "profile_required": true,
+      "reason": "profile-bound values required (W4 matrix); this profile carries no evidence-backed locator for this operation yet (fail closed)"
+    },
+    "kernel.read": {
+      "locator_ref": null,
+      "profile_fields": [
+        "addr",
+        "size"
+      ],
+      "profile_required": true,
+      "reason": "profile-bound values required (W4 matrix); this profile carries no evidence-backed locator for this operation yet (fail closed)"
+    },
+    "kernel.snapshot": {
+      "locator_ref": null,
+      "profile_fields": [
+        "range",
+        "region_ref",
+        "expected_sha256"
+      ],
+      "profile_required": true,
+      "reason": "profile-bound values required (W4 matrix); this profile carries no evidence-backed locator for this operation yet (fail closed)"
+    },
+    "kernel.snapshot.recipe": {
+      "locator_ref": null,
+      "profile_fields": [
+        "recipe_ref"
+      ],
+      "profile_required": true,
+      "reason": "profile-bound selector from the generated recipe table (no locator; fail closed)"
+    },
+    "keymgr.claim": {
+      "locator_ref": "keymgr.claim.entry",
+      "profile_fields": [
+        "slot"
+      ],
+      "profile_required": true,
+      "reason": "offline byte-verified claim entry (0x62C570); slot id is a u16 out parameter"
+    },
+    "keymgr.release": {
+      "locator_ref": "keymgr.release.entry",
+      "profile_fields": [
+        "claim_ref"
+      ],
+      "profile_required": true,
+      "reason": "offline byte-verified release-by-id entry (0x62C610); edi = slot id"
+    },
+    "keymgr.snapshot": {
+      "locator_ref": "keymgr.snapshot.pool",
+      "profile_fields": [
+        "scope"
+      ],
+      "profile_required": true,
+      "reason": "pool state window is structural only (no exact fingerprint); telemetry scope is declared in ccp-layouts.json"
+    },
+    "verify.kernel.copyout": {
+      "locator_ref": null,
+      "profile_fields": [
+        "addr",
+        "size",
+        "expected"
+      ],
+      "profile_required": true,
+      "reason": "profile-bound values required (W4 matrix); this profile carries no evidence-backed locator for this operation yet (fail closed)"
+    },
+    "verify.kernel.exec": {
+      "locator_ref": null,
+      "profile_fields": [
+        "probe"
+      ],
+      "profile_required": true,
+      "reason": "profile-bound values required (W4 matrix); this profile carries no evidence-backed locator for this operation yet (fail closed)"
+    },
+    "verify.kernel.read": {
+      "locator_ref": null,
+      "profile_fields": [
+        "addr",
+        "expected"
+      ],
+      "profile_required": true,
+      "reason": "profile-bound values required (W4 matrix); this profile carries no evidence-backed locator for this operation yet (fail closed)"
+    },
+    "verify.samu.access": {
+      "locator_ref": null,
+      "profile_fields": [
+        "probe"
+      ],
+      "profile_required": true,
+      "reason": "profile-bound values required (W4 matrix); this profile carries no evidence-backed locator for this operation yet (fail closed)"
+    }
+  },
+  "profile_id": "fw1352-real-13.52",
+  "profile_version": 2,
+  "schema": "ps4rf.profile.v1",
+  "target": {
+    "architecture": "x86-64",
+    "firmware_build_id": "kernel-sha256:cf157ffdbae872a20bbb9a46c8518b53d96c1ed75d4e73878466a295d92eca35",
+    "firmware_version": "13.52",
+    "hardware_revision": "B01Y",
+    "model_family": "PS4 Slim CUH-2116A",
+    "platform": "ORBIS"
+  },
+  "canonical_sha256": "0749a500f3cfb612bf005a79ebf0751c2cca4569b2d90b4f546d190886286818"
+}

@@ -1,0 +1,436 @@
+{
+ "canonical_sha256": "b919bbf12c751dbf77eaa862a414d2e939f9921cb82d42a7889fdd54189fddfb",
+ "fixture": true,
+ "locators": {
+  "ccp.submit": {
+   "confidence": "UNVERIFIED",
+   "expected_bytes": null,
+   "locator": {
+    "kind": "rva",
+    "value": "UNRESOLVED"
+   },
+   "module": "ccp",
+   "permissions": "UNRESOLVED",
+   "provenance": {
+    "kind": "fixture",
+    "sha256": null,
+    "source": "W5 placeholder (no on-site data yet)"
+   },
+   "section": "UNRESOLVED"
+  },
+  "gpuvm.lookup": {
+   "confidence": "UNVERIFIED",
+   "expected_bytes": null,
+   "locator": {
+    "kind": "rva",
+    "value": "UNRESOLVED"
+   },
+   "module": "gpuvm",
+   "permissions": "UNRESOLVED",
+   "provenance": {
+    "kind": "fixture",
+    "sha256": null,
+    "source": "W5 placeholder (no on-site data yet)"
+   },
+   "section": "UNRESOLVED"
+  },
+  "gpuvm.map": {
+   "confidence": "UNVERIFIED",
+   "expected_bytes": null,
+   "locator": {
+    "kind": "rva",
+    "value": "UNRESOLVED"
+   },
+   "module": "gpuvm",
+   "permissions": "UNRESOLVED",
+   "provenance": {
+    "kind": "fixture",
+    "sha256": null,
+    "source": "W5 placeholder (no on-site data yet)"
+   },
+   "section": "UNRESOLVED"
+  },
+  "gpuvm.unmap": {
+   "confidence": "UNVERIFIED",
+   "expected_bytes": null,
+   "locator": {
+    "kind": "rva",
+    "value": "UNRESOLVED"
+   },
+   "module": "gpuvm",
+   "permissions": "UNRESOLVED",
+   "provenance": {
+    "kind": "fixture",
+    "sha256": null,
+    "source": "W5 placeholder (no on-site data yet)"
+   },
+   "section": "UNRESOLVED"
+  },
+  "ioctl.invoke": {
+   "confidence": "UNVERIFIED",
+   "expected_bytes": null,
+   "locator": {
+    "kind": "rva",
+    "value": "UNRESOLVED"
+   },
+   "module": "userland",
+   "permissions": "UNRESOLVED",
+   "provenance": {
+    "kind": "fixture",
+    "sha256": null,
+    "source": "W5 placeholder (no on-site data yet)"
+   },
+   "section": "UNRESOLVED"
+  },
+  "kernel.dump.full": {
+   "confidence": "UNVERIFIED",
+   "expected_bytes": null,
+   "locator": {
+    "kind": "rva",
+    "value": "UNRESOLVED"
+   },
+   "module": "kernel",
+   "permissions": "UNRESOLVED",
+   "provenance": {
+    "kind": "fixture",
+    "sha256": null,
+    "source": "W5 placeholder (no on-site data yet)"
+   },
+   "section": "UNRESOLVED"
+  },
+  "kernel.read": {
+   "confidence": "UNVERIFIED",
+   "expected_bytes": null,
+   "locator": {
+    "kind": "rva",
+    "value": "UNRESOLVED"
+   },
+   "module": "kernel",
+   "permissions": "UNRESOLVED",
+   "provenance": {
+    "kind": "fixture",
+    "sha256": null,
+    "source": "W5 placeholder (no on-site data yet)"
+   },
+   "section": "UNRESOLVED"
+  },
+  "kernel.snapshot": {
+   "confidence": "UNVERIFIED",
+   "expected_bytes": null,
+   "locator": {
+    "kind": "rva",
+    "value": "UNRESOLVED"
+   },
+   "module": "kernel",
+   "permissions": "UNRESOLVED",
+   "provenance": {
+    "kind": "fixture",
+    "sha256": null,
+    "source": "W5 placeholder (no on-site data yet)"
+   },
+   "section": "UNRESOLVED"
+  },
+  "kernel.snapshot.recipe": {
+   "confidence": "UNVERIFIED",
+   "expected_bytes": null,
+   "locator": {
+    "kind": "rva",
+    "value": "UNRESOLVED"
+   },
+   "module": "kernel",
+   "permissions": "UNRESOLVED",
+   "provenance": {
+    "kind": "fixture",
+    "sha256": null,
+    "source": "W5 placeholder (no on-site data yet)"
+   },
+   "section": "UNRESOLVED"
+  },
+  "keymgr.claim": {
+   "confidence": "UNVERIFIED",
+   "expected_bytes": null,
+   "locator": {
+    "kind": "rva",
+    "value": "UNRESOLVED"
+   },
+   "module": "keymgr",
+   "permissions": "UNRESOLVED",
+   "provenance": {
+    "kind": "fixture",
+    "sha256": null,
+    "source": "W5 placeholder (no on-site data yet)"
+   },
+   "section": "UNRESOLVED"
+  },
+  "keymgr.release": {
+   "confidence": "UNVERIFIED",
+   "expected_bytes": null,
+   "locator": {
+    "kind": "rva",
+    "value": "UNRESOLVED"
+   },
+   "module": "keymgr",
+   "permissions": "UNRESOLVED",
+   "provenance": {
+    "kind": "fixture",
+    "sha256": null,
+    "source": "W5 placeholder (no on-site data yet)"
+   },
+   "section": "UNRESOLVED"
+  },
+  "keymgr.snapshot": {
+   "confidence": "UNVERIFIED",
+   "expected_bytes": null,
+   "locator": {
+    "kind": "rva",
+    "value": "UNRESOLVED"
+   },
+   "module": "keymgr",
+   "permissions": "UNRESOLVED",
+   "provenance": {
+    "kind": "fixture",
+    "sha256": null,
+    "source": "W5 placeholder (no on-site data yet)"
+   },
+   "section": "UNRESOLVED"
+  },
+  "verify.kernel.copyout": {
+   "confidence": "UNVERIFIED",
+   "expected_bytes": null,
+   "locator": {
+    "kind": "rva",
+    "value": "UNRESOLVED"
+   },
+   "module": "kernel",
+   "permissions": "UNRESOLVED",
+   "provenance": {
+    "kind": "fixture",
+    "sha256": null,
+    "source": "W5 placeholder (no on-site data yet)"
+   },
+   "section": "UNRESOLVED"
+  },
+  "verify.kernel.exec": {
+   "confidence": "UNVERIFIED",
+   "expected_bytes": null,
+   "locator": {
+    "kind": "rva",
+    "value": "UNRESOLVED"
+   },
+   "module": "kernel",
+   "permissions": "UNRESOLVED",
+   "provenance": {
+    "kind": "fixture",
+    "sha256": null,
+    "source": "W5 placeholder (no on-site data yet)"
+   },
+   "section": "UNRESOLVED"
+  },
+  "verify.kernel.read": {
+   "confidence": "UNVERIFIED",
+   "expected_bytes": null,
+   "locator": {
+    "kind": "rva",
+    "value": "UNRESOLVED"
+   },
+   "module": "kernel",
+   "permissions": "UNRESOLVED",
+   "provenance": {
+    "kind": "fixture",
+    "sha256": null,
+    "source": "W5 placeholder (no on-site data yet)"
+   },
+   "section": "UNRESOLVED"
+  },
+  "verify.samu.access": {
+   "confidence": "UNVERIFIED",
+   "expected_bytes": null,
+   "locator": {
+    "kind": "rva",
+    "value": "UNRESOLVED"
+   },
+   "module": "kernel",
+   "permissions": "UNRESOLVED",
+   "provenance": {
+    "kind": "fixture",
+    "sha256": null,
+    "source": "W5 placeholder (no on-site data yet)"
+   },
+   "section": "UNRESOLVED"
+  }
+ },
+ "modules": {
+  "ccp": {
+   "image": "ccp",
+   "locator_kind": "rva"
+  },
+  "gpuvm": {
+   "image": "gpuvm",
+   "locator_kind": "rva"
+  },
+  "kernel": {
+   "image": "kernel",
+   "locator_kind": "rva"
+  },
+  "keymgr": {
+   "image": "keymgr",
+   "locator_kind": "rva"
+  },
+  "userland": {
+   "image": "userland",
+   "locator_kind": "rva"
+  }
+ },
+ "notes": "W5 profile skeleton: values marked UNRESOLVED need on-site evidence.",
+ "operation_policy": {
+  "ccp.submit": {
+   "locator_ref": "ccp.submit",
+   "profile_fields": [
+    "slot",
+    "command"
+   ],
+   "profile_required": true,
+   "reason": "profile-bound values required (W4 matrix)"
+  },
+  "gpuvm.lookup": {
+   "locator_ref": "gpuvm.lookup",
+   "profile_fields": [
+    "gvm_id",
+    "va"
+   ],
+   "profile_required": true,
+   "reason": "profile-bound values required (W4 matrix)"
+  },
+  "gpuvm.map": {
+   "locator_ref": "gpuvm.map",
+   "profile_fields": [
+    "gvm_id",
+    "va",
+    "prot"
+   ],
+   "profile_required": true,
+   "reason": "profile-bound values required (W4 matrix)"
+  },
+  "gpuvm.unmap": {
+   "locator_ref": "gpuvm.unmap",
+   "profile_fields": [
+    "mapping_ref"
+   ],
+   "profile_required": true,
+   "reason": "profile-bound values required (W4 matrix)"
+  },
+  "ioctl.invoke": {
+   "locator_ref": "ioctl.invoke",
+   "profile_fields": [
+    "command"
+   ],
+   "profile_required": true,
+   "reason": "profile-bound values required (W4 matrix)"
+  },
+  "kernel.dump.full": {
+   "locator_ref": "kernel.dump.full",
+   "profile_fields": [
+    "region_map"
+   ],
+   "profile_required": true,
+   "reason": "profile-bound values required (W4 matrix)"
+  },
+  "kernel.read": {
+   "locator_ref": "kernel.read",
+   "profile_fields": [
+    "addr",
+    "size"
+   ],
+   "profile_required": true,
+   "reason": "profile-bound values required (W4 matrix)"
+  },
+  "kernel.snapshot": {
+   "locator_ref": "kernel.snapshot",
+   "profile_fields": [
+    "range",
+    "region_ref",
+    "expected_sha256"
+   ],
+   "profile_required": true,
+   "reason": "profile-bound values required (W4 matrix)"
+  },
+  "kernel.snapshot.recipe": {
+   "locator_ref": "kernel.snapshot.recipe",
+   "profile_fields": [
+    "recipe_ref"
+   ],
+   "profile_required": true,
+   "reason": "profile-bound values required (W4 matrix)"
+  },
+  "keymgr.claim": {
+   "locator_ref": "keymgr.claim",
+   "profile_fields": [
+    "slot"
+   ],
+   "profile_required": true,
+   "reason": "profile-bound values required (W4 matrix)"
+  },
+  "keymgr.release": {
+   "locator_ref": "keymgr.release",
+   "profile_fields": [
+    "claim_ref"
+   ],
+   "profile_required": true,
+   "reason": "profile-bound values required (W4 matrix)"
+  },
+  "keymgr.snapshot": {
+   "locator_ref": "keymgr.snapshot",
+   "profile_fields": [
+    "scope"
+   ],
+   "profile_required": true,
+   "reason": "profile-bound values required (W4 matrix)"
+  },
+  "verify.kernel.copyout": {
+   "locator_ref": "verify.kernel.copyout",
+   "profile_fields": [
+    "addr",
+    "size",
+    "expected"
+   ],
+   "profile_required": true,
+   "reason": "profile-bound values required (W4 matrix)"
+  },
+  "verify.kernel.exec": {
+   "locator_ref": "verify.kernel.exec",
+   "profile_fields": [
+    "probe"
+   ],
+   "profile_required": true,
+   "reason": "profile-bound values required (W4 matrix)"
+  },
+  "verify.kernel.read": {
+   "locator_ref": "verify.kernel.read",
+   "profile_fields": [
+    "addr",
+    "expected"
+   ],
+   "profile_required": true,
+   "reason": "profile-bound values required (W4 matrix)"
+  },
+  "verify.samu.access": {
+   "locator_ref": "verify.samu.access",
+   "profile_fields": [
+    "probe"
+   ],
+   "profile_required": true,
+   "reason": "profile-bound values required (W4 matrix)"
+  }
+ },
+ "profile_id": "fw900-fixture",
+ "profile_version": 1,
+ "schema": "ps4rf.profile.v1",
+ "target": {
+  "architecture": "x86-64",
+  "firmware_build_id": "UNRESOLVED",
+  "firmware_version": "9.00",
+  "hardware_revision": "UNRESOLVED",
+  "model_family": "UNRESOLVED",
+  "platform": "ORBIS"
+ }
+}

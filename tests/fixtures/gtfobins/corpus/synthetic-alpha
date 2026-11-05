@@ -1,0 +1,27 @@
+---
+comment: Synthetic ps4rf fixture entry written in the upstream GTFOBins entry format; not a real GTFOBins entry and contains no real recipe.
+functions:
+  shell:
+    - code: ./synthetic-alpha
+      version: '>= 1.0'
+      contexts:
+        unprivileged:
+        sudo:
+        suid:
+          code: ./synthetic-alpha --synthetic-suid-mode
+          shell: false
+        capabilities:
+          list:
+            - CAP_SETUID
+  file-read:
+    - code: ./synthetic-alpha --synthetic-read
+      contexts:
+        unprivileged:
+        sudo:
+        suid:
+    - code: ./synthetic-alpha --synthetic-cap-read
+      contexts:
+        capabilities:
+          list:
+            - CAP_DAC_READ_SEARCH
+...

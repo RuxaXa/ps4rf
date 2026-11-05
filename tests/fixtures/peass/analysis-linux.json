@@ -1,0 +1,265 @@
+{
+  "compatibility": {
+    "compatible": true,
+    "reason": "target detected as Linux: linPEAS assumptions apply, but every finding remains an observation that requires verification."
+  },
+  "findings": [
+    {
+      "category": "kernel_os",
+      "classification": "OBSERVATION",
+      "line": 8,
+      "requires_verification": true,
+      "text": "hostname: ac-lab-host"
+    },
+    {
+      "category": "kernel_os",
+      "classification": "OBSERVATION",
+      "line": 9,
+      "requires_verification": true,
+      "text": "uname -a: Linux ac-lab-host 6.8.0-31-generic #31-Ubuntu SMP PREEMPT_DYNAMIC x86_64 GNU/Linux"
+    },
+    {
+      "category": "kernel_os",
+      "classification": "OBSERVATION",
+      "line": 10,
+      "requires_verification": true,
+      "text": "kernel: 6.8.0-31-generic"
+    },
+    {
+      "category": "kernel_os",
+      "classification": "OBSERVATION",
+      "line": 11,
+      "requires_verification": true,
+      "text": "/etc/os-release: PRETTY_NAME=\"Ubuntu 24.04.1 LTS\" ID=ubuntu VERSION_ID=\"24.04\""
+    },
+    {
+      "category": "filesystem",
+      "classification": "OBSERVATION",
+      "line": 14,
+      "requires_verification": true,
+      "text": "world-writable file: /srv/app/cache/staging.sock (mode 0777, fixture)"
+    },
+    {
+      "category": "filesystem",
+      "classification": "OBSERVATION",
+      "line": 15,
+      "requires_verification": true,
+      "text": "writable directory: /opt/vendor/updates (owned by appuser, fixture)"
+    },
+    {
+      "category": "filesystem",
+      "classification": "OBSERVATION",
+      "line": 16,
+      "requires_verification": true,
+      "text": "world-writable directory: /srv/app/backup (mode 0777, fixture)"
+    },
+    {
+      "category": "mounts",
+      "classification": "OBSERVATION",
+      "line": 19,
+      "requires_verification": true,
+      "text": "overlay on / (docker-style rootfs, fixture)"
+    },
+    {
+      "category": "mounts",
+      "classification": "OBSERVATION",
+      "line": 20,
+      "requires_verification": true,
+      "text": "/dev/sda2 on /boot type ext4 (rw, fixture)"
+    },
+    {
+      "category": "mounts",
+      "classification": "OBSERVATION",
+      "line": 21,
+      "requires_verification": true,
+      "text": "tmpfs on /run (rw, fixture)"
+    },
+    {
+      "category": "mounts",
+      "classification": "OBSERVATION",
+      "line": 22,
+      "requires_verification": true,
+      "text": "cgroup2 on /sys/fs/cgroup (container hint, fixture)"
+    },
+    {
+      "category": "permissions",
+      "classification": "OBSERVATION",
+      "line": 25,
+      "requires_verification": true,
+      "text": "unreadable by scan user: /root (fixture)"
+    },
+    {
+      "category": "permissions",
+      "classification": "OBSERVATION",
+      "line": 26,
+      "requires_verification": true,
+      "text": "world-writable directory: /tmp (sticky, fixture)"
+    },
+    {
+      "category": "permissions",
+      "classification": "OBSERVATION",
+      "line": 27,
+      "requires_verification": true,
+      "text": "group-writable file: /var/log/app.log (mode 0664, fixture)"
+    },
+    {
+      "category": "suid_sgid",
+      "classification": "OBSERVATION",
+      "line": 30,
+      "requires_verification": true,
+      "text": "/usr/bin/sudo (SUID root, fixture)"
+    },
+    {
+      "category": "suid_sgid",
+      "classification": "OBSERVATION",
+      "line": 31,
+      "requires_verification": true,
+      "text": "/usr/bin/wall (SGID tty, fixture)"
+    },
+    {
+      "category": "suid_sgid",
+      "classification": "OBSERVATION",
+      "line": 32,
+      "requires_verification": true,
+      "text": "/opt/vendor/helper (SUID root, not package-owned, fixture)"
+    },
+    {
+      "category": "capabilities",
+      "classification": "OBSERVATION",
+      "line": 35,
+      "requires_verification": true,
+      "text": "/usr/bin/ping cap_net_raw+ep (fixture)"
+    },
+    {
+      "category": "capabilities",
+      "classification": "OBSERVATION",
+      "line": 36,
+      "requires_verification": true,
+      "text": "/opt/vendor/netd cap_net_admin,cap_net_bind_service+ep (fixture)"
+    },
+    {
+      "category": "services",
+      "classification": "OBSERVATION",
+      "line": 39,
+      "requires_verification": true,
+      "text": "systemd unit app.service runs as root (fixture)"
+    },
+    {
+      "category": "services",
+      "classification": "OBSERVATION",
+      "line": 40,
+      "requires_verification": true,
+      "text": "systemd unit update-agent.service enabled (fixture)"
+    },
+    {
+      "category": "services",
+      "classification": "OBSERVATION",
+      "line": 41,
+      "requires_verification": true,
+      "text": "daemon sshd.service running (fixture)"
+    },
+    {
+      "category": "cron",
+      "classification": "OBSERVATION",
+      "line": 44,
+      "requires_verification": true,
+      "text": "/etc/crontab: 17 * * * * root /opt/vendor/update.sh (fixture)"
+    },
+    {
+      "category": "cron",
+      "classification": "OBSERVATION",
+      "line": 45,
+      "requires_verification": true,
+      "text": "user crontab (appuser): @reboot /srv/app/bin/start.sh (fixture)"
+    },
+    {
+      "category": "sockets",
+      "classification": "OBSERVATION",
+      "line": 48,
+      "requires_verification": true,
+      "text": "tcp 127.0.0.1:8080 LISTEN (fixture)"
+    },
+    {
+      "category": "sockets",
+      "classification": "OBSERVATION",
+      "line": 49,
+      "requires_verification": true,
+      "text": "unix socket /run/app/control.sock (fixture)"
+    },
+    {
+      "category": "sockets",
+      "classification": "OBSERVATION",
+      "line": 50,
+      "requires_verification": true,
+      "text": "udp 0.0.0.0:5353 (fixture)"
+    },
+    {
+      "category": "credentials",
+      "classification": "OBSERVATION",
+      "line": 53,
+      "requires_verification": true,
+      "text": "/home/operator/.netrc: credential-like directives observed (values never copied)"
+    },
+    {
+      "category": "credentials",
+      "classification": "OBSERVATION",
+      "line": 54,
+      "requires_verification": true,
+      "text": "/home/operator/.bash_history: credential-like patterns observed (values never copied)"
+    },
+    {
+      "category": "credentials",
+      "classification": "OBSERVATION",
+      "line": 55,
+      "requires_verification": true,
+      "text": "/srv/app/.env: credential-like assignment present (values never copied)"
+    },
+    {
+      "category": "interesting_binaries",
+      "classification": "OBSERVATION",
+      "line": 58,
+      "requires_verification": true,
+      "text": "/usr/bin/gdb present (fixture)"
+    },
+    {
+      "category": "interesting_binaries",
+      "classification": "OBSERVATION",
+      "line": 59,
+      "requires_verification": true,
+      "text": "/usr/bin/curl present (fixture)"
+    },
+    {
+      "category": "interesting_binaries",
+      "classification": "OBSERVATION",
+      "line": 60,
+      "requires_verification": true,
+      "text": "/usr/bin/python3.12 present (fixture)"
+    },
+    {
+      "category": "environment",
+      "classification": "OBSERVATION",
+      "line": 63,
+      "requires_verification": true,
+      "text": "/.dockerenv present (container indicator, fixture)"
+    },
+    {
+      "category": "environment",
+      "classification": "OBSERVATION",
+      "line": 64,
+      "requires_verification": true,
+      "text": "hypervisor cpu flag present (VM indicator, fixture)"
+    }
+  ],
+  "scan_sha256": "5ecef87f3bc15e937d862d29a639a38fcbf6cf98fd31e93139525a57d987c61d",
+  "scanner": {
+    "synthetic": true,
+    "tool": "linPEAS",
+    "version": "20231115-mock"
+  },
+  "target": {
+    "hostname": "ac-lab-host",
+    "kernel": "Linux ac-lab-host 6.8.0-31-generic #31-Ubuntu SMP PREEMPT_DYNAMIC x86_64 GNU/Linux",
+    "os": "LINUX",
+    "release": "PRETTY_NAME=\"Ubuntu 24.04.1 LTS\" ID=ubuntu VERSION_ID=\"24.04\""
+  }
+}

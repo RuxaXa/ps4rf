@@ -1,0 +1,124 @@
+{
+  "id": "bd-jb-bluray-entry",
+  "name": "BD-JB - Blu-ray Disc Java Xlet to native code (TheFloW)",
+  "role": "training",
+  "burned_reason": "",
+  "platform": [
+    "ps4",
+    "ps5"
+  ],
+  "bug_class": "SANDBOX_ESCAPE",
+  "subsystem": "userland/bd-j (kernel access needs a separate kernel exploit)",
+  "root_cause": {
+    "summary": "The BD-J Xlet runs in a JVM whose boot classpath includes bdjstack.jar, so several bdjstack classes execute with full permissions on attacker-influenced input. UserPreferenceManagerImpl deserializes the user-writable userprefs file inside AccessController.doPrivileged; IxcProxy.invokeMethod reflectively invokes public methods in a privileged context; and on PS4 com.oracle.security.Service.newInstance resolves arbitrary class names. The chain disables the SecurityManager, reaches native memory and symbols through sun.misc.Unsafe and ClassLoader$NativeLibrary.findEntry, and on PS4 sends a 0x58-byte CompilerAgentRequest to the separate JIT compiler process, whose compiler_data pointer at offset 0x38 is used as the destination of a memcpy into shared JIT memory. The result is native userland code execution; this is not itself a kernel bug.",
+    "primitive": "Java sandbox escape to AllPermission plus arbitrary native calls; on PS4 a write-what-where into a shared JIT page through the compiler agent",
+    "trigger": "insert a burned Blu-ray whose BD-J Xlet contains the chain and open the Blu-ray player",
+    "consequence": "arbitrary native code execution in the BD-J process (userland); kernel compromise requires chaining a separate kernel exploit"
+  },
+  "discovery_approach": {
+    "summary": "TheFloW treated the Blu-ray player as an alternative entry point because PS5 WebKit was constrained by XOM and a stricter sandbox. He searched bdjstack.jar for AccessController.doPrivileged call sites, found the privileged deserialization and IxcProxy invocation gadgets, added the PS4-only com.oracle.security.Service constructor gadget, and used the CompilerAgentRequest write for JIT code execution. The five issues were reported to PlayStation on 2021-10-25 (HackerOne #1379975), presented at hardwear.io on 2022-06-10 and disclosed the same day.",
+    "signals": [
+      "the JVM boot flag -Xbootclasspath:lib/rt.jar:lib/sunrsasign.jar:lib/jsse.jar:lib/jce.jar:bdjstack.jar",
+      "ObjectInputStream.readObject() on RootCertManager.getOriginalPersistentRoot() + \"/userprefs\" inside a doPrivileged action",
+      "IxcProxy.invokeMethod dispatching through AccessController.doPrivileged",
+      "CompilerAgentRequest is 0x58 bytes and its compiler_data field at +0x38 is passed to memcpy(req.compiler_data + 0x28, &req, 0x58)",
+      "PS4-only class com.oracle.security.Service.newInstance calling Class.forName on a caller-supplied name"
+    ],
+    "blind_usable": false
+  },
+  "firmware": {
+    "affected": [
+      "9.00 (tested)",
+      "PS4 < 9.50",
+      "PS5 < 5.00"
+    ],
+    "fixed_in": "9.50 (PS4) / 5.00 (PS5) per the author's June 2022 support statement; no per-gadget patch map is public",
+    "differences": [
+      "PS4 runs the JVM JIT in a separate compiler process and the runtime writes payloads into shared JIT pages through CompilerAgentRequest; PS5 has no JVM JIT, so the compiler-agent stage does not exist there (slides).",
+      "com.oracle.security.Service is a PS4-only gadget; the PS5 BD-JB implementations instead used sleirsgoevy's jdk.internal-based sandbox escape (PS5 wiki).",
+      "The same HackerOne report includes a UDF kernel overflow (udf_read_internal copying inf_len bytes into a sector_size buffer), but the public payload only panics the kernel; it is a separate kernel bug from the BD-J sandbox escape."
+    ]
+  },
+  "patch_evidence": {
+    "available": false,
+    "what": "no public patch diff for the individual BD-J gadgets; the slides give only a support ceiling (PS4 <9.50, PS5 <5.00), and the HackerOne report says only that it was tested on 9.00",
+    "limits": "no firmware bytes, no Sony advisory text and no binary diff are stored or linked here"
+  },
+  "sources": [
+    {
+      "url": "https://hackerone.com/reports/1379975",
+      "supports": "the five chained BD-J vulnerabilities (userprefs readObject, IxcProxy, com.oracle.security.Service, CompilerAgentRequest memcpy at +0x38, UDF inf_len/sector_size overflow), tested on 9.00, disclosed 2022-06-10",
+      "kind": "advisory"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/TheOfficialFloW/Presentations/master/2022-hardwear-io-bd-jb.pdf",
+      "supports": "JVM boot classpath includes bdjstack.jar; userprefs path /OS/HDD/download0/mnt_ada/userprefs; IxcProxy privileged invocation; PS4 compiler process versus no JVM JIT on PS5; support PS4 <9.50 and PS5 <5.00",
+      "kind": "writeup"
+    },
+    {
+      "url": "https://www.psdevwiki.com/ps4/Vulnerabilities",
+      "supports": "BD-JB five-vulnerability chain at <=9.00, the PS4/PS5 bdjstack paths, and the later BD-JB2/BD-JB-EX variants used for the firmware-difference claims",
+      "kind": "writeup",
+      "verified_via": "wayback",
+      "snapshot": "20260710164118"
+    },
+    {
+      "url": "https://www.psdevwiki.com/ps5/Vulnerabilities",
+      "supports": "PS5 BD-JB at <=4.51, the PS5 alternative jdk.internal sandbox escape, and the fact that the PS4-only Service gadget did not work on PS5",
+      "kind": "writeup",
+      "verified_via": "wayback",
+      "snapshot": "20260709162809"
+    },
+    {
+      "url": "https://github.com/TheOfficialFloW/bd-jb",
+      "supports": "public 'first bd-j hack' implementation repository, created 2021-10-22",
+      "kind": "repo"
+    },
+    {
+      "url": "https://consolemods.org/wiki/PS4:BD-JB",
+      "supports": "the end-to-end disc workflow and the later Lapse.iso (9.00-12.02) and Henloader (9.00-12.52) chains that pair BD-JB with a kernel exploit",
+      "kind": "writeup",
+      "verified_via": "wayback",
+      "snapshot": "20260724075552"
+    }
+  ],
+  "confidence": "high",
+  "gaps": [
+    "No public patch diff for the individual BD-J gadgets; the <9.50/<5.00 ceiling is the author's support statement, not a vendor advisory.",
+    "The UDF overflow in the same report is demonstrated only as a kernel panic; no fetched source shows it reaching controlled kernel code execution.",
+    "The PS5 implementations (sleirsgoevy, john-tornblom, psxdev) replace the PS4-only stages, but the fetched sources do not give a single canonical PS5 chain.",
+    "The HackerOne report does not map each vulnerability to a firmware version; 'tested on latest 9.00' is the only concrete test statement."
+  ],
+  "entry_chain": [
+    {
+      "stage": "Burned Blu-ray inserted; the Blu-ray player mounts the UDF volume and starts the BD-J Xlet from BDMV/BDJO",
+      "image_visible": "BDMV/BDJO descriptors and the JAR entries are on the disc; the kernel image alone does not contain the BD-J Java classes. The system_ex BD-J launcher contains the -Xbootclasspath string and bdjstack.jar.",
+      "runtime_only": "which Xlet entry point the player invokes and the exact JVM launch state"
+    },
+    {
+      "stage": "Attacker Java runs inside the BD-J security sandbox",
+      "image_visible": "JAR manifest/Main-Class and bytecode references to bdjstack classes; the kernel image shows none of this",
+      "runtime_only": "the protection domains and permissions actually assigned to the Xlet"
+    },
+    {
+      "stage": "Sandbox escape through bdjstack privileged-context gadgets (userprefs deserialization, IxcProxy, PS4 Service gadget)",
+      "image_visible": "strings and bytecode references to AccessController.doPrivileged, ObjectInputStream, IxcProxy and Service.newInstance in bdjstack.jar; nothing in the kernel image",
+      "runtime_only": "the serialized object graph, the reachable constructors and the resulting AllPermission grant"
+    },
+    {
+      "stage": "SecurityManager disabled; sun.misc.Unsafe and NativeLibrary.findEntry give native memory access and symbol lookup",
+      "image_visible": "Unsafe and NativeLibrary symbols in rt.jar/bdjstack.jar; no kernel-image signature",
+      "runtime_only": "the resolved libkernel addresses, fake ArrayKlass layout and the setjmp/__Ux86_64_setcontext call"
+    },
+    {
+      "stage": "PS4: CompilerAgentRequest write into a shared JIT page; PS5: native calls without JVM JIT",
+      "image_visible": "CompilerAgentRequest structure and its memcpy are in the BD-J runtime; PS5's lack of the compiler process is a platform property",
+      "runtime_only": "the JIT page address, the compiler socket and the payload placement"
+    },
+    {
+      "stage": "Separate kernel exploit selected for the firmware (for example Lapse aio_multi_delete on PS4 9.00-12.02, or an IPv6/umtx/netcontrol bug on PS5)",
+      "image_visible": "the kernel image contains the candidate bug sites (aio_multi_delete, ip6_setpktopt, umtx_shm_unref_reg_locked, netcontrol); UDF udf_read_internal is visible if that path is used",
+      "runtime_only": "which bug matches the running firmware, the heap layout and the KASLR/offset state"
+    }
+  ]
+}

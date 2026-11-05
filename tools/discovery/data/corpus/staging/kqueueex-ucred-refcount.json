@@ -1,0 +1,62 @@
+{
+  "id": "kqueueex-ucred-refcount",
+  "name": "sys_kqueueex ucred reference leak - 32-bit cr_ref wrap to use-after-free (P2JB)",
+  "role": "training",
+  "burned_reason": "",
+  "platform": [
+    "ps5"
+  ],
+  "bug_class": "REFCOUNT",
+  "subsystem": "kernel/kqueue (sys_kqueueex)",
+  "root_cause": {
+    "summary": "sys_kqueueex() calls crhold() so the new kqueue can keep a credential reference. When the optional name argument is non-NULL and copyinstr() fails, the error path frees the kqueue, closes the descriptor and drops the file, but never calls crfree(), so every failed call leaves cr_ref one higher. Repeating the call drives the 32-bit counter towards 0xFFFFFFFF. The attacker opens files so that each falloc() adds its own crhold() and holds a controlled reference to the same ucred; with the counter at 1, a setuid() makes the kernel copy the credentials into a new ucred and crfree() the old one, freeing it while the open files still hold fp->f_cred pointers to it. A heap spray with a fake ucred whose cr_ref is 1 reclaims the freed object, and closing those files runs fdrop() -> crfree() on attacker data, repeatedly freeing the same object.",
+    "primitive": "reference-count leak turning into a 32-bit refcount wrap, premature free of struct ucred, then repeated crfree() of a reclaimed object",
+    "trigger": "__sys_kqueueex() with a non-NULL invalid name pointer (copyinstr fails, EFAULT) until cr_ref approaches 0xFFFFFFFF - roughly 50 minutes, reducible with threads - then open files to hold references, drive the counter to 1, call setuid(), spray a fake ucred with cr_ref = 1 and close the files",
+    "consequence": "double/triple free of struct ucred leading to arbitrary kernel read/write and root"
+  },
+  "discovery_approach": {
+    "summary": "Gezine found the missing crfree() on the copyinstr error path and published a C PoC on 2026-05-02 as 'PS5 12.70 kernel ucred reference leak leads to UAF'; the PoC's header comment is the write-up, including the full exploitation sequence. Ports to mast1c0re Lua (cheburek3000), Artemis Lua (maj0r, n0llptr), Y2JB JavaScript (matem6) and Ren'Py Python (matem6) followed within May 2026.",
+    "signals": [
+      "a syscall error path that takes crhold() on entry and has no matching crfree() on one branch",
+      "a 32-bit refcount field incremented once per failed syscall and never decremented",
+      "struct kqueue carrying a ucred reference on PS5 (the source notes PS4 kqueue does not hold ucred, so PS4 has no equivalent leak)",
+      "an fd-close path (fdrop -> crfree) that trusts fp->f_cred after the credential object was freed"
+    ],
+    "blind_usable": false
+  },
+  "firmware": {
+    "affected": [
+      "12.70"
+    ],
+    "fixed_in": "13.00",
+    "differences": [
+      "the defect only exists where struct kqueue carries a ucred reference; the source states the PS4 kqueue does not hold ucred, which is why the same error path is harmless there",
+      "PS5 13.00 is the first fixed firmware per both the PoC header and the dev wiki; neither names the code change (the defect is a missing crfree(), so the fix is presumably on that branch, but that is inference, not a sourced statement)"
+    ]
+  },
+  "patch_evidence": {
+    "available": false,
+    "what": "the PoC header and the PS5 dev wiki both state the bug was patched at PS5 13.00, and the dev wiki adds that the family is deprecated for exploitation because it takes about 50 minutes to trigger",
+    "limits": "no 13.00 diff, decompilation or vendor advisory was found; the trigger cost means the version claim is a report rather than something a third party can cheaply re-measure"
+  },
+  "sources": [
+    {
+      "url": "https://gist.github.com/Gezine/89581201a9c1da80317ffff1de519294",
+      "supports": "the missing crfree() on the copyinstr error path of sys_kqueueex, the full exploitation chain (2^32 calls, falloc crholds, setuid freeing the ucred, cr_ref=1 spray, close -> repeated crfree), 'Bug was patched at PS5 13.00' and 'PS4 kqueue does not hold ucred'",
+      "kind": "repo"
+    },
+    {
+      "url": "https://www.psdevwiki.com/ps5/Vulnerabilities",
+      "supports": "affected up to 12.70, patched since 13.00, ~50 minutes to trigger, deprecated for exploitation, PS4 not affected, and the list of public ports",
+      "kind": "writeup"
+    }
+  ],
+  "confidence": "medium",
+  "gaps": [
+    "only one substantive source: the dev wiki's bug description restates the PoC header almost verbatim, so the mechanism and the 13.00 patch claim are not independently corroborated",
+    "the exact error-return sequence is described but not shown as disassembly; no source confirms whether free()/fdclose()/fdrop() ordering matters for reachability",
+    "no page or write-up shows the 13.00 fix, so the changed code is unknown",
+    "the lower bound of the affected range is not documented - only the top (12.70) is public",
+    "the PoC depends on kernel_copyout()/kernel_copyout helpers from a PS5 SDK to observe cr_ref, so the claim that the counter actually wraps is a design argument, not a published measurement"
+  ]
+}

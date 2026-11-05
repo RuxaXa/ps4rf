@@ -1,0 +1,85 @@
+{
+ "blind_protocol": {
+  "evaluation_layer": "semantic graph + chain reasoning + ranking (new in S1.3)",
+  "family": "afterglow-kqueue",
+  "independent_result_valid": false,
+  "invalidated_reason": "After the first result was visible, semgraph.chains was repaired: the start node was not marked visited, path reconstruction followed src instead of dst, and the export truncated at 400. These are correctness defects, but changing them invalidates the frozen evaluation.",
+  "rules_changed_after_measurement": false,
+  "status": "partially burned (measured once in S1.2d)"
+ },
+ "file_sha256": {
+  "tools/discovery/chains.py": "c8384d679b662af3419738fb8af0a1559cf093c98c36afce823bd1c133b143b7",
+  "tools/discovery/cli.py": "b99805234c5afdfd5065af6cec848bfb985bf46f0ac3dc7f2f31dd551f617e7d",
+  "tools/discovery/data/blind/afterglow-targets.json": "2122bb8f706481595a8af31c43ddef035f29083a7841ead0795aa4b79f21344c",
+  "tools/discovery/data/training/references.json": "9646ea23e889da4cb437b57b716341417d62aa77309fcda6e0e98f62bd96779b",
+  "tools/discovery/entries.py": "a2f81576c21993b5fa5307e00adc42d7187a2d077c8bc2b2ab70f94e1d139367",
+  "tools/discovery/handles.py": "59f99a334a46b95418bbb262196e1358d6c0ca155c07d25cc4eb0b0afd042fce",
+  "tools/discovery/patterns.py": "b205c52b12e53b1814f3e6c5fc1714ee917bc9074db302e280ca0b47716fdc26",
+  "tools/discovery/semgraph.py": "fc2c28bf09af8158bcca48968b353c0b56073bcdd8a4bd2884f4812e01aa8028"
+ },
+ "frozen_at_commit": "9c087268d862b20d7775e3aac65d31ca35fc967c",
+ "metrics": {
+  "false_positive_rate": "claims per analysed function on the negative corpora, reported with numerator, denominator and a one-sided 95% upper bound; a 0/1 observation is never reported as a rate",
+  "ranking_hit": "the held-back family appears in the top-10 of the frozen ranking",
+  "root_cause_recall_proxy": "a chain whose hop_status is 'proved' and whose primitive rank is <=2 inside the held-back entry set",
+  "subsystem_coverage": "number of distinct detectors that fire inside the held-back entry set (a subsystem hit is NOT a root-cause hit)"
+ },
+ "note": "Written before the S1.3 blind evaluation ran. Rules, search space, metrics and ranking are fixed here; a change to any hash below invalidates the blind result and requires a new manifest.",
+ "ranking": {
+  "excluded_functions": {
+   "13.52": [
+    "0x164e90",
+    "0x164dc0",
+    "0x1e0ad0",
+    "0x1e0710",
+    "0x164810"
+   ],
+   "reason": "netcontrol training reference"
+  },
+  "excluded_subsystems": [],
+  "score_terms": [
+   "proved_hop_ratio x 3",
+   "+ 2 if the primitive carries a decisive identity domain (handle)",
+   "+ 1 if a surplus reference is proven",
+   "+ 1 if a cross-subsystem hop is witnessed",
+   "- 0.5 x entry depth",
+   "- 2 if the chain depends on a 'possible' or 'unknown' hop"
+  ]
+ },
+ "revisions": [
+  {
+   "blind_result_seen_before_change": false,
+   "change": "reporting only: each finding now carries entry_candidates, the full list of entry labels that reach the function at the minimal depth. The S1.3 attribution check showed that the label a finding displays is decided by shortest-path ordering, so a single label must not read as ownership.",
+   "file": "tools/discovery/cli.py",
+   "metrics_changed": false,
+   "ranking_changed": false,
+   "rules_changed": false,
+   "search_space_changed": false,
+   "sha256_after": "b99805234c5afdfd5065af6cec848bfb985bf46f0ac3dc7f2f31dd551f617e7d",
+   "sha256_before": "ef3c6542948ee5b9c39332bbf52900bd1631c476bbb5481cc19cf5956210f57a"
+  },
+  {
+   "blind_result_seen_before_change": true,
+   "change": "chain termination, forward path reconstruction, full candidate export, cross-subsystem hop accounting",
+   "consequence": "cycle-1 Afterglow result is not an independent blind result",
+   "file": "tools/discovery/semgraph.py",
+   "metrics_changed": true,
+   "ranking_changed": true,
+   "rules_changed": true,
+   "search_space_changed": false,
+   "sha256_after": "f9653ef289d0c07e7ab27c6dda30f1ed764d48e23afaeddf8db44afb7b07768b",
+   "sha256_before": "fc2c28bf09af8158bcca48968b353c0b56073bcdd8a4bd2884f4812e01aa8028"
+  }
+ ],
+ "schema": "ps4rf.discovery.freeze/1",
+ "search_space": {
+  "depth": 2,
+  "entry_set": "extended",
+  "max_functions": 12000,
+  "scan_artefacts": {
+   "13.52": "sprint1.2d/s12d-scan-fw1352-ext.json",
+   "9.00": "sprint1.2d/s12d-scan-fw900-ext.json"
+  },
+  "selection_order": "depth"
+ }
+}

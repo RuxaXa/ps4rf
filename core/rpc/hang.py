@@ -1,0 +1,2 @@
+class MockHangReleased(Exception):
+    pass

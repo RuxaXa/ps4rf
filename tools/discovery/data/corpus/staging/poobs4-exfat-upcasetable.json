@@ -1,0 +1,77 @@
+{
+  "id": "poobs4-exfat-upcasetable",
+  "name": "pOOBs4 / exFAThax - exFAT up-case table size truncation (CVE-2022-3349)",
+  "role": "training",
+  "burned_reason": "",
+  "platform": [
+    "ps4",
+    "ps5"
+  ],
+  "bug_class": "HEAP_OVERFLOW",
+  "subsystem": "fs/exfat (Sony UVFAT)",
+  "root_cause": {
+    "summary": "UVFAT_readupcasetable() parses the up-case table directory entry of an exFAT volume and reads dataLength as a 64-bit on-disk value. It computes the table size in 64-bit arithmetic as (sector_size + dataLength - 1) rounded down to a sector multiple, then passes that size to sceFatfsCreateHeapVl(), whose size argument is a 32-bit int. When dataLength is larger than 4 GiB the low 32 bits of the rounded size survive (for example 0x100000200 becomes 0x200), so the kernel allocates a small buffer and then reads the up-case table sector by sector into it until dataLength is satisfied, producing a linear heap overflow of attacker-controlled table data in multiples of the sector size.",
+    "primitive": "linear heap buffer overflow (out-of-bounds write) of attacker-controlled file content, length a multiple of the sector size, caused by a 64-bit to 32-bit truncation at an allocator boundary",
+    "trigger": "inserting a USB mass-storage device that holds a crafted exFAT image (the public exploit waits for the system's 'disk format not supported' notification after insertion), which makes the kernel exFAT handler parse the volume's up-case table; no further user action beyond insertion and the resulting mount attempt",
+    "consequence": "kernel heap corruption of the allocations adjacent to the undersized up-case buffer; with heap shaping this yields control of an adjacent object and kernel code execution (the public exploit reaches kernel ROP and kernel patching)"
+  },
+  "discovery_approach": {
+    "summary": "Two public paths converged on the same function. TheFloW found the truncation while auditing Sony's exFAT implementation and reported it to PlayStation on 2021-09-15 (HackerOne #1340942, disclosed 2022-09-21, CVE-2022-3349). Separately, after 9.03 shipped, zecoxao diffed the 9.00 and 9.03 kernels and advised the scene to exploit the vulnerability; ChendoChap, Znullptr and Specter released pOOBs4 for 9.00 on 2021-12-13. The pOOBs4 README describes its own route as a 9.00-versus-9.03 kernel diff, so the public exploit was version-diff driven even though the same defect had already been reported privately.",
+    "signals": [
+      "a 64-bit length field read from disk reaches a callee whose prototype declares a 32-bit int size parameter (implicit narrowing at the call boundary)",
+      "allocation size computed as a sector-rounded value in 64-bit arithmetic and then truncated by the callee",
+      "copy loop that advances the destination pointer by sector size for dataLength bytes without any bound derived from the allocation",
+      "up-case table entry length trusted without an upper-bound check against the volume or partition size"
+    ],
+    "blind_usable": false
+  },
+  "firmware": {
+    "affected": [
+      "1.00",
+      "5.05",
+      "6.72",
+      "7.55",
+      "9.00"
+    ],
+    "fixed_in": "9.03",
+    "differences": [
+      "9.03 adds an upper-32-bit test before the allocator call: the 9.03+ decompilation excerpt shows `if (table_len >> 0x20 == 0)` guarding sceFatfsCreateHeapVl(0, table_len & 0xffffffff), so a table length above 4 GiB is rejected instead of silently truncated",
+      "the same excerpt shows the block-size field read from fileSystem+0x104 in 1.01-9.00 but from fileSystem+0x4c in 9.03-13.50, a structure-layout change that accompanies the fix but is not itself the security check",
+      "the PS4 dev wiki records the same bug as fixed on PS5 in 4.50"
+    ]
+  },
+  "patch_evidence": {
+    "available": true,
+    "what": "public decompiler-style excerpt of UVFAT_readupcasetable before and after 9.03 (PS4 dev wiki) showing the added `table_len >> 0x20 == 0` guard, plus the CVE-2022-3349 record naming the function and CWE-787",
+    "limits": "no firmware bytes, no Sony advisory text and no binary diff are stored or linked here; the before/after code is a wiki transcription, not a vendor patch"
+  },
+  "sources": [
+    {
+      "url": "https://github.com/ChendoChap/pOOBs4",
+      "supports": "exploit needs a modified exFAT image; describes discovery by diffing 9.00 and 9.03 kernels; states the bug is fixed in 9.03 and predates 1.00; states it works on some PS5 firmwares but with no public exploitation strategy",
+      "kind": "repo"
+    },
+    {
+      "url": "https://hackerone.com/reports/1340942",
+      "supports": "root cause: 64-bit dataLength and size truncated by the 32-bit sceFatfsCreateHeapVl() argument; 512-byte-multiple overflow; heap spray target; reporter and disclosure dates",
+      "kind": "advisory"
+    },
+    {
+      "url": "https://www.psdevwiki.com/ps4/Vulnerabilities",
+      "supports": "CVE-2022-3349 mapping, credit timeline (TheFloW find, zecoxao diff advice, ChendoChap implementation), pre-9.03 and 9.03+ pseudo-code with the added check, affected 1.01-9.00 and fixed 9.03 / PS5 4.50",
+      "kind": "writeup"
+    },
+    {
+      "url": "https://nvd.nist.gov/vuln/detail/CVE-2022-3349",
+      "supports": "official CVE description naming UVFAT_readupcasetable and dataLength, CWE-787 classification, publication date 2022-09-28",
+      "kind": "advisory"
+    }
+  ],
+  "confidence": "high",
+  "gaps": [
+    "The PS4 dev wiki credits TheFloW with the find, while the pOOBs4 README describes independent discovery by diffing 9.00 and 9.03; both fit the same code path, but no source states the relationship between the two discoveries",
+    "PS5 exploitation is asserted by the repository README but no public PS5 trigger, writeup or exploit was fetched; the PS5 claim rests on that sentence and the wiki fix version",
+    "heap layout, spray object and offset constants used by the exploit are deliberately not reproduced here",
+    "the CVE record is VulDB-sourced rather than vendor-sourced, and no Sony security advisory text was fetched"
+  ]
+}

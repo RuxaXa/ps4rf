@@ -1,0 +1,340 @@
+{
+  "canonical_sha256": "51b59db31ee47a9e2c5450ddfad002a80a407bf727f9ac5ae19558b82c3a4819",
+  "fixture": false,
+  "locators": {
+    "kernel.attest.amd_iommu": {
+      "confidence": "OBSERVED",
+      "expected_bytes": {
+        "hex": "414d4420494f4d4d5500696f6d6d7520",
+        "offset": 0
+      },
+      "locator": {
+        "kind": "rva",
+        "value": 8186345
+      },
+      "module": "kernel",
+      "permissions": "r-x",
+      "policy": "STRICT_FINGERPRINT",
+      "provenance": {
+        "kind": "evidence",
+        "sha256": "cf157ffdbae872a20bbb9a46c8518b53d96c1ed75d4e73878466a295d92eca35",
+        "source": "kernel.bin (pinned FW13.52 image) + W9 live attestation (byte-exact match)"
+      },
+      "section": "text"
+    },
+    "kernel.attest.aperture_global": {
+      "confidence": "OBSERVED",
+      "expected_bytes": {
+        "hex": "000080e4da82ffff",
+        "offset": 0
+      },
+      "locator": {
+        "kind": "rva",
+        "value": 37567992
+      },
+      "module": "kernel",
+      "permissions": "r--",
+      "policy": "STRUCTURAL_ONLY",
+      "provenance": {
+        "kind": "evidence",
+        "sha256": "cf157ffdbae872a20bbb9a46c8518b53d96c1ed75d4e73878466a295d92eca35",
+        "source": "kernel.bin (pinned FW13.52 image) + W9 live attestation (byte-exact match)"
+      },
+      "section": "outside-loaded-image"
+    },
+    "kernel.attest.code_anchor": {
+      "confidence": "OBSERVED",
+      "expected_bytes": {
+        "hex": "554889e54157415641545383ff0f0f876d0100004989f689",
+        "offset": 0
+      },
+      "locator": {
+        "kind": "rva",
+        "value": 5043872
+      },
+      "module": "kernel",
+      "permissions": "r-x",
+      "policy": "STRICT_FINGERPRINT",
+      "provenance": {
+        "kind": "evidence",
+        "sha256": "cf157ffdbae872a20bbb9a46c8518b53d96c1ed75d4e73878466a295d92eca35",
+        "source": "kernel.bin (pinned FW13.52 image) + W9 live attestation (byte-exact match)"
+      },
+      "section": "text"
+    },
+    "kernel.attest.copyout_prologue": {
+      "confidence": "OBSERVED",
+      "expected_bytes": {
+        "hex": "554889e565488b04",
+        "offset": 0
+      },
+      "locator": {
+        "kind": "rva",
+        "value": 2872992
+      },
+      "module": "kernel",
+      "permissions": "r-x",
+      "policy": "STRICT_FINGERPRINT",
+      "provenance": {
+        "kind": "evidence",
+        "sha256": "cf157ffdbae872a20bbb9a46c8518b53d96c1ed75d4e73878466a295d92eca35",
+        "source": "kernel.bin (pinned FW13.52 image) + W9 live attestation (byte-exact match)"
+      },
+      "section": "text"
+    },
+    "kernel.attest.gbase_vtophys": {
+      "confidence": "OBSERVED",
+      "expected_bytes": {
+        "hex": "67626173655f76746f70687973006762",
+        "offset": 0
+      },
+      "locator": {
+        "kind": "rva",
+        "value": 8477628
+      },
+      "module": "kernel",
+      "permissions": "r-x",
+      "policy": "STRICT_FINGERPRINT",
+      "provenance": {
+        "kind": "evidence",
+        "sha256": "cf157ffdbae872a20bbb9a46c8518b53d96c1ed75d4e73878466a295d92eca35",
+        "source": "kernel.bin (pinned FW13.52 image) + W9 live attestation (byte-exact match)"
+      },
+      "section": "text"
+    },
+    "kernel.attest.image_elf": {
+      "confidence": "OBSERVED",
+      "expected_bytes": {
+        "hex": "7f454c46020101090000000000000000",
+        "offset": 0
+      },
+      "locator": {
+        "kind": "rva",
+        "value": 0
+      },
+      "module": "kernel",
+      "permissions": "r-x",
+      "policy": "STRICT_FINGERPRINT",
+      "provenance": {
+        "kind": "evidence",
+        "sha256": "cf157ffdbae872a20bbb9a46c8518b53d96c1ed75d4e73878466a295d92eca35",
+        "source": "kernel.bin (pinned FW13.52 image) + W9 live attestation (byte-exact match)"
+      },
+      "section": "text"
+    },
+    "kernel.attest.prison0_static": {
+      "confidence": "OBSERVED",
+      "expected_bytes": {
+        "hex": "c0c0b2d1ffffffff",
+        "offset": 0
+      },
+      "locator": {
+        "kind": "rva",
+        "value": 17955352
+      },
+      "module": "kernel",
+      "permissions": "rw-",
+      "policy": "STRICT_FINGERPRINT",
+      "provenance": {
+        "kind": "evidence",
+        "sha256": "cf157ffdbae872a20bbb9a46c8518b53d96c1ed75d4e73878466a295d92eca35",
+        "source": "kernel.bin (pinned FW13.52 image) + W9 live attestation (byte-exact match)"
+      },
+      "section": "data"
+    },
+    "kernel.attest.xfast_entry": {
+      "confidence": "OBSERVED",
+      "expected_bytes": {
+        "hex": "0f01f86548892425",
+        "offset": 0
+      },
+      "locator": {
+        "kind": "rva",
+        "value": 448
+      },
+      "module": "kernel",
+      "permissions": "r-x",
+      "policy": "STRICT_FINGERPRINT",
+      "provenance": {
+        "kind": "evidence",
+        "sha256": "cf157ffdbae872a20bbb9a46c8518b53d96c1ed75d4e73878466a295d92eca35",
+        "source": "kernel.bin (pinned FW13.52 image) + W9 live attestation (byte-exact match)"
+      },
+      "section": "text"
+    }
+  },
+  "modules": {
+    "kernel": {
+      "image": "kernel",
+      "locator_kind": "rva"
+    },
+    "gpuvm": {
+      "image": "gpuvm",
+      "locator_kind": "rva"
+    },
+    "keymgr": {
+      "image": "keymgr",
+      "locator_kind": "rva"
+    },
+    "ccp": {
+      "image": "ccp",
+      "locator_kind": "rva"
+    },
+    "userland": {
+      "image": "userland",
+      "locator_kind": "rva"
+    }
+  },
+  "notes": "Real FW13.52 profile promoted from W9 live attestation evidence (2026-10-05) plus the pinned FW13.52 research. Identity basis: seven STRICT_FINGERPRINT windows of the kernel image matched the live kernel byte for byte (host-verified), so the firmware family 13.52 is derived from kernel evidence and NOT from the userland kern.sdk_version value. No runtime address (LSTAR, kbase, KASLR slide, aperture value) is stored here: those live in runtime evidence and runtime bindings only. aperture_global is STRUCTURAL_ONLY by agreement and is never part of the identity. Console identity from the capture dossier (/home/hermes/audits/playstation-ps4/fw1352-ps4b-20260920/README.md, sha256 9563bc80304707310027a0c6d64351d7dfab16e08e526e27e98270265402cc39). SCOPE: this profile evidences the kernel attestation windows only. Gated operations whose locator is not evidenced here carry profile_required=true with locator_ref=null (explicitly pending) and refuse with LOCATOR_MISSING; the binding authority for them stays the W4 requirement table, and no boot binding exists yet either, so privileged providers remain deferred.",
+  "operation_policy": {
+    "ccp.submit": {
+      "locator_ref": null,
+      "profile_fields": [
+        "slot",
+        "command"
+      ],
+      "profile_required": true,
+      "reason": "profile-bound values required (W4 matrix); this profile carries no evidence-backed locator for this operation yet (fail closed)"
+    },
+    "gpuvm.lookup": {
+      "locator_ref": null,
+      "profile_fields": [
+        "gvm_id",
+        "va"
+      ],
+      "profile_required": true,
+      "reason": "profile-bound values required (W4 matrix); this profile carries no evidence-backed locator for this operation yet (fail closed)"
+    },
+    "gpuvm.map": {
+      "locator_ref": null,
+      "profile_fields": [
+        "gvm_id",
+        "va",
+        "prot"
+      ],
+      "profile_required": true,
+      "reason": "profile-bound values required (W4 matrix); this profile carries no evidence-backed locator for this operation yet (fail closed)"
+    },
+    "gpuvm.unmap": {
+      "locator_ref": null,
+      "profile_fields": [
+        "mapping_ref"
+      ],
+      "profile_required": true,
+      "reason": "profile-bound values required (W4 matrix); this profile carries no evidence-backed locator for this operation yet (fail closed)"
+    },
+    "ioctl.invoke": {
+      "locator_ref": null,
+      "profile_fields": [
+        "command"
+      ],
+      "profile_required": true,
+      "reason": "selector bound by the native device/command policy (no locator; fail closed)"
+    },
+    "kernel.dump.full": {
+      "locator_ref": null,
+      "profile_fields": [
+        "region_map"
+      ],
+      "profile_required": true,
+      "reason": "profile-bound values required (W4 matrix); this profile carries no evidence-backed locator for this operation yet (fail closed)"
+    },
+    "kernel.read": {
+      "locator_ref": null,
+      "profile_fields": [
+        "addr",
+        "size"
+      ],
+      "profile_required": true,
+      "reason": "profile-bound values required (W4 matrix); this profile carries no evidence-backed locator for this operation yet (fail closed)"
+    },
+    "kernel.snapshot": {
+      "locator_ref": null,
+      "profile_fields": [
+        "range",
+        "region_ref",
+        "expected_sha256"
+      ],
+      "profile_required": true,
+      "reason": "profile-bound values required (W4 matrix); this profile carries no evidence-backed locator for this operation yet (fail closed)"
+    },
+    "kernel.snapshot.recipe": {
+      "locator_ref": null,
+      "profile_fields": [
+        "recipe_ref"
+      ],
+      "profile_required": true,
+      "reason": "profile-bound selector from the generated recipe table (no locator; fail closed)"
+    },
+    "keymgr.claim": {
+      "locator_ref": null,
+      "profile_fields": [
+        "slot"
+      ],
+      "profile_required": true,
+      "reason": "profile-bound values required (W4 matrix); this profile carries no evidence-backed locator for this operation yet (fail closed)"
+    },
+    "keymgr.release": {
+      "locator_ref": null,
+      "profile_fields": [
+        "claim_ref"
+      ],
+      "profile_required": true,
+      "reason": "profile-bound values required (W4 matrix); this profile carries no evidence-backed locator for this operation yet (fail closed)"
+    },
+    "keymgr.snapshot": {
+      "locator_ref": null,
+      "profile_fields": [
+        "scope"
+      ],
+      "profile_required": true,
+      "reason": "profile-bound values required (W4 matrix); this profile carries no evidence-backed locator for this operation yet (fail closed)"
+    },
+    "verify.kernel.copyout": {
+      "locator_ref": null,
+      "profile_fields": [
+        "addr",
+        "size",
+        "expected"
+      ],
+      "profile_required": true,
+      "reason": "profile-bound values required (W4 matrix); this profile carries no evidence-backed locator for this operation yet (fail closed)"
+    },
+    "verify.kernel.exec": {
+      "locator_ref": null,
+      "profile_fields": [
+        "probe"
+      ],
+      "profile_required": true,
+      "reason": "profile-bound values required (W4 matrix); this profile carries no evidence-backed locator for this operation yet (fail closed)"
+    },
+    "verify.kernel.read": {
+      "locator_ref": null,
+      "profile_fields": [
+        "addr",
+        "expected"
+      ],
+      "profile_required": true,
+      "reason": "profile-bound values required (W4 matrix); this profile carries no evidence-backed locator for this operation yet (fail closed)"
+    },
+    "verify.samu.access": {
+      "locator_ref": null,
+      "profile_fields": [
+        "probe"
+      ],
+      "profile_required": true,
+      "reason": "profile-bound values required (W4 matrix); this profile carries no evidence-backed locator for this operation yet (fail closed)"
+    }
+  },
+  "profile_id": "fw1352-real-13.52",
+  "profile_version": 1,
+  "schema": "ps4rf.profile.v1",
+  "target": {
+    "architecture": "x86-64",
+    "firmware_build_id": "kernel-sha256:cf157ffdbae872a20bbb9a46c8518b53d96c1ed75d4e73878466a295d92eca35",
+    "firmware_version": "13.52",
+    "hardware_revision": "B01Y",
+    "model_family": "PS4 Slim CUH-2116A",
+    "platform": "ORBIS"
+  }
+}

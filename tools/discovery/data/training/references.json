@@ -1,0 +1,109 @@
+{
+  "note": "Role of every reference case in the discovery programme. training = the case contributed to the rules and may be cited as a positive; held_back = the case must not be used to change a rule, the search space or the ranking; negative = a corpus that only measures false positives. Burned cases stay in the file: hiding that a test has been seen would make later recall numbers meaningless.  S1.9 source handoff: the answer payloads of the held_back entries were redacted; the entries stay so that the leak checks and the blind-claim accounting still see them.",
+  "references": [
+    {
+      "burned": "partially",
+      "burned_reason": "S1.2c reconstructed the family by hand and S1.2d made the D7 rule find it from the extended entry set; it can no longer serve as a blind test, only as a regression anchor.",
+      "detectors": [
+        "D7_handle_object_identity",
+        "D8_reference_balance"
+      ],
+      "firmwares": {
+        "13.52": {
+          "evidence": "sprint1.2c/EVIDENCE.md, sprint1.3/attribution.json",
+          "matcher": "0x1e0710",
+          "verdict": "fixed",
+          "wrapper": "0x164e90"
+        },
+        "9.00": {
+          "evidence": "sprint1.2c/EVIDENCE.md, sprint1.3/attribution.json",
+          "matcher": "0x2e4570",
+          "verdict": "vulnerable",
+          "wrapper": "0x447e60"
+        }
+      },
+      "id": "netcontrol-double-fdrop",
+      "role": "training",
+      "root_cause": "4-byte file-descriptor number compared against a caller supplied value; the number can be reused by a different object, so the matched record does not own the reference that is dropped twice"
+    },
+    {
+      "burned": "yes",
+      "burned_reason": "integrated exploit family (families.json) whose shape informed D1/D4; D1/D4 are still gated untrusted, so the case is a training reference and not a positive control.",
+      "detectors": [
+        "D1_double_release",
+        "D4_alias_index"
+      ],
+      "firmwares": {},
+      "id": "lapse",
+      "role": "training"
+    },
+    {
+      "burned": "yes",
+      "burned_reason": "Measured in S1.2d and again in the first S1.3 graph pass. A non-terminating predecessor-cycle defect and a path reconstruction defect were then repaired, so the S1.3 freeze was invalidated after the result was known. Afterglow is now a regression/negative control only; no rule was tuned to its root cause.",
+      "detectors": [],
+      "entries": [
+        "sysent[362]",
+        "sysent[363]",
+        "sysent[477]",
+        "sysent[24]"
+      ],
+      "expected_shape": "a generic UAF/ownership rule should fire inside the kqueue handler set or its depth-1 callees, otherwise the rule set is aio-shaped",
+      "id": "afterglow-kqueue",
+      "role": "negative",
+      "source": "tools/discovery/data/blind/afterglow-targets.json"
+    },
+    {
+      "burned": "no",
+      "burned_reason": "",
+      "detectors": [],
+      "firmwares": {
+        "13.52": {
+          "verdict": "reference_negative"
+        }
+      },
+      "id": "fw1352-frozen-corpus",
+      "label_scope": "corrected-functions-only",
+      "note": "false-positive denominator over functions whose correction is independently established, not over the firmware as a whole. A function that is merely unlabelled is UNKNOWN, never a true negative: the same firmware carries a positive ReLapse case, so 'FW 13.52 is negative' is not a defensible label.",
+      "role": "negative",
+      "unlabeled_functions": "unknown"
+    },
+    {
+      "burned": "no",
+      "burned_reason": "",
+      "detectors": [],
+      "id": "prior-results",
+      "note": "previously rejected candidates; queue.build uses them as counter-evidence for the subsystem prior.",
+      "role": "negative",
+      "source": "tools/discovery/data/negative/prior-results.json"
+    },
+    {
+      "burned": "no",
+      "burned_reason": "Selected with the complete set of unused families before cycle-2 evaluation; engine does not read families.json.",
+      "detectors": [],
+      "entries": {
+        "redacted": "removed for the source handoff; a held-back answer must not leave the machine that produced it"
+      },
+      "expected": {
+        "redacted": "removed for the source handoff; a held-back answer must not leave the machine that produced it"
+      },
+      "id": "pppwn-cycle2",
+      "role": "held_back",
+      "source": "tools/discovery/data/families/families.json#pppwn"
+    },
+    {
+      "burned": "no",
+      "burned_reason": "Selected with the complete set of unused families before cycle-2 evaluation; engine does not read families.json.",
+      "detectors": [],
+      "entries": {
+        "redacted": "removed for the source handoff; a held-back answer must not leave the machine that produced it"
+      },
+      "expected": {
+        "redacted": "removed for the source handoff; a held-back answer must not leave the machine that produced it"
+      },
+      "id": "relapse-cycle2",
+      "role": "held_back",
+      "source": "tools/discovery/data/families/families.json#relapse"
+    }
+  ],
+  "schema": "ps4rf.discovery.references/1"
+}

@@ -1,0 +1,186 @@
+{
+  "corpus_sha256": "0d4f9c0d361760e6f5517ce49e80df6c43aa0784943cf21299a0f02587025ee2",
+  "entries": {
+    "synthetic-alpha": {
+      "capability_requirements": {
+        "file_read": [
+          [
+            "CAP_DAC_READ_SEARCH"
+          ]
+        ],
+        "shell": [
+          [
+            "CAP_SETUID"
+          ]
+        ]
+      },
+      "contexts": {
+        "file_read": [
+          "capabilities",
+          "sudo",
+          "suid",
+          "unprivileged"
+        ],
+        "shell": [
+          "capabilities",
+          "sudo",
+          "suid",
+          "unprivileged"
+        ]
+      },
+      "functions": [
+        "capabilities",
+        "file_read",
+        "shell",
+        "sudo",
+        "suid"
+      ],
+      "reference": "https://gtfobins.github.io/gtfobins/synthetic-alpha/",
+      "relative_path": "synthetic-alpha",
+      "sha256": "7548376093538802d499df2929e99ac2abe268382d9696d3c92f90c471d79f4a",
+      "version_constraints": [
+        ">= 1.0"
+      ]
+    },
+    "synthetic-beta": {
+      "capability_requirements": {},
+      "contexts": {
+        "download": [
+          "unprivileged"
+        ],
+        "file_read": [
+          "unprivileged"
+        ],
+        "file_write": [
+          "unprivileged"
+        ],
+        "restricted_shell": [
+          "unprivileged"
+        ],
+        "upload": [
+          "unprivileged"
+        ]
+      },
+      "functions": [
+        "download",
+        "file_read",
+        "file_write",
+        "restricted_shell",
+        "upload"
+      ],
+      "reference": "https://gtfobins.github.io/gtfobins/synthetic-beta/",
+      "relative_path": "synthetic-beta",
+      "sha256": "75c5a98b9b33d0001d7833ae0c617964e47e74aac794281b46f1cb6db7bbf6b1",
+      "version_constraints": []
+    },
+    "synthetic-delta": {
+      "capability_requirements": {},
+      "contexts": {
+        "file_read": [
+          "suid"
+        ],
+        "shell": [
+          "suid"
+        ]
+      },
+      "functions": [
+        "file_read",
+        "shell",
+        "suid"
+      ],
+      "reference": "https://gtfobins.github.io/gtfobins/synthetic-delta/",
+      "relative_path": "synthetic-delta",
+      "sha256": "345ff0b8cbc602615f272ba76f4b39146fa9ba5da28997c6b3b6b2f3084a7582",
+      "version_constraints": []
+    },
+    "synthetic-epsilon": {
+      "capability_requirements": {
+        "command": [
+          []
+        ],
+        "file_read": [
+          [
+            "CAP_DAC_OVERRIDE",
+            "CAP_DAC_READ_SEARCH"
+          ]
+        ],
+        "shell": [
+          [
+            "CAP_SETUID"
+          ]
+        ]
+      },
+      "contexts": {
+        "command": [
+          "capabilities"
+        ],
+        "file_read": [
+          "capabilities"
+        ],
+        "shell": [
+          "capabilities"
+        ]
+      },
+      "functions": [
+        "capabilities",
+        "command",
+        "file_read",
+        "shell"
+      ],
+      "reference": "https://gtfobins.github.io/gtfobins/synthetic-epsilon/",
+      "relative_path": "synthetic-epsilon",
+      "sha256": "a29644cfb1e4655838522e97ad5e33e14424c656e3e9973480180bb85b52fd95",
+      "version_constraints": []
+    },
+    "synthetic-gamma": {
+      "capability_requirements": {},
+      "contexts": {
+        "command": [
+          "sudo"
+        ],
+        "library_load": [
+          "sudo"
+        ],
+        "shell": [
+          "sudo"
+        ]
+      },
+      "functions": [
+        "command",
+        "library_load",
+        "shell",
+        "sudo"
+      ],
+      "reference": "https://gtfobins.github.io/gtfobins/synthetic-gamma/",
+      "relative_path": "synthetic-gamma",
+      "sha256": "00bc4f93bda250896b1a7240fd7c4313e31cff7e2e9fff278643598e53fcce41",
+      "version_constraints": []
+    },
+    "synthetic-zeta": {
+      "alias": "synthetic-gamma",
+      "capability_requirements": {},
+      "contexts": {
+        "command": [
+          "sudo"
+        ],
+        "library_load": [
+          "sudo"
+        ],
+        "shell": [
+          "sudo"
+        ]
+      },
+      "functions": [
+        "command",
+        "library_load",
+        "shell",
+        "sudo"
+      ],
+      "reference": "https://gtfobins.github.io/gtfobins/synthetic-zeta/",
+      "relative_path": "synthetic-zeta",
+      "sha256": "f8bda947ccb2dcaa2038ae0da6a06cdffe235c3b5053ec3403c47c53acff5e5b",
+      "version_constraints": []
+    }
+  },
+  "schema": "ps4rf.knowledge.gtfobins.index/v1"
+}
