@@ -47,7 +47,8 @@ def proof(*effects, argument="rdi", status=sm.COMPLETE, vf=None, release=None):
 
 def caller(argument="rdi", status="proved"):
     return {"status": status, "argument": argument, "site": "0x88",
-            "kind": "cfg-must-reach", "text": "mov rdi, rbx; call 0x100"}
+            "acquisition": "0x60", "source_register": "rbx",
+            "kind": "cfg-must-reach", "text": "CFG must-reach rbx -> rdi"}
 
 
 def test_complete_exact_argument_free_has_checked_release_instruction():
@@ -224,3 +225,30 @@ def test_actual_capstone_decode_matches_claimed_release_site():
     assert result["witness"]["release_target"] == hex(target)
     assert release_identity_witness(
         modeled, decoded, "rdi", lambda candidate: False)["status"] == "unknown"
+
+
+@pytest.mark.parametrize("removed", ("acquisition", "site", "text", "kind"))
+def test_join_does_not_trust_bare_caller_proved_status(removed):
+    forged = caller()
+    forged.pop(removed)
+    claim = combine_transfer_claim(forged, proof(effect()))
+    assert claim["attrs"]["status"] == "unknown"
+    assert claim["attrs"]["callee_identity_proven"] is False
+
+
+@pytest.mark.parametrize("removed", ("object_key", "kind", "summary_status"))
+def test_join_rejects_incomplete_callee_proof_objects(removed):
+    result = proof(effect())
+    witness = dict(result["witness"])
+    witness.pop(removed)
+    result = dict(result, witness=witness)
+    claim = combine_transfer_claim(caller(), result)
+    assert claim["attrs"]["status"] == "unknown"
+    assert claim["attrs"]["callee_identity_proven"] is False
+
+
+def test_join_rejects_callee_proof_for_wrong_same_abi_argument_key():
+    result = proof(effect())
+    witness = dict(result["witness"], object_key=("arg", 1, ()))
+    claim = combine_transfer_claim(caller(), dict(result, witness=witness))
+    assert claim["attrs"]["status"] == "unknown"
