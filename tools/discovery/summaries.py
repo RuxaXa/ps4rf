@@ -1621,6 +1621,14 @@ def _nearest_write_to(view, call_site: int, register: str) -> Optional[Tuple[int
     for back in range(position - 1, max(-1, position - 120), -1):
         ins = view.ins[back]
         operands = list(getattr(ins, "operands", []) or [])
+        # xchg writes BOTH registers, and its second operand must kill any
+        # stale argument witness that lies earlier in this backwards window.
+        if mnemonic == "xchg" and len(operands) >= 2 \
+                and getattr(operands[1], "type", None) == X86_OP_REG:
+            other = _reg(ins, operands[1])
+            if other and canon_reg(other) in ARG_INDEX:
+                seen_args.add(canon_reg(other))
+                saw_uncertain = True
         if not operands or getattr(operands[0], "type", None) != X86_OP_REG:
             continue
         name = _reg(ins, operands[0])
@@ -1680,7 +1688,23 @@ def _placement_for(view, call_site: int, object_register: str) -> dict:
     alias = {target}
     seen_args = set()
     saw_uncertain = False
-    refutation = None
+
+    def bypasses_setup(site: int) -> bool:
+        """A direct branch from before the setup can skip it and hit the call."""
+        for before in insns:
+            if before.address >= site:
+                break
+            kind = before.mnemonic.split()[-1].lower()
+            if not (kind.startswith("j") or kind.startswith("loop")):
+                continue
+            ops = list(getattr(before, "operands", []) or [])
+            if not ops or getattr(ops[0], "type", None) != X86_OP_IMM:
+                return True
+            target_site = int(ops[0].imm)
+            if site < target_site <= call_site:
+                return True
+        return False
+
     for back in range(position - 1, max(-1, position - 25), -1):
         ins = insns[back]
         mnemonic = ins.mnemonic.split()[-1].lower()
@@ -1709,18 +1733,25 @@ def _placement_for(view, call_site: int, object_register: str) -> dict:
             if mnemonic in ("mov", "movabs") and source.type == X86_OP_REG:
                 raw_source = _reg(ins, source)
                 if raw_source and raw_source == target and target in alias:
+                    if bypasses_setup(ins.address):
+                        saw_uncertain = True
+                        continue
                     return {"status": PROVEN, "argument": dest, "site": ins.address,
                             "text": f"{ins.mnemonic} {ins.op_str}",
                             "why": f"{dest} receives the same full-width pointer as {target}"}
-                refutation = {"status": REFUTED, "argument": dest, "site": ins.address,
-                              "text": f"{ins.mnemonic} {ins.op_str}",
-                              "why": f"{dest} is redefined from a different register"}
+                # A different register is not a *different object* proof:
+                # rcx may alias rax in an upstream block.  Without an identity
+                # domain, the honest conclusion is UNKNOWN, not REFUTED.
+                saw_uncertain = True
                 continue
 
             if mnemonic == "lea" and source.type == X86_OP_MEM:
                 base = _reg_name_mem(ins, source.mem.base)
                 if (base == target and target in alias
                         and not source.mem.index and source.mem.disp == 0):
+                    if bypasses_setup(ins.address):
+                        saw_uncertain = True
+                        continue
                     return {"status": PROVEN, "argument": dest, "site": ins.address,
                             "text": f"{ins.mnemonic} {ins.op_str}",
                             "why": f"{dest} receives an identity LEA of {target}"}
@@ -1739,8 +1770,8 @@ def _placement_for(view, call_site: int, object_register: str) -> dict:
         return {"status": UNKNOWN, "argument": None,
                 "why": "argument placement may involve a field, interior pointer, "
                        "partial register, branch or unsupported definition"}
-    return refutation or {"status": UNKNOWN, "argument": None,
-                          "why": "no full-width argument placement can be proved"}
+    return {"status": UNKNOWN, "argument": None,
+            "why": "no full-width argument placement can be proved"}
 
 
 def hop_at(view, call_site: int, object_register: str, callee_summary: Optional[FunctionSummary],
