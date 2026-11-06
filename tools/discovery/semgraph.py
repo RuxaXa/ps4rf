@@ -95,9 +95,12 @@ class Graph:
         if not witness or not witness.get("site") or not witness.get("text"):
             raise AssertionError(f"edge {src}->{dst} ({kind}) has no witness")
         if kind == "transfers-reference":
-            # An omitted status is NOT positive evidence of a transfer.
-            # Keep the explicit refusal in exported graph and chain reports.
-            attrs.setdefault("status", UNKNOWN)
+            # Missing/null grades are not positive evidence; malformed grades
+            # are a producer error, never silently interpreted as proof.
+            if attrs.get("status") is None:
+                attrs["status"] = UNKNOWN
+            elif attrs["status"] not in STATUS_ORDER:
+                raise AssertionError("transfer edge has invalid proof status")
         if kind == "transfers-reference" and attrs.get("status") == PROVED:
             # Proving caller placement alone does not identify callee's object.
             # Require both independently checkable witness halves.
@@ -763,7 +766,9 @@ def chains(graph: dict, scan: dict, facts: dict, chains_mod=None, limit: int = 2
 
     def with_status(edge: dict) -> dict:
         hop = _hop(edge, nodes)
-        hop["status"] = edge.get("status", status_of.get(edge["kind"], UNKNOWN))
+        status = edge.get("status")
+        hop["status"] = (status if status in STATUS_ORDER
+                         else status_of.get(edge["kind"], UNKNOWN))
         return hop
 
     primitives = [f for f in scan.get("findings", []) if f.get("rank", 9) <= 2]
