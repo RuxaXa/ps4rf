@@ -334,7 +334,7 @@ def test_missing_transfer_status_aggregates_as_unknown_independent_of_order():
     for missing_first in (True, False):
         g = semgraph.Graph()
         witness = {"site": "0x44", "text": "call 0x20"}
-        records = ({}, {"status": semgraph.UNKNOWN})
+        records = ({"detector": "synthetic_a"}, {"status": semgraph.UNKNOWN, "detector": "synthetic_b"})
         if not missing_first:
             records = tuple(reversed(records))
         for attrs in records:
@@ -342,7 +342,7 @@ def test_missing_transfer_status_aggregates_as_unknown_independent_of_order():
                    "transfers-reference", witness, **attrs)
         edge = g.export()["edges"][0]
         assert edge["status"] == semgraph.UNKNOWN
-        assert len(edge["evidence"]) == 2 or len(edge["evidence"]) == 0
+        assert len(edge["evidence"]) == 2
 
 
 # ------------------------------------------------------- A1-02: candidate evidence
