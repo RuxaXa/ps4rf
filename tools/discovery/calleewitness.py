@@ -124,12 +124,21 @@ def combine_transfer_claim(caller: dict, callee: dict) -> dict:
     caller = caller or {}
     callee = callee or {}
     arg = caller.get("argument")
-    caller_proved = caller.get("status") == "proved"
+    # A bare status="proved" is not itself a caller witness. Require the
+    # exact output contract of the CFG must-reaching-definitions producer.
+    caller_proved = (caller.get("status") == "proved"
+                     and caller.get("kind") == "cfg-must-reach"
+                     and arg in ARG_REGS
+                     and bool(caller.get("site") and caller.get("text")
+                              and caller.get("acquisition")))
     cw = callee.get("witness")
     callee_status = callee.get("status")
     agreed = (arg in ARG_REGS and callee.get("argument") == arg
               and isinstance(cw, dict)
               and cw.get("argument") == arg
+              and cw.get("object_key") == ("arg", ARG_REGS.index(arg), ())
+              and cw.get("kind") == "callee-direct-free"
+              and cw.get("summary_status") == sm.COMPLETE
               and cw.get("identity_relation") == "same-object"
               and cw.get("site") and cw.get("text"))
     attrs = {"status": "unknown", "argument_proven": caller_proved,
