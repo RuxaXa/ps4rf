@@ -344,3 +344,28 @@ def test_mutation_branch_in_placement_window_must_refuse_linear_proof():
     code = [move(0x10, "rdi", reg("rax")),
             Ins(0x14, "jne", [imm(0x1e)]), call(0x20)]
     assert not _argument_carries(code, 0x20, "rax")
+
+
+def test_n1_null_transfer_grade_is_unknown_and_invalid_is_refused():
+    w = {"site": "0x14", "kind": "call", "text": "call helper"}
+    graph = Graph()
+    assert graph.edge("function:0x1", "function:0x2", "transfers-reference",
+                      w, status=None)
+    assert graph.export()["edges"][0]["status"] == UNKNOWN
+    with pytest.raises(AssertionError, match="invalid proof status"):
+        graph.edge("function:0x1", "function:0x3", "transfers-reference",
+                   w, status="pr0ved")
+
+
+def test_n1_unvalidated_external_null_grade_cannot_break_chain_scoring():
+    w = {"site": "0x14", "kind": "call", "text": "call helper"}
+    graph = {"nodes": [{"id": "entry:probe", "kind": "entry"},
+                       {"id": "function:0x2", "kind": "function"}],
+             "edges": [{"src": "entry:probe", "dst": "function:0x2",
+                        "kind": "transfers-reference", "witness": w,
+                        "status": None}]}
+    assert check_evidence(graph)
+    finding = {"detector": "D1", "function": {"rva": "0x2"},
+               "bug_class": "OWNERSHIP_DOUBLE_FREE", "rank": 1}
+    result = chains(graph, {"findings": [finding]}, facts={})["chains"][0]
+    assert result["hop_status"] == UNKNOWN
