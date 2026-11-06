@@ -91,7 +91,9 @@ def release_identity_witness(summary, view, argument: str,
     # as the ownership event. When it differs the summary and release call
     # are not necessarily the same action; a conditional claim can survive.
     ownership_site = getattr(effect, "ownership_site", 0)
-    status = "proved" if strength == "must" and ownership_site in (0, site) else "conditional"
+    status = ("proved" if strength == "must" and ownership_site == site
+              and not getattr(effect, "release_conditional", False)
+              else "conditional")
     witness = {
         "site": hex(site),
         "kind": "callee-direct-free",
