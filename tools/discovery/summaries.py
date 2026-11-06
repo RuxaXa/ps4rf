@@ -1799,6 +1799,8 @@ def hop_at(view, call_site: int, object_register: str, callee_summary: Optional[
                if candidate.key and candidate.key[0] == "arg"
                and candidate.key[1] == argument_index
                and candidate.ownership != OWN_NONE]
+    # The same argument pointer is distinct from an object loaded through it.
+    direct_key = ("arg", argument_index, ())
     effects.sort(key=lambda candidate: (
         candidate.key != direct_key, candidate.ownership_strength != "must",
         repr(candidate.key), candidate.ownership_site))
