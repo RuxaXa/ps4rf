@@ -1,0 +1,28 @@
+name: Summary argument identity
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  summary-argument-identity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test dependencies
+        run: python -m pip install -e . pytest
+      - name: Verify summary fixture
+        run: python tests/fixtures/discovery/gen_summaries.py --check
+      - name: Run both existing and adversarial interprocedural tests
+        run: |
+          python -m pytest -q \
+            tests/test_discovery_summaries.py \
+            tests/test_discovery_summary_placement_soundness.py
