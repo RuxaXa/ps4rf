@@ -1761,8 +1761,13 @@ def hop_at(view, call_site: int, object_register: str, callee_summary: Optional[
                if candidate.key and candidate.key[0] == "arg"
                and candidate.key[1] == argument_index
                and candidate.ownership != OWN_NONE]
-    effects.sort(key=lambda candidate: (candidate.ownership_strength != "must",
-                                        len(candidate.key[2])))
+    # Identity outranks strength: releasing *arg0+0x30* is not the same
+    # object as releasing arg0. Prefer a direct identity witness over a
+    # stronger-looking release of a different field. Stabilize ties, too.
+    direct_key = ("arg", argument_index, ())
+    effects.sort(key=lambda candidate: (
+        candidate.key != direct_key, candidate.ownership_strength != "must",
+        repr(candidate.key), candidate.ownership_site))
     effect = effects[0] if effects else callee_summary.param(argument_index)
     composed_label = effect.label
     caller_key = placement.get("key")
@@ -1774,13 +1779,32 @@ def hop_at(view, call_site: int, object_register: str, callee_summary: Optional[
         site = (effect.release_sites[0] if effect.release_sites else effect.ownership_site) or 0
         witnesses.append({"callee": {"site": hex(site) if site else None,
                                      "kind": effect.ownership.lower(),
+                                     "identity_relation": (
+                                         "same-object" if effect.key == ("arg", argument_index, ())
+                                         else "derived-or-unknown"),
                                      "object": effect.label,
                                      "text": f"the callee {effect.ownership}s "
                                              f"{effect.label} ({effect.ownership_strength}) at "
                                              f"{hex(site) if site else 'an unknown site'}"}})
     complete = callee_summary.status == COMPLETE
     witnessed = bool(effect.release_sites or effect.ownership_site)
+    # The caller passes an object pointer. The callee's argument *field*
+    # is a different object, even if its release is a complete, must-fact.
+    # An exact identity match plus a concrete callee site are mandatory
+    # before reporting this as a same-object reference transfer.
+    same_object = effect.key == direct_key
     if effect.ownership in (OWN_FREE, OWN_DROP_REF, OWN_TRANSFER_OUT) and \
+            not same_object:
+        status = UNKNOWN
+        why = (f"callee release addresses {effect.label or effect.key}, not argument "
+               f"{argument_index} itself; a field-derived object is not a same-object "
+               "ownership transfer")
+    elif effect.ownership in (OWN_FREE, OWN_DROP_REF, OWN_TRANSFER_OUT) and \
+            not witnessed:
+        status = UNKNOWN
+        why = ("callee claims an ownership effect but has no concrete release "
+               "or transfer instruction witness")
+    elif effect.ownership in (OWN_FREE, OWN_DROP_REF, OWN_TRANSFER_OUT) and \
             effect.ownership_strength == "must" and complete:
         status = PROVEN if placement["status"] == PROVEN else UNKNOWN
         why = "" if status == PROVEN else "the placement is not proved"
