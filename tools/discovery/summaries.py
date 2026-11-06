@@ -1655,12 +1655,17 @@ def caller_argument_objects(view, call_site: int) -> Dict[str, dict]:
 
 
 def _placement_for(view, call_site: int, object_register: str) -> dict:
-    """Which argument register receives the object, and how well that is established.
+    """Conservative exact-pointer placement witness for an ABI call.
 
-    Scans backwards from the call and stops at the first write to an argument register: the
-    nearest definition wins, so ``mov rdi, rax; mov rdi, rcx; call`` places ``rcx``, never ``rax``.
-    Sub-registers are canonicalised and ``lea`` produces an interior pointer, which is still the
-    same object.
+    Search the closest definition of EACH argument register independently.
+    A nonmatching write to rdi cannot refute a valid placement into rsi.
+    Only a full-width register copy, or an identity LEA with zero index and
+    displacement, proves the *same pointer*. A memory load yields a different
+    (possibly aliased) value, and an interior LEA or a partial register copy
+    cannot be called an exact 64-bit identity without additional evidence.
+
+    This bounded linear window is not a path-complete alias analysis. Unknown
+    inputs stay UNKNOWN; callers must not upgrade that to a proved transfer.
     """
     insns = view.ins
     position = next((i for i, ins in enumerate(insns) if ins.address == call_site), None)
@@ -1668,53 +1673,74 @@ def _placement_for(view, call_site: int, object_register: str) -> dict:
         return {"status": UNKNOWN, "argument": None,
                 "why": "the call site is not in this body"}
     target = canon_reg(object_register)
+    if object_register != target:
+        return {"status": UNKNOWN, "argument": None,
+                "why": "a partial-width pointer register has no full-width identity witness"}
+
     alias = {target}
-    window = 0
-    for back in range(position - 1, -1, -1):
-        window += 1
-        if window > 24:
-            break
+    seen_args = set()
+    saw_uncertain = False
+    refutation = None
+    for back in range(position - 1, max(-1, position - 25), -1):
         ins = insns[back]
+        mnemonic = ins.mnemonic.split()[-1].lower()
+        if mnemonic == "call" or mnemonic == "ret":
+            break
+        if mnemonic.startswith("j") or mnemonic.startswith("loop"):
+            # Without block/path-sensitive provenance, a branch can bypass the
+            # setup; no conclusion about the argument on every path is valid.
+            saw_uncertain = True
+            break
         operands = list(getattr(ins, "operands", []) or [])
-        mnemonic = ins.mnemonic.split()[-1]
-        if mnemonic == "call":
-            break                              # a call clobbers the argument registers
-        if not operands:
+        if not operands or getattr(operands[0], "type", None) != X86_OP_REG:
             continue
-        destination = operands[0]
-        if getattr(destination, "type", None) != X86_OP_REG:
+        raw_dest = _reg(ins, operands[0])
+        if not raw_dest:
             continue
-        name = _reg(ins, destination)
-        if not name:
-            continue
-        name = canon_reg(name)
-        if name in alias:
-            alias.discard(name)                # the object register is overwritten
-            continue
-        if name in ARG_INDEX and len(operands) >= 2:
+        dest = canon_reg(raw_dest)
+
+        if dest in ARG_INDEX and dest not in seen_args:
+            seen_args.add(dest)       # the nearest write to this ABI argument wins
+            if len(operands) < 2 or raw_dest != dest:
+                saw_uncertain = True
+                continue
+
             source = operands[1]
-            source_name = None
-            if getattr(source, "type", None) == X86_OP_REG:
-                source_name = canon_reg(_reg(ins, source) or "")
-            elif getattr(source, "type", None) == X86_OP_MEM and not getattr(
-                    source.mem, "index", 0):
-                base_name = _reg_name_mem(ins, source.mem.base)
-                source_name = canon_reg(base_name) if base_name else None
-            if mnemonic in ("mov", "lea") and source_name in alias:
-                return {"status": PROVEN, "argument": name, "site": ins.address,
-                        "text": f"{ins.mnemonic} {ins.op_str}",
-                        "why": f"{name} receives {'an interior pointer into ' if mnemonic == 'lea' else ''}"
-                               f"the object from {source_name}"}
-            return {"status": REFUTED, "argument": name, "site": ins.address,
-                    "text": f"{ins.mnemonic} {ins.op_str}",
-                    "why": f"{name} is written by {ins.mnemonic} {ins.op_str}, which does not "
-                           f"carry the object"}
-        if mnemonic in ("add", "sub") and len(operands) >= 2 and \
-                getattr(operands[1], "type", None) == X86_OP_IMM:
-            continue                            # interior pointer arithmetic keeps the alias
-        alias.discard(name)
-    return {"status": UNKNOWN, "argument": None,
-            "why": "no argument register can be shown to carry the object at this call"}
+            if mnemonic in ("mov", "movabs") and source.type == X86_OP_REG:
+                raw_source = _reg(ins, source)
+                if raw_source and raw_source == target and target in alias:
+                    return {"status": PROVEN, "argument": dest, "site": ins.address,
+                            "text": f"{ins.mnemonic} {ins.op_str}",
+                            "why": f"{dest} receives the same full-width pointer as {target}"}
+                refutation = {"status": REFUTED, "argument": dest, "site": ins.address,
+                              "text": f"{ins.mnemonic} {ins.op_str}",
+                              "why": f"{dest} is redefined from a different register"}
+                continue
+
+            if mnemonic == "lea" and source.type == X86_OP_MEM:
+                base = _reg_name_mem(ins, source.mem.base)
+                if (base == target and target in alias
+                        and not source.mem.index and source.mem.disp == 0):
+                    return {"status": PROVEN, "argument": dest, "site": ins.address,
+                            "text": f"{ins.mnemonic} {ins.op_str}",
+                            "why": f"{dest} receives an identity LEA of {target}"}
+                saw_uncertain = True
+                continue
+
+            # mov dst, [source + field] loads a value *from* the object,
+            # not necessarily the object. Arithmetic, indexed addresses and
+            # unknown instructions are not alias proofs either.
+            saw_uncertain = True
+            continue
+
+        if dest in alias:
+            alias.discard(dest)
+    if saw_uncertain:
+        return {"status": UNKNOWN, "argument": None,
+                "why": "argument placement may involve a field, interior pointer, "
+                       "partial register, branch or unsupported definition"}
+    return refutation or {"status": UNKNOWN, "argument": None,
+                          "why": "no full-width argument placement can be proved"}
 
 
 def hop_at(view, call_site: int, object_register: str, callee_summary: Optional[FunctionSummary],
