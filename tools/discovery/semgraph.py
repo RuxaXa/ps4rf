@@ -513,33 +513,62 @@ def _path_key(hops: List[dict]) -> tuple:
 def _entry_paths(start: str, by_dst: Dict[str, List[dict]], back_kinds: tuple,
                  max_depth: int = MAX_CHAIN_DEPTH,
                  budget: int = MAX_PATH_EXPANSIONS) -> tuple:
-    """All entry-rooted reverse paths to ``start``, strongest evidence first.
+    """Find bounded entry paths, prioritizing evidence during exploration.
 
-    Returns ``(paths, truncated)`` where each path is an entry -> ``start`` hop list.
+    A depth-first walk sorted only *after* exhausting its budget can report a
+    weak path while missing a fully proved one solely due to edge ordering.
+    Explore stronger paths first, then shorter paths, with deterministic ties.
+    A truncated result is still incomplete, never a proof of path absence.
     """
+    from heapq import heappop, heappush
+    from itertools import count
+
+    defaults = {"calls": PROVED, "tail-jumps": PROVED, "reaches": PROVED,
+                "transfers-reference": POSSIBLE}
+
+    def strength(edge: dict) -> int:
+        status = edge.get("status", defaults.get(edge["kind"], UNKNOWN))
+        return STATUS_ORDER.get(status, STATUS_ORDER[UNKNOWN])
+
+    def edge_key(edge: dict) -> tuple:
+        witness = edge.get("witness") or {}
+        return (edge["src"], edge["kind"], edge["dst"],
+                str(witness.get("site", "")),
+                str(edge.get("status", "")), str(witness.get("text", "")))
+
     paths: List[List[dict]] = []
-    stack = [(start, [], frozenset((start,)))]
+    serial = count()
+    # Queue priority: weakest hop on the trail, depth, stable edge signatures.
+    frontier = [(STATUS_ORDER[PROVED], 0, (), next(serial),
+                 start, (), frozenset((start,)))]
     expansions = 0
     truncated = False
-    while stack:
-        node, trail, visited = stack.pop()
-        expansions += 1
-        if expansions > budget:
+    while frontier:
+        if expansions >= budget:
             truncated = True
             break
+        worst, depth, signature, _, node, trail, visited = heappop(frontier)
+        expansions += 1
         if trail and node.startswith("entry:"):
-            # ``trail`` was built from the primitive backwards, so the entry hop is
-            # its last element: reverse it to read entry -> primitive.
             paths.append(list(reversed(trail)))
             continue
-        if len(trail) >= max_depth:
+        if depth >= max_depth:
             truncated = True
             continue
-        for edge in by_dst.get(node, []):
+        for edge in sorted(by_dst.get(node, []), key=edge_key):
             if edge["kind"] not in back_kinds or edge["src"] in visited:
                 continue
-            stack.append((edge["src"], trail + [edge], visited | {edge["src"]}))
-    paths.sort(key=len)
+            heappush(frontier, (max(worst, strength(edge)), depth + 1,
+                                signature + (edge_key(edge),), next(serial),
+                                edge["src"], trail + (edge,),
+                                visited | {edge["src"]}))
+
+    def path_key(path: List[dict]) -> tuple:
+        return (max((strength(edge) for edge in path),
+                    default=STATUS_ORDER[UNKNOWN]), len(path),
+                tuple(edge_key(edge) for edge in reversed(path)))
+
+    paths.sort(key=path_key)
     return paths, truncated
 
 
