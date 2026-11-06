@@ -1,0 +1,26 @@
+name: Callee release identity producer
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  callee-producer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e . pytest
+      - name: Verify source-backed fixture bytes
+        run: python tests/fixtures/discovery/gen_a1_regressions.py --check
+      - name: Validate callee release identity and caller must-join
+        run: |
+          python -m pytest -q \
+            tests/test_discovery_callee_witness_producer.py \
+            tests/test_discovery_cfg_mustflow.py \
+            tests/test_discovery_callee_identity_gate.py
