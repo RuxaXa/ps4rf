@@ -201,7 +201,7 @@ def test_the_nearest_write_to_an_argument_register_decides_the_placement(env):
     assert fresh.argument == "rdi"
 
 
-def test_a_subregister_write_still_places_the_object(env):
+def test_a_subregister_write_does_not_prove_full_pointer_identity(env):
     from tools.discovery.patterns import FunctionView
 
     doc, image, index, store = env
@@ -209,11 +209,12 @@ def test_a_subregister_write_still_places_the_object(env):
     view = FunctionView(image, record.rva, record.size)
     site = call_site_in(env, "caller_subregister", "callee_deref")
     hop = summaries.hop_at(view, site, "rax", store.get(index.by_name("callee_deref").rva))
-    assert hop.placement == summaries.PROVEN
-    assert hop.argument == "rdi"
+    assert hop.placement == summaries.UNKNOWN
+    assert hop.status != summaries.PROVEN
+    assert "partial-width" in hop.why
 
 
-def test_an_interior_pointer_is_placed_as_the_object(env):
+def test_an_interior_pointer_is_not_a_same_pointer_transfer(env):
     from tools.discovery.patterns import FunctionView
 
     doc, image, index, store = env
@@ -221,8 +222,9 @@ def test_an_interior_pointer_is_placed_as_the_object(env):
     view = FunctionView(image, record.rva, record.size)
     site = call_site_in(env, "caller_lea_arg", "callee_deref")
     hop = summaries.hop_at(view, site, "rax", store.get(index.by_name("callee_deref").rva))
-    assert hop.placement == summaries.PROVEN
-    assert hop.argument == "rdi"
+    assert hop.placement == summaries.UNKNOWN
+    assert hop.status != summaries.PROVEN
+    assert "interior" in hop.why
 
 
 def test_a_call_without_argument_setup_proves_nothing(env):
@@ -242,9 +244,11 @@ def test_a_complete_callee_that_only_reads_the_argument_refutes_a_transfer(env):
     from tools.discovery.patterns import FunctionView
 
     doc, image, index, store = env
-    record = index.by_name("caller_lea_arg")
+    # This test is about the callee's proven lack of release, not pointer
+    # arithmetic. Use the full-width caller_hop_negative positive placement.
+    record = index.by_name("caller_hop_negative")
     view = FunctionView(image, record.rva, record.size)
-    site = call_site_in(env, "caller_lea_arg", "callee_deref")
+    site = call_site_in(env, "caller_hop_negative", "callee_deref")
     hop = summaries.hop_at(view, site, "rax", store.get(index.by_name("callee_deref").rva))
     assert hop.status == summaries.REFUTED
     assert "not a transfer" in hop.why

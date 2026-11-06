@@ -1,0 +1,27 @@
+name: Callee same-object proof gate
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  callee-identity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test dependencies
+        run: python -m pip install -e . pytest
+      - name: Check synthetic summary fixture integrity
+        run: python tests/fixtures/discovery/gen_summaries.py --check
+      - name: Assert callee object identity and historical summary controls
+        run: |
+          python -m pytest -q \
+            tests/test_discovery_callee_identity_gate.py \
+            tests/test_discovery_summaries.py \
+            tests/test_discovery_objectflow.py

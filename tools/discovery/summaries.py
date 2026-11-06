@@ -1655,12 +1655,14 @@ def caller_argument_objects(view, call_site: int) -> Dict[str, dict]:
 
 
 def _placement_for(view, call_site: int, object_register: str) -> dict:
-    """Which argument register receives the object, and how well that is established.
+    """Bounded, *exact-pointer* argument placement witness.
 
-    Scans backwards from the call and stops at the first write to an argument register: the
-    nearest definition wins, so ``mov rdi, rax; mov rdi, rcx; call`` places ``rcx``, never ``rax``.
-    Sub-registers are canonicalised and ``lea`` produces an interior pointer, which is still the
-    same object.
+    A typed, full-width `mov rdi, rax` preserves a pointer identity.
+    `mov rdi, [rax+offset]` loads another value, `lea rdi, [rax+offset]`
+    creates a different (interior) pointer, and `mov edi, eax` truncates
+    or zero-extends the value.  None proves the original 64-bit pointer
+    reaches the callee.  A local backward scan is not CFG-complete; an
+    unresolved branch in the window must refuse a PROVEN witness.
     """
     insns = view.ins
     position = next((i for i, ins in enumerate(insns) if ins.address == call_site), None)
@@ -1668,53 +1670,89 @@ def _placement_for(view, call_site: int, object_register: str) -> dict:
         return {"status": UNKNOWN, "argument": None,
                 "why": "the call site is not in this body"}
     target = canon_reg(object_register)
+    if target != object_register:
+        return {"status": UNKNOWN, "argument": None,
+                "why": "a partial-width source is not a full pointer identity"}
     alias = {target}
-    window = 0
-    for back in range(position - 1, -1, -1):
-        window += 1
-        if window > 24:
-            break
+    # The backward-window algorithm cannot prove that a branch in the
+    # inspected region always passes through the same argument definition.
+    # Be conservative until CFG-based must-reaching-definitions is used.
+    window_start = max(0, position - 24)
+    if any((ins.mnemonic.split()[-1].lower() in ("jmp", "ret")
+            or ins.mnemonic.split()[-1].lower().startswith(("j", "loop")))
+           for ins in insns[window_start:position]):
+        return {"status": UNKNOWN, "argument": None,
+                "why": "control flow in the argument-placement window is unresolved"}
+
+    seen_arguments = set()
+    uncertain = None
+    for back in range(position - 1, window_start - 1, -1):
         ins = insns[back]
         operands = list(getattr(ins, "operands", []) or [])
-        mnemonic = ins.mnemonic.split()[-1]
-        if mnemonic == "call":
-            break                              # a call clobbers the argument registers
+        mnemonic = ins.mnemonic.split()[-1].lower()
+        if mnemonic in ("call", "syscall"):
+            break  # an intervening call may clobber argument registers
+        if mnemonic in ("xchg", "xadd", "cmpxchg"):
+            return {"status": UNKNOWN, "argument": None,
+                    "why": "multi-register exchange/atomic writes need explicit provenance"}
         if not operands:
             continue
         destination = operands[0]
         if getattr(destination, "type", None) != X86_OP_REG:
             continue
-        name = _reg(ins, destination)
-        if not name:
+        written = _reg(ins, destination)
+        if not written:
             continue
-        name = canon_reg(name)
+        name = canon_reg(written)
         if name in alias:
-            alias.discard(name)                # the object register is overwritten
+            alias.discard(name)
             continue
-        if name in ARG_INDEX and len(operands) >= 2:
-            source = operands[1]
-            source_name = None
-            if getattr(source, "type", None) == X86_OP_REG:
-                source_name = canon_reg(_reg(ins, source) or "")
-            elif getattr(source, "type", None) == X86_OP_MEM and not getattr(
-                    source.mem, "index", 0):
-                base_name = _reg_name_mem(ins, source.mem.base)
-                source_name = canon_reg(base_name) if base_name else None
-            if mnemonic in ("mov", "lea") and source_name in alias:
-                return {"status": PROVEN, "argument": name, "site": ins.address,
-                        "text": f"{ins.mnemonic} {ins.op_str}",
-                        "why": f"{name} receives {'an interior pointer into ' if mnemonic == 'lea' else ''}"
-                               f"the object from {source_name}"}
-            return {"status": REFUTED, "argument": name, "site": ins.address,
+        if name in ARG_INDEX:
+            if name in seen_arguments:
+                continue  # a nearer definition supersedes this write
+            seen_arguments.add(name)
+            if written != name or len(operands) < 2:
+                uncertain = uncertain or {
+                    "status": UNKNOWN, "argument": name, "site": ins.address,
                     "text": f"{ins.mnemonic} {ins.op_str}",
-                    "why": f"{name} is written by {ins.mnemonic} {ins.op_str}, which does not "
-                           f"carry the object"}
+                    "why": "a partial-width or unmodelled argument write cannot prove a pointer"}
+                continue
+            source = operands[1]
+            if getattr(source, "type", None) == X86_OP_REG:
+                raw_source = _reg(ins, source) or ""
+                if (mnemonic in ("mov", "movabs") and raw_source == target
+                        and raw_source in alias):
+                    return {"status": PROVEN, "argument": name, "site": ins.address,
+                            "text": f"{ins.mnemonic} {ins.op_str}",
+                            "why": f"{name} receives the full-width object pointer from {target}"}
+            elif getattr(source, "type", None) == X86_OP_MEM:
+                base = _reg_name_mem(ins, source.mem.base)
+                if base and canon_reg(base) in alias:
+                    if (mnemonic == "lea" and not getattr(source.mem, "index", 0)
+                            and getattr(source.mem, "disp", 0) == 0):
+                        return {"status": PROVEN, "argument": name, "site": ins.address,
+                                "text": f"{ins.mnemonic} {ins.op_str}",
+                                "why": f"{name} is the identity address of {target}"}
+                    uncertain = uncertain or {
+                        "status": UNKNOWN, "argument": name, "site": ins.address,
+                        "text": f"{ins.mnemonic} {ins.op_str}",
+                        "why": ("a field load or interior/indexed address cannot establish "
+                                "the exact identity of the acquired object")}
+                    continue
+            # Another argument may still carry the object.  Do not let an
+            # unrelated write to rdi mask a genuine full-width transfer in rsi.
+            continue
         if mnemonic in ("add", "sub") and len(operands) >= 2 and \
                 getattr(operands[1], "type", None) == X86_OP_IMM:
-            continue                            # interior pointer arithmetic keeps the alias
+            continue
         alias.discard(name)
+    if uncertain is not None:
+        return uncertain
+    if seen_arguments:
+        return {"status": REFUTED, "argument": None,
+                "why": "the observed argument definitions do not carry this object"}
     return {"status": UNKNOWN, "argument": None,
-            "why": "no argument register can be shown to carry the object at this call"}
+            "why": "no full-width argument register is proved to carry this object"}
 
 
 def hop_at(view, call_site: int, object_register: str, callee_summary: Optional[FunctionSummary],
@@ -1761,8 +1799,11 @@ def hop_at(view, call_site: int, object_register: str, callee_summary: Optional[
                if candidate.key and candidate.key[0] == "arg"
                and candidate.key[1] == argument_index
                and candidate.ownership != OWN_NONE]
-    effects.sort(key=lambda candidate: (candidate.ownership_strength != "must",
-                                        len(candidate.key[2])))
+    # The same argument pointer is distinct from an object loaded through it.
+    direct_key = ("arg", argument_index, ())
+    effects.sort(key=lambda candidate: (
+        candidate.key != direct_key, candidate.ownership_strength != "must",
+        repr(candidate.key), candidate.ownership_site))
     effect = effects[0] if effects else callee_summary.param(argument_index)
     composed_label = effect.label
     caller_key = placement.get("key")
@@ -1774,13 +1815,32 @@ def hop_at(view, call_site: int, object_register: str, callee_summary: Optional[
         site = (effect.release_sites[0] if effect.release_sites else effect.ownership_site) or 0
         witnesses.append({"callee": {"site": hex(site) if site else None,
                                      "kind": effect.ownership.lower(),
+                                     "identity_relation": (
+                                         "same-object" if effect.key == ("arg", argument_index, ())
+                                         else "derived-or-unknown"),
                                      "object": effect.label,
                                      "text": f"the callee {effect.ownership}s "
                                              f"{effect.label} ({effect.ownership_strength}) at "
                                              f"{hex(site) if site else 'an unknown site'}"}})
     complete = callee_summary.status == COMPLETE
     witnessed = bool(effect.release_sites or effect.ownership_site)
+    # The caller passes an object pointer. The callee's argument *field*
+    # is a different object, even if its release is a complete, must-fact.
+    # An exact identity match plus a concrete callee site are mandatory
+    # before reporting this as a same-object reference transfer.
+    same_object = effect.key == direct_key
     if effect.ownership in (OWN_FREE, OWN_DROP_REF, OWN_TRANSFER_OUT) and \
+            not same_object:
+        status = UNKNOWN
+        why = (f"callee release addresses {effect.label or effect.key}, not argument "
+               f"{argument_index} itself; a field-derived object is not a same-object "
+               "ownership transfer")
+    elif effect.ownership in (OWN_FREE, OWN_DROP_REF, OWN_TRANSFER_OUT) and \
+            not witnessed:
+        status = UNKNOWN
+        why = ("callee claims an ownership effect but has no concrete release "
+               "or transfer instruction witness")
+    elif effect.ownership in (OWN_FREE, OWN_DROP_REF, OWN_TRANSFER_OUT) and \
             effect.ownership_strength == "must" and complete:
         status = PROVEN if placement["status"] == PROVEN else UNKNOWN
         why = "" if status == PROVEN else "the placement is not proved"
@@ -1802,7 +1862,11 @@ def hop_at(view, call_site: int, object_register: str, callee_summary: Optional[
                f"edge is not a transfer")
     else:
         status = UNKNOWN
-        why = (f"the callee is {callee_summary.status}"
+        # Preserve the *caller-side* refusal. Otherwise an interior-pointer
+        # or truncated-register defect looks like a generic callee uncertainty.
+        placement_why = (f"caller placement unresolved: {placement['why']}; "
+                         if placement["status"] != PROVEN else "")
+        why = (placement_why + f"the callee is {callee_summary.status}"
                + (f" ({callee_summary.refusal.get('code')})" if callee_summary.refusal else "")
                + f" and its effect on argument {argument_index} is {effect.ownership}/"
                  f"{effect.ownership_strength}")
