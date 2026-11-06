@@ -168,8 +168,12 @@ def test_proved_transfer_requires_both_witness_halves():
         graph.edge("function:0x10", "function:0x30", "transfers-reference", witness,
                    status="proved", argument_proven=False,
                    callee_identity_witness={"site": "0x31", "text": "drop arg0"})
+    with pytest.raises(AssertionError, match="callee object-identity witness"):
+        graph.edge("function:0x10", "function:0x30", "transfers-reference", witness,
+                   status="proved", argument_proven=True,
+                   callee_identity_witness={"site": "0x31", "text": "drop arg0"})
     assert graph.edge("function:0x10", "function:0x30", "transfers-reference", witness,
-                      status="proved", argument_proven=True,
+                      status="proved", argument_proven=True, callee_identity_proven=True,
                       callee_identity_witness={"site": "0x31", "text": "drop arg0"})
 
 
