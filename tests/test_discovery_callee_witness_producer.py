@@ -45,10 +45,18 @@ def proof(*effects, argument="rdi", status=sm.COMPLETE, vf=None, release=None):
         release if release is not None else (lambda target: target == 0x400))
 
 
-def caller(argument="rdi", status="proved"):
-    return {"status": status, "argument": argument, "site": "0x88",
-            "acquisition": "0x60", "source_register": "rbx",
-            "kind": "cfg-must-reach", "text": "CFG must-reach rbx -> rdi"}
+def caller(argument="rdi", status="proved", *, bound=True):
+    result = {"status": status, "argument": argument, "site": "0x88",
+              "generation_site": "0x60", "source_register": "rbx",
+              "kind": "cfg-must-reach", "text": "CFG must-reach rbx -> rdi",
+              "producer_binding": "unverified"}
+    if bound:
+        result["producer_binding"] = "verified"
+        result["producer_witness"] = {
+            "kind": "verified-object-generation",
+            "generation_site": "0x60",
+            "site": "0x40", "text": "independently checked producer"}
+    return result
 
 
 def test_complete_exact_argument_free_has_checked_release_instruction():
@@ -252,3 +260,34 @@ def test_join_rejects_callee_proof_for_wrong_same_abi_argument_key():
     witness = dict(result["witness"], object_key=("arg", 1, ()))
     claim = combine_transfer_claim(caller(), dict(result, witness=witness))
     assert claim["attrs"]["status"] == "unknown"
+
+
+def test_unbound_load_generation_cannot_promote_exact_callee_free():
+    """A must-flow LOAD is not proof that the acquire call produced it."""
+    claim = combine_transfer_claim(caller(bound=False), proof(effect()))
+    assert claim["attrs"]["status"] == "unknown"
+    assert claim["attrs"]["argument_proven"] is False
+    assert "callee_identity_witness" not in claim["attrs"]
+
+
+@pytest.mark.parametrize("mutation", [
+    {"producer_binding": "verified", "producer_witness": None},
+    {"producer_binding": "verified", "producer_witness": {"kind": "verified-object-generation"}},
+    {"producer_binding": "verified", "producer_witness": {
+        "kind": "verified-object-generation", "generation_site": "0x70",
+        "site": "0x40", "text": "different load"}},
+    {"producer_binding": "unverified"},
+])
+def test_incomplete_or_mismatched_producer_binding_is_unknown(mutation):
+    bad = caller(bound=False)
+    bad.update(mutation)
+    attrs = combine_transfer_claim(bad, proof(effect()))["attrs"]
+    assert attrs["status"] == "unknown"
+    assert attrs["callee_identity_proven"] is False
+
+
+def test_verified_producer_binding_and_direct_free_preserve_positive():
+    attrs = combine_transfer_claim(caller(bound=True), proof(effect()))["attrs"]
+    assert attrs["status"] == "proved"
+    assert attrs["argument_proven"] is True
+    assert attrs["callee_identity_proven"] is True
