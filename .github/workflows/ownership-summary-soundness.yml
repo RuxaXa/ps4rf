@@ -1,0 +1,26 @@
+name: Ownership summary soundness
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  summaries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: python -m pip install -e . pytest
+      - name: Verify pinned summary fixtures
+        run: python tests/fixtures/discovery/gen_summaries.py --check
+      - name: Run exact pointer and ownership summary tests
+        run: |
+          python -m pytest -q \
+            tests/test_discovery_summary_placement_exact.py \
+            tests/test_discovery_summaries.py

@@ -274,12 +274,16 @@ def test_a_different_object_in_the_argument_register_is_not_a_transfer(
     assert semgraph._argument_carries(ins, call.address, "rax") is False
 
 
-def test_a_lea_into_the_argument_register_still_proves_a_transfer(fixture_doc,
-                                                                  fixture_image):
-    """The positive twin: `lea rdi, [rax+0x10]` does put the object's address there."""
+def test_an_interior_pointer_lea_does_not_prove_object_identity(fixture_doc,
+                                                                 fixture_image):
+    """An interior address (rax+0x10) need not be the refcounted object pointer.
+
+    The old A1-06 test treated a derived address as the identical acquired
+    object; that was an overclaim, so it stays UNKNOWN rather than PROVED.
+    """
     ins = instructions_of(fixture_doc, fixture_image, "pass_by_lea")
     call = next(x for x in ins if x.mnemonic == "call")
-    assert semgraph._argument_carries(ins, call.address, "rax") is True
+    assert semgraph._argument_carries(ins, call.address, "rax") is False
 
 
 def test_an_unproven_transfer_hop_stays_unknown_in_a_chain():
@@ -301,6 +305,38 @@ def test_an_unproven_transfer_hop_stays_unknown_in_a_chain():
     chain = semgraph.chains(g.export(), scan, facts={})["chains"][0]
     assert chain["hop_status"] == "unknown"
     assert [h["status"] for h in chain["hops"]] == ["proved", "unknown", "proved"]
+
+
+
+def test_omitted_transfer_status_fails_closed_in_graph_and_chain():
+    """A1 N1: missing status is not evidence for a POSSIBLE ownership hop."""
+    g = semgraph.Graph()
+    g.node("entry:sysent[9]", "entry")
+    for address in ("0x30", "0x20", "0x10"):
+        g.node(f"function:{address}", "function")
+    g.edge("entry:sysent[9]", "function:0x30", "reaches",
+           {"site": "0x30", "text": "entry reaches 0x30"})
+    g.edge("function:0x30", "function:0x20", "transfers-reference",
+           {"site": "0x34", "text": "object placement unverified"})
+    g.edge("function:0x20", "function:0x10", "calls",
+           {"site": "0x24", "text": "call 0x10"})
+    transfer = next(e for e in g.export()["edges"]
+                    if e["kind"] == "transfers-reference")
+    assert transfer["status"] == semgraph.UNKNOWN
+    chain = semgraph.chains(g.export(), {"findings": [_primitive("0x10")]},
+                            facts={})["chains"][0]
+    assert chain["hop_status"] == "unknown"
+    assert [hop["status"] for hop in chain["hops"]] == [
+        "proved", "unknown", "proved"]
+
+
+def test_explicit_possible_transfer_is_preserved():
+    """An explicit weak claim remains distinct from an absent claim."""
+    g = semgraph.Graph()
+    g.edge("function:0x30", "function:0x20", "transfers-reference",
+           {"site": "0x34", "text": "conditional ownership transfer"},
+           status=semgraph.POSSIBLE)
+    assert g.export()["edges"][0]["status"] == semgraph.POSSIBLE
 
 
 # ------------------------------------------------------- A1-02: candidate evidence

@@ -30,6 +30,7 @@ Edge kinds, all evidence bearing
 from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
+import json
 from collections import Counter
 from typing import Dict, List, Optional, Tuple
 
@@ -72,7 +73,9 @@ class Graph:
     def __init__(self) -> None:
         self.nodes: Dict[str, dict] = {}
         self.edges: List[dict] = []
-        self._keys = set()
+        self._keys = set()      # exact evidence records
+        self._by_site = {}      # one structural edge per source/destination/kind/site
+        self._observations = {} # all distinct witnesses for each structural edge
 
     def node(self, nid: str, kind: str, **attrs) -> str:
         cur = self.nodes.get(nid)
@@ -91,12 +94,55 @@ class Graph:
     def edge(self, src: str, dst: str, kind: str, witness: dict, **attrs) -> bool:
         if not witness or not witness.get("site") or not witness.get("text"):
             raise AssertionError(f"edge {src}->{dst} ({kind}) has no witness")
-        key = (src, dst, kind, witness["site"])
-        if key in self._keys:
+        if kind == "transfers-reference" and attrs.get("status") == PROVED:
+            # Proving caller placement alone does not identify callee's object.
+            # Require both independently checkable witness halves.
+            callee = attrs.get("callee_identity_witness")
+            if (not attrs.get("argument_proven") or not isinstance(callee, dict)
+                    or not callee.get("site") or not callee.get("text")):
+                raise AssertionError("proved transfer requires a callee object-identity witness")
+        # Missing ownership proof is UNKNOWN, never an implicit POSSIBLE hop.
+        if kind == "transfers-reference" and "status" not in attrs:
+            attrs["status"] = UNKNOWN
+        # Structural graph edges must remain unique. Otherwise independent
+        # detector findings at each hop can multiply path enumeration
+        # exponentially. Preserve all evidence without duplicating the edge.
+        structural = (src, dst, kind, str(witness["site"]))
+        record = {"witness": dict(witness), "attrs": dict(attrs)}
+        record_key = json.dumps([structural, record], sort_keys=True, default=str)
+        if record_key in self._keys:
             return False
-        self._keys.add(key)
-        self.edges.append(dict(attrs, src=src, dst=dst, kind=kind, witness=witness))
-        return True
+        self._keys.add(record_key)
+        if structural not in self._by_site:
+            edge = dict(attrs, src=src, dst=dst, kind=kind, witness=dict(witness))
+            self._by_site[structural] = edge
+            self._observations[structural] = [record]
+            self.edges.append(edge)
+            return True
+
+        observations = self._observations[structural]
+        observations.append(record)
+        defaults = {"calls": PROVED, "tail-jumps": PROVED, "reaches": PROVED,
+                    "transfers-reference": UNKNOWN}
+
+        def rank(item):
+            status = item["attrs"].get("status", defaults.get(kind, UNKNOWN))
+            return (STATUS_ORDER.get(status, STATUS_ORDER[UNKNOWN]),
+                    json.dumps(item, sort_keys=True, default=str))
+
+        observations.sort(key=rank)
+        preferred = observations[0]
+        edge = self._by_site[structural]
+        edge.clear()
+        edge.update(preferred["attrs"])
+        edge.update(src=src, dst=dst, kind=kind, witness=preferred["witness"],
+                    evidence=list(observations))
+        levels = {item["attrs"].get("status", defaults.get(kind, UNKNOWN))
+                  for item in observations}
+        if REFUTED in levels and (PROVED in levels or POSSIBLE in levels):
+            edge["status"] = UNKNOWN
+            edge["evidence_conflict"] = True
+        return False
 
     def out_edges(self, nid: str, kinds: Optional[Iterable[str]] = None) -> List[dict]:
         wanted = set(kinds) if kinds else None
@@ -110,7 +156,8 @@ class Graph:
 
     def export(self) -> dict:
         edges = sorted(self.edges, key=lambda e: (e["src"], e["kind"], e["dst"],
-                                                  str(e["witness"]["site"])))
+                                                  str(e["witness"]["site"]),
+                                                  json.dumps(e, sort_keys=True, default=str)))
         edge_counts: Dict[str, int] = {}
         for edge in edges:
             edge_counts[edge["kind"]] = edge_counts.get(edge["kind"], 0) + 1
@@ -125,36 +172,131 @@ class Graph:
         }
 
 
-def _argument_carries(insns, call_site: int, obj_reg: str) -> bool:
-    """Does the call at ``call_site`` actually receive ``obj_reg``?
+def _transfer_status(argument_placement_proven: bool) -> str:
+    """Never call a release transfer PROVED from a caller-only witness.
 
-    Checking that the callee merely *can* drop a reference is not provenance.  The
-    register has to be moved into a System V argument register in the setup window
-    before the call; otherwise the edge is guesswork and is recorded as unknown
-    instead of possible.
+    Proving that a register value enters a callee does not prove the callee
+    drops that particular object. ReleaseShape.drops is local and has no
+    argument-to-drop identity mapping, so PROVED cannot be produced here.
     """
-    idx = None
-    for pos, ins in enumerate(insns):
-        if ins.address == call_site:
-            idx = pos
-            break
+    return POSSIBLE if argument_placement_proven else UNKNOWN
+
+
+def _argument_carries(insns, call_site: int, obj_reg: str,
+                      obj_load_site: Optional[int] = None) -> bool:
+    """Conservative local argument-placement witness for an acquired object.
+
+    Operand-text matching is not provenance: a field load through an object
+    register does not yield the same object, and later argument overwrites
+    invalidate earlier placements. Only a full-width register move or an
+    identity LEA can establish this bounded local witness.
+
+    This is not an interprocedural lifetime proof. Unknown indirect branches
+    and aliases beyond the window stay UNKNOWN.
+    """
+    idx = next((pos for pos, ins in enumerate(insns)
+                if ins.address == call_site), None)
     if idx is None:
         return False
+
+    # Partial-register writes invalidate the corresponding 64-bit argument.
+    # A sub-register write kills the *whole pointer identity*, even for
+    # non-argument source registers (rbx/rbp/rsp).  In particular, 'mov ebx,'
+    # zero-extends into rbx, while 'mov bl,' changes its low byte.
+    aliases = {"edi": "rdi", "di": "rdi", "dil": "rdi",
+               "esi": "rsi", "si": "rsi", "sil": "rsi",
+               "edx": "rdx", "dx": "rdx", "dl": "rdx", "dh": "rdx",
+               "ecx": "rcx", "cx": "rcx", "cl": "rcx", "ch": "rcx",
+               "eax": "rax", "ax": "rax", "al": "rax", "ah": "rax",
+               "ebx": "rbx", "bx": "rbx", "bl": "rbx", "bh": "rbx",
+               "ebp": "rbp", "bp": "rbp", "bpl": "rbp",
+               "esp": "rsp", "sp": "rsp", "spl": "rsp"}
+    for num in (8, 9, 10, 11, 12, 13, 14, 15):
+        aliases.update({f"r{num}d": f"r{num}",
+                        f"r{num}w": f"r{num}",
+                        f"r{num}b": f"r{num}"})
+
+    def canonical(reg: str) -> str:
+        return aliases.get(reg, reg)
+
+    if canonical(obj_reg) != obj_reg:
+        return False  # A partial pointer is not a full object identity.
+
+    def target(ins) -> Optional[int]:
+        if ins.operands and ins.operands[0].type == X86_OP_IMM:
+            return int(ins.operands[0].imm)
+        return None
+
+    def writes(ins) -> set:
+        try:
+            _reads, regs = ins.regs_access()
+            return {canonical(ins.reg_name(r)) for r in regs}
+        except Exception:
+            # Missing Capstone detail is not proof of register preservation.
+            return set(ARG_REGS) | {obj_reg}
+
+    clobbered = set()
+    # At most 13 preceding instructions: no guessed long-range provenance.
     for back in range(idx - 1, max(-1, idx - 14), -1):
         ins = insns[back]
-        if len(ins.operands) < 2 or ins.operands[0].type != X86_OP_REG:
+        mnemonic = ins.mnemonic.split()[-1].lower()
+        if (mnemonic in ("call", "ret", "jmp") or mnemonic.startswith("j")
+                or mnemonic.startswith("loop")):
+            return False
+
+        written_args = writes(ins) & set(ARG_REGS)
+        if not written_args:
             continue
-        mnemonic = ins.mnemonic.split()[-1]
-        if mnemonic not in ("mov", "movabs", "lea"):
+        # Include implicit and second-operand writes, e.g. xchg.
+        eligible = written_args - clobbered
+        clobbered.update(written_args)
+        if not eligible or not ins.operands or ins.operands[0].type != X86_OP_REG:
             continue
         dst = ins.reg_name(ins.operands[0].reg)
-        if dst not in ARG_REGS:
+        arg = canonical(dst)
+        if arg not in eligible:
             continue
-        source = ins.op_str.split(",", 1)[1] if "," in ins.op_str else ""
-        if obj_reg in source:
-            return True
-    return False
+        if dst != arg or len(ins.operands) < 2:
+            continue  # Partial-width assignment truncates/changes pointer.
 
+        src = ins.operands[1]
+        carries = (mnemonic in ("mov", "movabs") and src.type == X86_OP_REG
+                   and ins.reg_name(src.reg) == obj_reg)
+        if mnemonic == "lea" and src.type == X86_OP_MEM:
+            # Interior and indexed addresses do NOT prove identical objects.
+            carries = (ins.reg_name(src.mem.base) == obj_reg
+                       and not src.mem.index and src.mem.disp == 0)
+        if not carries:
+            continue
+
+        if obj_load_site is not None:
+            if not (obj_load_site <= ins.address < call_site):
+                continue
+            # Clobbers after acquisition and before placement destroy identity.
+            for mid in insns:
+                if not (obj_load_site < mid.address < ins.address):
+                    continue
+                if mid.mnemonic.split()[-1].lower() in ("call", "syscall"):
+                    return False
+                if obj_reg in writes(mid):
+                    return False
+            # A direct branch can skip acquisition but reach placement.
+            if any(other.address < obj_load_site
+                   and (other.mnemonic.split()[-1].lower().startswith("j")
+                        or other.mnemonic.split()[-1].lower().startswith("loop"))
+                   and (jump := target(other)) is not None
+                   and obj_load_site < jump <= ins.address for other in insns):
+                return False
+
+        # A direct branch can skip the placement and reach the call.
+        if any(other.address < ins.address
+               and (other.mnemonic.split()[-1].lower().startswith("j")
+                    or other.mnemonic.split()[-1].lower().startswith("loop"))
+               and (jump := target(other)) is not None
+               and ins.address < jump <= call_site for other in insns):
+            return False
+        return True
+    return False
 
 def build(scan: dict, handles_mod, image, index, ownership=None,
           entry_meta: Optional[Dict[str, int]] = None,
@@ -196,8 +338,9 @@ def build(scan: dict, handles_mod, image, index, ownership=None,
             shapes[rva] = None
         return shapes[rva]
 
-    def argument_carries(insns, call_site: int, obj_reg: str) -> bool:
-        return _argument_carries(insns, call_site, obj_reg)
+    def argument_carries(insns, call_site: int, obj_reg: str,
+                         obj_load_site: Optional[int] = None) -> bool:
+        return _argument_carries(insns, call_site, obj_reg, obj_load_site)
 
     for finding in scan.get("findings", []):
         func = finding["function"]
@@ -314,22 +457,28 @@ def build(scan: dict, handles_mod, image, index, ownership=None,
                     oid = objects.get(acq.obj_reg)
                     if oid is None:
                         continue
-                    # The callee dropping *a* reference says nothing about *this*
-                    # object.  Only an argument-register hand-off proves the
-                    # transfer; without it the edge stays unknown, so a chain can
-                    # never read "leads to a release" as evidence.
-                    proven = argument_carries(insns, site, acq.obj_reg)
-                    text = (f"{acq.obj_reg} is passed to {hex(tgt)} at {hex(site)}, which "
-                            f"drops a reference"
-                            if proven else
+                    # The call-site placement is only HALF of an ownership
+                    # transfer: ReleaseShape tells us the callee drops *some*
+                    # reference, not that its drop consumes the passed argument.
+                    # It may dereference an unrelated global, a different argument,
+                    # or overwrite the register before the drop. Keep this hop
+                    # possible until a callee-side identity/lifetime witness exists.
+                    placement_proven = argument_carries(
+                        insns, site, acq.obj_reg, acq.obj_load)
+                    status = _transfer_status(placement_proven)
+                    text = (f"{acq.obj_reg} reaches an argument register of "
+                            f"{hex(tgt)} at {hex(site)}, but the callee's drop "
+                            f"has not been tied to that argument"
+                            if placement_proven else
                             f"{hex(tgt)} drops a reference, but no argument register "
-                            f"receives {acq.obj_reg} at {hex(site)}")
+                            f"is proven to receive {acq.obj_reg} at {hex(site)}")
                     g.edge(fid, tid, "transfers-reference",
-                           _witness(hex(site), "argument-passing" if proven
-                                    else "argument-passing-unproven", text),
+                           _witness(hex(site), "argument-placement-only"
+                                    if placement_proven else "argument-passing-unproven", text),
                            detector=finding["detector"],
-                           status=PROVED if proven else UNKNOWN,
-                           argument_proven=proven)
+                           status=status,
+                           argument_proven=placement_proven,
+                           callee_identity_proven=False)
 
         claims = finding.get("claims") or {}
         target = claims.get("decision_target")
@@ -490,11 +639,16 @@ def _hop(edge: dict, nodes: Dict[str, dict]) -> dict:
     crosses = (bool(src_node.get("subsystem"))
                and bool(dst_node.get("subsystem"))
                and src_node.get("subsystem") != dst_node.get("subsystem"))
-    return {"from": edge["src"], "to": edge["dst"], "kind": edge["kind"],
-            "status": edge.get("status", UNKNOWN),
-            "witness": edge["witness"],
-            "detector": edge.get("detector"),
-            "cross_subsystem": crosses}
+    hop = {"from": edge["src"], "to": edge["dst"], "kind": edge["kind"],
+           "status": edge.get("status", UNKNOWN),
+           "witness": edge["witness"],
+           "detector": edge.get("detector"),
+           "cross_subsystem": crosses}
+    if "evidence" in edge:
+        hop["evidence"] = edge["evidence"]
+    if edge.get("evidence_conflict"):
+        hop["evidence_conflict"] = True
+    return hop
 
 
 def _path_key(hops: List[dict]) -> tuple:
@@ -513,33 +667,62 @@ def _path_key(hops: List[dict]) -> tuple:
 def _entry_paths(start: str, by_dst: Dict[str, List[dict]], back_kinds: tuple,
                  max_depth: int = MAX_CHAIN_DEPTH,
                  budget: int = MAX_PATH_EXPANSIONS) -> tuple:
-    """All entry-rooted reverse paths to ``start``, strongest evidence first.
+    """Find bounded entry paths, prioritizing evidence during exploration.
 
-    Returns ``(paths, truncated)`` where each path is an entry -> ``start`` hop list.
+    A depth-first walk sorted only *after* exhausting its budget can report a
+    weak path while missing a fully proved one solely due to edge ordering.
+    Explore stronger paths first, then shorter paths, with deterministic ties.
+    A truncated result is still incomplete, never a proof of path absence.
     """
+    from heapq import heappop, heappush
+    from itertools import count
+
+    defaults = {"calls": PROVED, "tail-jumps": PROVED, "reaches": PROVED,
+                "transfers-reference": UNKNOWN}
+
+    def strength(edge: dict) -> int:
+        status = edge.get("status", defaults.get(edge["kind"], UNKNOWN))
+        return STATUS_ORDER.get(status, STATUS_ORDER[UNKNOWN])
+
+    def edge_key(edge: dict) -> tuple:
+        witness = edge.get("witness") or {}
+        return (edge["src"], edge["kind"], edge["dst"],
+                str(witness.get("site", "")),
+                str(edge.get("status", "")), str(witness.get("text", "")))
+
     paths: List[List[dict]] = []
-    stack = [(start, [], frozenset((start,)))]
+    serial = count()
+    # Queue priority: weakest hop on the trail, depth, stable edge signatures.
+    frontier = [(STATUS_ORDER[PROVED], 0, (), next(serial),
+                 start, (), frozenset((start,)))]
     expansions = 0
     truncated = False
-    while stack:
-        node, trail, visited = stack.pop()
-        expansions += 1
-        if expansions > budget:
+    while frontier:
+        if expansions >= budget:
             truncated = True
             break
+        worst, depth, signature, _, node, trail, visited = heappop(frontier)
+        expansions += 1
         if trail and node.startswith("entry:"):
-            # ``trail`` was built from the primitive backwards, so the entry hop is
-            # its last element: reverse it to read entry -> primitive.
             paths.append(list(reversed(trail)))
             continue
-        if len(trail) >= max_depth:
+        if depth >= max_depth:
             truncated = True
             continue
-        for edge in by_dst.get(node, []):
+        for edge in sorted(by_dst.get(node, []), key=edge_key):
             if edge["kind"] not in back_kinds or edge["src"] in visited:
                 continue
-            stack.append((edge["src"], trail + [edge], visited | {edge["src"]}))
-    paths.sort(key=len)
+            heappush(frontier, (max(worst, strength(edge)), depth + 1,
+                                signature + (edge_key(edge),), next(serial),
+                                edge["src"], trail + (edge,),
+                                visited | {edge["src"]}))
+
+    def path_key(path: List[dict]) -> tuple:
+        return (max((strength(edge) for edge in path),
+                    default=STATUS_ORDER[UNKNOWN]), len(path),
+                tuple(edge_key(edge) for edge in reversed(path)))
+
+    paths.sort(key=path_key)
     return paths, truncated
 
 
@@ -563,7 +746,7 @@ def chains(graph: dict, scan: dict, facts: dict, chains_mod=None, limit: int = 2
         by_dst.setdefault(edge["dst"], []).append(edge)
     back_kinds = ("calls", "tail-jumps", "reaches", "transfers-reference")
     status_of = {"calls": PROVED, "tail-jumps": PROVED, "reaches": PROVED,
-                 "transfers-reference": POSSIBLE}
+                 "transfers-reference": UNKNOWN}
 
     def with_status(edge: dict) -> dict:
         hop = _hop(edge, nodes)
