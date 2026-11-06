@@ -1621,14 +1621,6 @@ def _nearest_write_to(view, call_site: int, register: str) -> Optional[Tuple[int
     for back in range(position - 1, max(-1, position - 120), -1):
         ins = view.ins[back]
         operands = list(getattr(ins, "operands", []) or [])
-        # xchg writes BOTH registers, and its second operand must kill any
-        # stale argument witness that lies earlier in this backwards window.
-        if mnemonic == "xchg" and len(operands) >= 2 \
-                and getattr(operands[1], "type", None) == X86_OP_REG:
-            other = _reg(ins, operands[1])
-            if other and canon_reg(other) in ARG_INDEX:
-                seen_args.add(canon_reg(other))
-                saw_uncertain = True
         if not operands or getattr(operands[0], "type", None) != X86_OP_REG:
             continue
         name = _reg(ins, operands[0])
@@ -1716,6 +1708,14 @@ def _placement_for(view, call_site: int, object_register: str) -> dict:
             saw_uncertain = True
             break
         operands = list(getattr(ins, "operands", []) or [])
+        # xchg writes BOTH registers, and its second operand must kill any
+        # earlier placement of that argument in this backwards window.
+        if mnemonic == "xchg" and len(operands) >= 2 \
+                and getattr(operands[1], "type", None) == X86_OP_REG:
+            other = _reg(ins, operands[1])
+            if other and canon_reg(other) in ARG_INDEX:
+                seen_args.add(canon_reg(other))
+                saw_uncertain = True
         if not operands or getattr(operands[0], "type", None) != X86_OP_REG:
             continue
         raw_dest = _reg(ins, operands[0])
