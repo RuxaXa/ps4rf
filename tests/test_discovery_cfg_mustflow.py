@@ -173,7 +173,7 @@ def test_missing_branch_target_refuses():
     body = view({0x10: [call(0x10), jne(0x20, 0x80)],
                  0x40: [call(0x40)]},
                 {0x10: [], 0x40: []})
-    assert "conditional branch" in result(body)["why"]
+    assert "conditional" in result(body)["why"]
 
 
 def test_invalid_or_exhausted_budget_is_unknown():
@@ -208,3 +208,74 @@ def test_alias_clobbers_callee_saved_pointer_generation(clobber):
                     ins(0x30, "mov", reg("rdi"), reg("rbx")),
                     call(0x40))
     assert result(body, source="rbx")["status"] == "unknown"
+
+
+def test_missing_taken_arm_is_not_a_false_must_proof():
+    body = view({
+        0x10: [call(0x10), jne(0x14, 0x30)],
+        0x20: [ins(0x20, "mov", reg("rdi"), reg("rax"))],
+        0x30: [ins(0x30, "nop")],
+        0x40: [call(0x40)],
+    }, {0x10: [0x20], 0x20: [0x40],
+        0x30: [0x40], 0x40: []})
+    answer = result(body)
+    assert answer["status"] == "unknown"
+    assert "taken edge" in answer["why"]
+
+
+def test_missing_fallthrough_arm_is_not_a_false_must_proof():
+    body = view({
+        0x10: [call(0x10), jne(0x14, 0x30)],
+        0x20: [ins(0x20, "nop")],
+        0x30: [ins(0x30, "mov", reg("rdi"), reg("rax"))],
+        0x40: [call(0x40)],
+    }, {0x10: [0x30], 0x20: [0x40],
+        0x30: [0x40], 0x40: []})
+    answer = result(body)
+    assert answer["status"] == "unknown"
+    assert "fall-through" in answer["why"]
+
+
+def test_real_capstone_decoder_uses_same_cfg_and_pointer_rules():
+    """Pinned assembled fixture, not an abstract mock or a PlayStation image."""
+    import json
+    from pathlib import Path
+    from capstone import Cs, CS_ARCH_X86, CS_MODE_64
+    from tools.discovery.patterns import FunctionView
+
+    root = Path(__file__).resolve().parent / "fixtures" / "discovery"
+    doc = json.loads((root / "a1-regressions.json").read_text(encoding="utf-8"))
+
+    class Image:
+        def __init__(self):
+            self.base = int(doc["base_rva"], 16)
+            self.data = bytes.fromhex(doc["image_hex"])
+
+        def disasm(self, addr, size, **_kwargs):
+            engine = Cs(CS_ARCH_X86, CS_MODE_64)
+            engine.detail = True
+            blob = self.data[addr-self.base:addr-self.base+size]
+            return list(engine.disasm(blob, addr)), engine
+
+    image = Image()
+
+    def fixture(name):
+        record = doc["symbols"][name]
+        view = FunctionView(image, int(record["rva"], 16),
+                            int(record["size"], 16))
+        return view, view.ins[0].address, next(
+            i.address for i in view.ins if i.mnemonic == "call")
+
+    # The positive tests *only register identity* after a seeded first
+    # instruction. They do not claim that the fixture allocated an object.
+    view_positive, seed, call_site = fixture("pass_in_arg")
+    assert must_argument_placement(view_positive, call_site, "rdi", seed)[
+        "status"] == "proved"
+
+    view_negative, seed, call_site = fixture("pass_other_object")
+    assert must_argument_placement(view_negative, call_site, "rax", seed)[
+        "status"] == "unknown"
+
+    view_interior, seed, call_site = fixture("pass_by_lea")
+    assert must_argument_placement(view_interior, call_site, "rax", seed)[
+        "status"] == "unknown"
