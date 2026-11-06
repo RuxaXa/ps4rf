@@ -101,6 +101,10 @@ class Graph:
             if (not attrs.get("argument_proven") or not isinstance(callee, dict)
                     or not callee.get("site") or not callee.get("text")):
                 raise AssertionError("proved transfer requires a callee object-identity witness")
+        # A missing transfer grade is not a positive observation. Fail closed
+        # before first-edge export and before evidence aggregation.
+        if kind == "transfers-reference" and "status" not in attrs:
+            attrs["status"] = UNKNOWN
         # Structural graph edges must remain unique. Otherwise independent
         # detector findings at each hop can multiply path enumeration
         # exponentially. Preserve all evidence without duplicating the edge.
@@ -120,7 +124,7 @@ class Graph:
         observations = self._observations[structural]
         observations.append(record)
         defaults = {"calls": PROVED, "tail-jumps": PROVED, "reaches": PROVED,
-                    "transfers-reference": POSSIBLE}
+                    "transfers-reference": UNKNOWN}
 
         def rank(item):
             status = item["attrs"].get("status", defaults.get(kind, UNKNOWN))
@@ -675,7 +679,7 @@ def _entry_paths(start: str, by_dst: Dict[str, List[dict]], back_kinds: tuple,
     from itertools import count
 
     defaults = {"calls": PROVED, "tail-jumps": PROVED, "reaches": PROVED,
-                "transfers-reference": POSSIBLE}
+                "transfers-reference": UNKNOWN}
 
     def strength(edge: dict) -> int:
         status = edge.get("status", defaults.get(edge["kind"], UNKNOWN))
@@ -743,7 +747,7 @@ def chains(graph: dict, scan: dict, facts: dict, chains_mod=None, limit: int = 2
         by_dst.setdefault(edge["dst"], []).append(edge)
     back_kinds = ("calls", "tail-jumps", "reaches", "transfers-reference")
     status_of = {"calls": PROVED, "tail-jumps": PROVED, "reaches": PROVED,
-                 "transfers-reference": POSSIBLE}
+                 "transfers-reference": UNKNOWN}
 
     def with_status(edge: dict) -> dict:
         hop = _hop(edge, nodes)
