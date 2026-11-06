@@ -196,7 +196,7 @@ def test_the_nearest_write_to_an_argument_register_decides_the_placement(env):
     callee_summary = store.get(index.by_name("callee_deref").rva)
     stale = summaries.hop_at(view, site, "rax", callee_summary)
     fresh = summaries.hop_at(view, site, "rcx", callee_summary)
-    assert stale.placement == summaries.REFUTED
+    assert stale.placement == summaries.UNKNOWN  # rcx could alias rax upstream
     assert fresh.placement == summaries.PROVEN
     assert fresh.argument == "rdi"
 
