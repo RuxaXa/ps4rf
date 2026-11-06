@@ -197,11 +197,17 @@ def _argument_carries(insns, call_site: int, obj_reg: str,
         return False
 
     # Partial-register writes invalidate the corresponding 64-bit argument.
+    # A sub-register write kills the *whole pointer identity*, even for
+    # non-argument source registers (rbx/rbp/rsp).  In particular, 'mov ebx,'
+    # zero-extends into rbx, while 'mov bl,' changes its low byte.
     aliases = {"edi": "rdi", "di": "rdi", "dil": "rdi",
                "esi": "rsi", "si": "rsi", "sil": "rsi",
                "edx": "rdx", "dx": "rdx", "dl": "rdx", "dh": "rdx",
                "ecx": "rcx", "cx": "rcx", "cl": "rcx", "ch": "rcx",
-               "eax": "rax", "ax": "rax", "al": "rax", "ah": "rax"}
+               "eax": "rax", "ax": "rax", "al": "rax", "ah": "rax",
+               "ebx": "rbx", "bx": "rbx", "bl": "rbx", "bh": "rbx",
+               "ebp": "rbp", "bp": "rbp", "bpl": "rbp",
+               "esp": "rsp", "sp": "rsp", "spl": "rsp"}
     for num in (8, 9, 10, 11, 12, 13, 14, 15):
         aliases.update({f"r{num}d": f"r{num}",
                         f"r{num}w": f"r{num}",
