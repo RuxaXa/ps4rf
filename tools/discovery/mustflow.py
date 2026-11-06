@@ -116,7 +116,10 @@ def _transfer(ins, state: FrozenSet[str], acquire_site: int,
                     and _reg(ins, src) in old):
                 exact = True
             elif mnemonic == "lea" and src.type == X86_OP_MEM:
-                base = _reg(ins, type("Operand", (), {"reg": src.mem.base})())
+                try:
+                    base = str(ins.reg_name(src.mem.base)).lower()
+                except Exception:
+                    base = ""
                 # Only LEA of the *same* address may transfer pointer identity.
                 exact = (base in old and not src.mem.index and not src.mem.disp)
             if exact:
@@ -158,9 +161,11 @@ def must_argument_placement(view, call_site: int, object_register: str,
         return refuse("CFG is incomplete or does not match the disassembly")
 
     # Reject control transfers whose destinations are not represented by the
-    # provided CFG. The current FunctionView does not model indirect branches.
-    # Treating those as exits would let a computed jump bypass acquisition
-    # or a copy and produce an unsupported must-proof.
+    # provided CFG. FunctionView does not model indirect branches. Also verify
+    # explicit taken AND fall-through edges: a CFG that lost a conditional arm
+    # can otherwise falsely prove a must-definition on the surviving path.
+    ordered = sorted(by_site)
+    next_site = {site: ordered[idx + 1] for idx, site in enumerate(ordered[:-1])}
     for site, ins in by_site.items():
         mnemonic = ins.mnemonic.split()[-1].lower()
         if (mnemonic in ("jmp", "call") or mnemonic.startswith("j")
@@ -170,8 +175,16 @@ def must_argument_placement(view, call_site: int, object_register: str,
             operands = getattr(ins, "operands", []) or []
             if not operands or operands[0].type != X86_OP_IMM:
                 return refuse("an indirect or unknown control transfer is unresolved")
-            if mnemonic != "jmp" and not successors[site]:
-                return refuse("a conditional branch has no resolved successors")
+            target = int(operands[0].imm)
+            # A target in the decoded function must have a CFG successor.
+            if target in by_site and target not in successors[site]:
+                return refuse("CFG does not include the branch taken edge")
+            if mnemonic != "jmp":
+                fall = next_site.get(site)
+                if fall in by_site and fall not in successors[site]:
+                    return refuse("CFG does not include the conditional fall-through edge")
+                if not successors[site]:
+                    return refuse("a conditional branch has no resolved successors")
 
     entry = insns[0].address
     incoming: Dict[int, FrozenSet[str]] = {entry: frozenset()}
