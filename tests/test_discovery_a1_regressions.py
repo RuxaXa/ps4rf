@@ -307,6 +307,44 @@ def test_an_unproven_transfer_hop_stays_unknown_in_a_chain():
     assert [h["status"] for h in chain["hops"]] == ["proved", "unknown", "proved"]
 
 
+def test_missing_transfer_status_fails_closed_in_export_and_chain():
+    """Missing transfer status must not silently become POSSIBLE."""
+    g = semgraph.Graph()
+    g.node("entry:sysent[9]", "entry")
+    g.node("function:0x30", "function")
+    g.node("function:0x20", "function")
+    g.node("function:0x10", "function")
+    g.edge("entry:sysent[9]", "function:0x30", "reaches",
+           {"site": "0x30", "text": "entry reaches 0x30"})
+    g.edge("function:0x30", "function:0x20", "transfers-reference",
+           {"site": "0x34", "text": "unknown argument placement"})
+    g.edge("function:0x20", "function:0x10", "calls",
+           {"site": "0x24", "text": "call 0x10"}, status=semgraph.PROVED)
+    exported = g.export()
+    transfer = next(e for e in exported["edges"] if e["kind"] == "transfers-reference")
+    assert transfer["status"] == semgraph.UNKNOWN
+    chain = semgraph.chains(exported, {"findings": [_primitive("0x10")]}, facts={})["chains"][0]
+    assert chain["hop_status"] == semgraph.UNKNOWN
+    assert [h["status"] for h in chain["hops"]] == [
+        semgraph.PROVED, semgraph.UNKNOWN, semgraph.PROVED]
+
+
+def test_missing_transfer_status_aggregates_as_unknown_independent_of_order():
+    """An absent grade cannot silently promote another transfer observation."""
+    for missing_first in (True, False):
+        g = semgraph.Graph()
+        witness = {"site": "0x44", "text": "call 0x20"}
+        records = ({}, {"status": semgraph.UNKNOWN})
+        if not missing_first:
+            records = tuple(reversed(records))
+        for attrs in records:
+            g.edge("function:0x30", "function:0x20",
+                   "transfers-reference", witness, **attrs)
+        edge = g.export()["edges"][0]
+        assert edge["status"] == semgraph.UNKNOWN
+        assert len(edge["evidence"]) == 2 or len(edge["evidence"]) == 0
+
+
 # ------------------------------------------------------- A1-02: candidate evidence
 
 
