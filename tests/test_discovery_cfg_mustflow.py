@@ -34,7 +34,12 @@ class Ins:
 
 
 def reg(name):
-    return SimpleNamespace(type=X86_OP_REG, reg=name)
+    bits = (64 if name in ("rax", "rbx", "rcx", "rdx", "rsi", "rdi",
+                               "rbp", "rsp", "r8", "r9", "r10", "r11",
+                               "r12", "r13", "r14", "r15") else
+            32 if name.startswith("e") or name.endswith("d") else
+            8 if name.endswith(("b", "l", "h")) else 16)
+    return SimpleNamespace(type=X86_OP_REG, reg=name, size=bits // 8)
 
 
 def imm(target):
@@ -42,7 +47,7 @@ def imm(target):
 
 
 def mem(base, disp=0, index=0):
-    return SimpleNamespace(type=X86_OP_MEM,
+    return SimpleNamespace(type=X86_OP_MEM, size=8,
                            mem=SimpleNamespace(base=base, disp=disp, index=index))
 
 
@@ -51,6 +56,10 @@ def ins(addr, name, dst=None, src=None):
     if src is not None:
         operands.append(src)
     return Ins(addr, name, operands)
+
+
+def load(addr=0x10, name="rax"):
+    return ins(addr, "mov", reg(name), mem("rbp", disp=-0x20))
 
 
 def call(addr):
@@ -67,7 +76,7 @@ def jump(addr, target):
 
 def view(blocks, successors):
     return SimpleNamespace(ins=[item for block in blocks.values() for item in block],
-                           ins_by=blocks, succ=successors)
+                           ins_by=blocks, succ=successors, strict_cfg=True)
 
 
 def straight(*instructions):
@@ -82,7 +91,7 @@ def basic_two_branch(missing=False, partial=False, source="rax"):
     if partial:
         right.append(ins(0x34, "mov", reg("edi"), reg("eax")))
     return view({
-        0x10: [call(0x10), jne(0x14, 0x30)],
+        0x10: [load(0x10), jne(0x14, 0x30)],
         0x20: left, 0x30: right, 0x40: [call(0x40)],
     }, {0x10: [0x20, 0x30], 0x20: [0x40],
         0x30: [0x40], 0x40: []})
@@ -93,13 +102,14 @@ def result(body, acq=0x10, target=0x40, source="rax", budget=20000):
 
 
 def test_simple_full_width_caller_argument_is_proved():
-    body = straight(call(0x10), ins(0x20, "mov", reg("rdi"), reg("rax")),
+    body = straight(load(0x10), ins(0x20, "mov", reg("rdi"), reg("rax")),
                     call(0x40))
     witness = result(body)
     assert witness["status"] == "proved"
     assert witness["argument"] == "rdi"
     assert witness["kind"] == "cfg-must-reach"
-    assert witness["acquisition"] == "0x10"
+    assert witness["generation_site"] == "0x10"
+    assert witness["producer_binding"] == "unverified"
 
 
 def test_two_branch_paths_both_carry_object():
@@ -119,14 +129,14 @@ def test_partial_width_write_on_one_arm_invalidates_identity():
 def test_acquisition_bypass_is_not_a_must_proof():
     body = view({
         0x00: [jne(0x00, 0x40)],
-        0x10: [call(0x10), ins(0x20, "mov", reg("rdi"), reg("rax"))],
+        0x10: [load(0x10), ins(0x20, "mov", reg("rdi"), reg("rax"))],
         0x40: [call(0x40)],
     }, {0x00: [0x10, 0x40], 0x10: [0x40], 0x40: []})
     assert result(body)["status"] == "unknown"
 
 
 def test_intervening_call_kills_caller_saved_argument():
-    body = straight(call(0x10), ins(0x20, "mov", reg("rdi"), reg("rax")),
+    body = straight(load(0x10), ins(0x20, "mov", reg("rdi"), reg("rax")),
                     call(0x30), call(0x40))
     assert result(body)["status"] == "unknown"
 
@@ -139,14 +149,14 @@ def test_callee_saved_object_register_survives_intervening_call():
 
 
 def test_interior_lea_does_not_carry_same_object():
-    body = straight(call(0x10),
+    body = straight(load(0x10),
                     ins(0x20, "lea", reg("rdi"), mem("rax", disp=0x18)),
                     call(0x40))
     assert result(body)["status"] == "unknown"
 
 
 def test_identity_lea_is_full_width_same_pointer():
-    body = straight(call(0x10),
+    body = straight(load(0x10),
                     ins(0x20, "lea", reg("rdi"), mem("rax")),
                     call(0x40))
     assert result(body)["status"] == "proved"
@@ -157,23 +167,23 @@ def test_partial_width_source_is_never_full_pointer():
 
 
 def test_partial_width_move_is_not_full_pointer():
-    body = straight(call(0x10), ins(0x20, "mov", reg("edi"), reg("eax")),
+    body = straight(load(0x10), ins(0x20, "mov", reg("edi"), reg("eax")),
                     call(0x40))
     assert result(body)["status"] == "unknown"
 
 
 def test_indirect_branch_refuses_until_cfg_is_complete():
-    body = view({0x10: [call(0x10), ins(0x20, "jmp", reg("rax"))],
+    body = view({0x10: [load(0x10), ins(0x20, "jmp", reg("rax"))],
                  0x40: [call(0x40)]},
                 {0x10: [], 0x40: []})
     assert "indirect" in result(body)["why"]
 
 
 def test_missing_branch_target_refuses():
-    body = view({0x10: [call(0x10), jne(0x20, 0x80)],
+    body = view({0x10: [load(0x10), jne(0x20, 0x80)],
                  0x40: [call(0x40)]},
                 {0x10: [], 0x40: []})
-    assert "conditional" in result(body)["why"]
+    assert "branch target" in result(body)["why"]
 
 
 def test_invalid_or_exhausted_budget_is_unknown():
@@ -183,7 +193,7 @@ def test_invalid_or_exhausted_budget_is_unknown():
 
 
 def test_unreachable_target_does_not_make_a_proved_argument():
-    body = view({0x10: [call(0x10), jump(0x20, 0x30)],
+    body = view({0x10: [load(0x10), jump(0x20, 0x30)],
                  0x30: [ins(0x30, "ret")],
                  0x40: [call(0x40)]},
                 {0x10: [0x30], 0x30: [], 0x40: []})
@@ -192,7 +202,7 @@ def test_unreachable_target_does_not_make_a_proved_argument():
 
 def test_branch_can_put_object_in_different_arguments_but_not_prove_one():
     body = view({
-        0x10: [call(0x10), jne(0x14, 0x30)],
+        0x10: [load(0x10), jne(0x14, 0x30)],
         0x20: [ins(0x20, "mov", reg("rdi"), reg("rax")), jump(0x24, 0x40)],
         0x30: [ins(0x30, "mov", reg("rsi"), reg("rax"))],
         0x40: [call(0x40)],
@@ -212,7 +222,7 @@ def test_alias_clobbers_callee_saved_pointer_generation(clobber):
 
 def test_missing_taken_arm_is_not_a_false_must_proof():
     body = view({
-        0x10: [call(0x10), jne(0x14, 0x30)],
+        0x10: [load(0x10), jne(0x14, 0x30)],
         0x20: [ins(0x20, "mov", reg("rdi"), reg("rax"))],
         0x30: [ins(0x30, "nop")],
         0x40: [call(0x40)],
@@ -225,7 +235,7 @@ def test_missing_taken_arm_is_not_a_false_must_proof():
 
 def test_missing_fallthrough_arm_is_not_a_false_must_proof():
     body = view({
-        0x10: [call(0x10), jne(0x14, 0x30)],
+        0x10: [load(0x10), jne(0x14, 0x30)],
         0x20: [ins(0x20, "nop")],
         0x30: [ins(0x30, "mov", reg("rdi"), reg("rax"))],
         0x40: [call(0x40)],
@@ -262,15 +272,15 @@ def test_real_capstone_decoder_uses_same_cfg_and_pointer_rules():
     def fixture(name):
         record = doc["symbols"][name]
         view = FunctionView(image, int(record["rva"], 16),
-                            int(record["size"], 16))
+                            int(record["size"], 16), strict_cfg=True)
         return view, view.ins[0].address, next(
             i.address for i in view.ins if i.mnemonic == "call")
 
-    # The positive tests *only register identity* after a seeded first
-    # instruction. They do not claim that the fixture allocated an object.
-    view_positive, seed, call_site = fixture("pass_in_arg")
-    assert must_argument_placement(view_positive, call_site, "rdi", seed)[
-        "status"] == "proved"
+    # The historical "positive" fixture merely seeds a register-copy,
+    # not a decoded pointer-load generation. It must no longer prove anything.
+    view_untrusted, seed, call_site = fixture("pass_in_arg")
+    assert must_argument_placement(view_untrusted, call_site, "rdi", seed)[
+        "status"] == "unknown"
 
     view_negative, seed, call_site = fixture("pass_other_object")
     assert must_argument_placement(view_negative, call_site, "rax", seed)[
