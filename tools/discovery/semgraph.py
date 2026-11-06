@@ -94,6 +94,10 @@ class Graph:
     def edge(self, src: str, dst: str, kind: str, witness: dict, **attrs) -> bool:
         if not witness or not witness.get("site") or not witness.get("text"):
             raise AssertionError(f"edge {src}->{dst} ({kind}) has no witness")
+        if kind == "transfers-reference":
+            # An omitted status is NOT positive evidence of a transfer.
+            # Keep the explicit refusal in exported graph and chain reports.
+            attrs.setdefault("status", UNKNOWN)
         if kind == "transfers-reference" and attrs.get("status") == PROVED:
             # Proving caller placement alone does not identify callee's object.
             # Require both independently checkable witness halves.
@@ -120,7 +124,7 @@ class Graph:
         observations = self._observations[structural]
         observations.append(record)
         defaults = {"calls": PROVED, "tail-jumps": PROVED, "reaches": PROVED,
-                    "transfers-reference": POSSIBLE}
+                    "transfers-reference": UNKNOWN}
 
         def rank(item):
             status = item["attrs"].get("status", defaults.get(kind, UNKNOWN))
@@ -136,9 +140,18 @@ class Graph:
                     evidence=list(observations))
         levels = {item["attrs"].get("status", defaults.get(kind, UNKNOWN))
                   for item in observations}
-        if REFUTED in levels and (PROVED in levels or POSSIBLE in levels):
+        # A refutation accompanied by any different verdict is an unresolved
+        # evidence disagreement, including REFUTED vs UNKNOWN.  This is not
+        # necessarily a logical contradiction, so preserve both observations.
+        if REFUTED in levels and len(levels) > 1:
             edge["status"] = UNKNOWN
             edge["evidence_conflict"] = True
+            # These flat proof flags belong to the preferred *observation*,
+            # not to the aggregated UNKNOWN verdict.  Keep the complete
+            # evidence in edge["evidence"] rather than mislabelling the edge.
+            for field in ("argument_proven", "callee_identity_proven",
+                          "callee_identity_witness"):
+                edge.pop(field, None)
         return False
 
     def out_edges(self, nid: str, kinds: Optional[Iterable[str]] = None) -> List[dict]:
@@ -622,6 +635,9 @@ def check_evidence(graph: dict) -> List[str]:
         w = edge.get("witness") or {}
         if not w.get("site") or not w.get("text"):
             bad.append(f"{edge['src']}->{edge['dst']}:{edge['kind']}")
+        if edge.get("kind") == "transfers-reference" and edge.get("status") not in (
+                PROVED, POSSIBLE, UNKNOWN, REFUTED):
+            bad.append(f"{edge['src']}->{edge['dst']}:transfer-status-missing-or-invalid")
     return bad
 
 
@@ -675,7 +691,7 @@ def _entry_paths(start: str, by_dst: Dict[str, List[dict]], back_kinds: tuple,
     from itertools import count
 
     defaults = {"calls": PROVED, "tail-jumps": PROVED, "reaches": PROVED,
-                "transfers-reference": POSSIBLE}
+                "transfers-reference": UNKNOWN}
 
     def strength(edge: dict) -> int:
         status = edge.get("status", defaults.get(edge["kind"], UNKNOWN))
@@ -743,7 +759,7 @@ def chains(graph: dict, scan: dict, facts: dict, chains_mod=None, limit: int = 2
         by_dst.setdefault(edge["dst"], []).append(edge)
     back_kinds = ("calls", "tail-jumps", "reaches", "transfers-reference")
     status_of = {"calls": PROVED, "tail-jumps": PROVED, "reaches": PROVED,
-                 "transfers-reference": POSSIBLE}
+                 "transfers-reference": UNKNOWN}
 
     def with_status(edge: dict) -> dict:
         hop = _hop(edge, nodes)
@@ -777,9 +793,9 @@ def chains(graph: dict, scan: dict, facts: dict, chains_mod=None, limit: int = 2
                 "hop_status": max(statuses_alt, key=lambda x: STATUS_ORDER[x]),
                 "hop_count": len(hops_alt),
                 "cross_subsystem": sum(1 for h in hops_alt if h.get("cross_subsystem")),
-                "hops": [{"from": h["from"], "to": h["to"], "kind": h["kind"],
-                          "status": h["status"], "witness": h["witness"]}
-                         for h in hops_alt],
+                # Alternative paths must be as auditable as the selected path.
+                # _hop() already retains aggregated observations and conflicts.
+                "hops": [dict(h) for h in hops_alt],
             })
         chain = {
             "primitive": {"detector": finding["detector"], "rank": finding.get("rank"),
