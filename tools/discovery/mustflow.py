@@ -60,7 +60,8 @@ def _writes(ins) -> Optional[FrozenSet[str]]:
 
 def _refusal(why: str, *, call_site: int, acquisition: int) -> dict:
     return {"status": "unknown", "argument": None, "site": None,
-            "call_site": hex(call_site), "acquisition": hex(acquisition),
+            "call_site": hex(call_site), "generation_site": hex(acquisition),
+            "producer_binding": "unverified",
             "why": why}
 
 
@@ -95,7 +96,9 @@ def _successors(view) -> Optional[Dict[int, tuple]]:
 def _transfer(ins, state: FrozenSet[str], acquire_site: int,
               source_reg: str) -> Optional[FrozenSet[str]]:
     if ins.address == acquire_site:
-        # A new generation begins here, after the instruction's effects.
+        # A verified full-width load (validated by the entry preconditions)
+        # starts a local *load generation*. This is NOT proof that an earlier
+        # acquisition call wrote the loaded slot, or that a producer dominated.
         return frozenset((source_reg,))
     writes = _writes(ins)
     if writes is None:
@@ -131,8 +134,10 @@ def must_argument_placement(view, call_site: int, object_register: str,
                             acquire_site: int, max_states: int = 20_000) -> dict:
     """Prove one exact 64-bit object survives on ALL CFG paths to a call.
 
-    This computes a must fixed-point for registers carrying a single acquired
-    pointer generation. A branch can reach the call along multiple paths only
+    This computes a must fixed-point for registers carrying one validated
+    full-width *load generation*. It does not establish that the generating
+    memory slot came from a separately identified acquisition call. A branch
+    can reach the call along multiple paths only
     when all incoming states still carry the pointer in the same argument
     register. The result is caller evidence, *never* a release verdict.
 
@@ -153,9 +158,23 @@ def must_argument_placement(view, call_site: int, object_register: str,
     if len(by_site) != len(insns) or call_site not in by_site:
         return refuse("call site is absent or instruction addresses overlap")
     if acquire_site not in by_site:
-        return refuse("acquisition instruction is not in the function")
+        return refuse("load-generation instruction is not in the function")
     if by_site[call_site].mnemonic.split()[-1].lower() != "call":
         return refuse("target instruction is not a call")
+    # A non-strict FunctionView can walk through UD2. The compiler/runtime
+    # may never execute the purported caller definition after that trap.
+    if getattr(view, "strict_cfg", False) is not True:
+        return refuse("a strict CFG view is required for must-reaching-definitions")
+    seed = by_site[acquire_site]
+    seed_ops = getattr(seed, "operands", ()) or ()
+    if not (seed.mnemonic.split()[-1].lower() in ("mov", "movabs")
+            and len(seed_ops) >= 2
+            and seed_ops[0].type == X86_OP_REG
+            and _reg(seed, seed_ops[0]) == source
+            and getattr(seed_ops[0], "size", None) == 8
+            and seed_ops[1].type == X86_OP_MEM
+            and getattr(seed_ops[1], "size", None) == 8):
+        return refuse("seed must be a decoded 64-bit memory load into the exact object register")
     successors = _successors(view)
     if not successors or set(successors) != set(by_site):
         return refuse("CFG is incomplete or does not match the disassembly")
@@ -176,15 +195,20 @@ def must_argument_placement(view, call_site: int, object_register: str,
             if not operands or operands[0].type != X86_OP_IMM:
                 return refuse("an indirect or unknown control transfer is unresolved")
             target = int(operands[0].imm)
-            # A target in the decoded function must have a CFG successor.
-            if target in by_site and target not in successors[site]:
+            # Missing taken targets are *not* known exits: the function
+            # inventory may be truncated before a jump back into the body.
+            if target not in by_site:
+                return refuse("branch target falls outside the decoded function extent")
+            if target not in successors[site]:
                 return refuse("CFG does not include the branch taken edge")
             if mnemonic != "jmp":
                 fall = next_site.get(site)
-                if fall in by_site and fall not in successors[site]:
-                    return refuse("CFG does not include the conditional fall-through edge")
+                if fall not in by_site or fall not in successors[site]:
+                    return refuse("CFG lacks the conditional fall-through edge")
                 if not successors[site]:
                     return refuse("a conditional branch has no resolved successors")
+        if mnemonic in ("ret", "hlt", "ud2") and successors[site]:
+            return refuse("terminal instruction has a successor in the CFG")
 
     entry = insns[0].address
     incoming: Dict[int, FrozenSet[str]] = {entry: frozenset()}
@@ -197,9 +221,10 @@ def must_argument_placement(view, call_site: int, object_register: str,
         evaluations += 1
         if evaluations > max_states:
             return refuse("CFG reaching-definitions analysis exceeded its budget")
-        if site == call_site:
-            # The call itself would clobber its arguments; we need pre-call.
-            continue
+        # Record the pre-call value for the result, but DO NOT stop analysis
+        # here. On a backedge the same call may execute a second time after
+        # clobbering caller-saved registers, and that can invalidate a must
+        # claim. Its successors must reach the same fixed point as all edges.
         after = _transfer(by_site[site], incoming[site], acquire_site, source)
         if after is None:
             return refuse(f"unavailable register-write metadata at {hex(site)}")
@@ -221,7 +246,8 @@ def must_argument_placement(view, call_site: int, object_register: str,
         return refuse("no argument register retains this exact object on every path")
     return {"status": "proved", "argument": carried[0],
             "arguments": carried, "site": hex(call_site),
-            "call_site": hex(call_site), "acquisition": hex(acquire_site),
+            "call_site": hex(call_site), "generation_site": hex(acquire_site),
+            "producer_binding": "unverified",
             "source_register": source, "kind": "cfg-must-reach",
             "evaluated_states": evaluations,
             "text": (f"CFG must-reach from {hex(acquire_site)} ({source}) "
