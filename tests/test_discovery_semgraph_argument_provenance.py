@@ -4,6 +4,8 @@ These tests pin the semantics of Capstone operand types and register writes;
 they do not claim firmware reachability or independently discovered exploits.
 """
 from dataclasses import dataclass
+
+import pytest
 from types import SimpleNamespace
 
 from capstone.x86 import X86_OP_IMM, X86_OP_MEM, X86_OP_REG
@@ -218,3 +220,25 @@ def test_conflicting_proof_and_refutation_degrades_to_unknown():
     edge = graph.export()["edges"][0]
     assert edge["status"] == UNKNOWN
     assert edge["evidence_conflict"] is True
+
+
+@pytest.mark.parametrize("source,partial", [
+    ("rbx", "ebx"), ("rbx", "bx"), ("rbx", "bl"), ("rbx", "bh"),
+    ("rbp", "ebp"), ("rbp", "bp"), ("rbp", "bpl"),
+    ("rsp", "esp"), ("rsp", "sp"), ("rsp", "spl"),
+    ("r12", "r12d"), ("r12", "r12w"), ("r12", "r12b"),
+])
+def test_subregister_clobber_kills_source_pointer_identity(source, partial):
+    """After acquiring a pointer, even 8/16/32-bit writes destroy identity.
+
+    Previously rbx/rbp/rsp subregisters were absent from canonical(),
+    and the scanner would incorrectly retain an older object.
+    """
+    intact = [move(0x10, source, mem("rcx")),
+              move(0x14, "rdi", reg(source)), call(0x20)]
+    assert _argument_carries(intact, 0x20, source, obj_load_site=0x10)
+
+    overwritten = [move(0x10, source, mem("rcx")),
+                   move(0x12, partial, reg("rax")),
+                   move(0x14, "rdi", reg(source)), call(0x20)]
+    assert not _argument_carries(overwritten, 0x20, source, obj_load_site=0x10)
