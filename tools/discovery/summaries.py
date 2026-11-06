@@ -1684,12 +1684,17 @@ def _placement_for(view, call_site: int, object_register: str) -> dict:
         return {"status": UNKNOWN, "argument": None,
                 "why": "control flow in the argument-placement window is unresolved"}
 
+    seen_arguments = set()
+    uncertain = None
     for back in range(position - 1, window_start - 1, -1):
         ins = insns[back]
         operands = list(getattr(ins, "operands", []) or [])
         mnemonic = ins.mnemonic.split()[-1].lower()
-        if mnemonic == "call":
-            break  # calls may clobber argument and other caller-saved registers
+        if mnemonic in ("call", "syscall"):
+            break  # an intervening call may clobber argument registers
+        if mnemonic in ("xchg", "xadd", "cmpxchg"):
+            return {"status": UNKNOWN, "argument": None,
+                    "why": "multi-register exchange/atomic writes need explicit provenance"}
         if not operands:
             continue
         destination = operands[0]
@@ -1702,11 +1707,16 @@ def _placement_for(view, call_site: int, object_register: str) -> dict:
         if name in alias:
             alias.discard(name)
             continue
-        if name in ARG_INDEX and len(operands) >= 2:
-            if written != name:
-                return {"status": UNKNOWN, "argument": name,
-                        "site": ins.address, "text": f"{ins.mnemonic} {ins.op_str}",
-                        "why": "a partial-width argument write does not preserve a 64-bit pointer"}
+        if name in ARG_INDEX:
+            if name in seen_arguments:
+                continue  # a nearer definition supersedes this write
+            seen_arguments.add(name)
+            if written != name or len(operands) < 2:
+                uncertain = uncertain or {
+                    "status": UNKNOWN, "argument": name, "site": ins.address,
+                    "text": f"{ins.mnemonic} {ins.op_str}",
+                    "why": "a partial-width or unmodelled argument write cannot prove a pointer"}
+                continue
             source = operands[1]
             if getattr(source, "type", None) == X86_OP_REG:
                 raw_source = _reg(ins, source) or ""
@@ -1723,18 +1733,24 @@ def _placement_for(view, call_site: int, object_register: str) -> dict:
                         return {"status": PROVEN, "argument": name, "site": ins.address,
                                 "text": f"{ins.mnemonic} {ins.op_str}",
                                 "why": f"{name} is the identity address of {target}"}
-                    return {"status": UNKNOWN, "argument": name, "site": ins.address,
-                            "text": f"{ins.mnemonic} {ins.op_str}",
-                            "why": ("a field load or interior/indexed address cannot establish "
-                                    "the exact identity of the acquired object")}
-            return {"status": REFUTED, "argument": name, "site": ins.address,
-                    "text": f"{ins.mnemonic} {ins.op_str}",
-                    "why": f"{name} is written by {ins.mnemonic} {ins.op_str}, which does not "
-                           f"carry the object"}
+                    uncertain = uncertain or {
+                        "status": UNKNOWN, "argument": name, "site": ins.address,
+                        "text": f"{ins.mnemonic} {ins.op_str}",
+                        "why": ("a field load or interior/indexed address cannot establish "
+                                "the exact identity of the acquired object")}
+                    continue
+            # Another argument may still carry the object.  Do not let an
+            # unrelated write to rdi mask a genuine full-width transfer in rsi.
+            continue
         if mnemonic in ("add", "sub") and len(operands) >= 2 and \
                 getattr(operands[1], "type", None) == X86_OP_IMM:
             continue
         alias.discard(name)
+    if uncertain is not None:
+        return uncertain
+    if seen_arguments:
+        return {"status": REFUTED, "argument": None,
+                "why": "the observed argument definitions do not carry this object"}
     return {"status": UNKNOWN, "argument": None,
             "why": "no full-width argument register is proved to carry this object"}
 
