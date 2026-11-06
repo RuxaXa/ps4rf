@@ -1840,7 +1840,11 @@ def hop_at(view, call_site: int, object_register: str, callee_summary: Optional[
                f"edge is not a transfer")
     else:
         status = UNKNOWN
-        why = (f"the callee is {callee_summary.status}"
+        # Preserve the *caller-side* refusal. Otherwise an interior-pointer
+        # or truncated-register defect looks like a generic callee uncertainty.
+        placement_why = (f"caller placement unresolved: {placement['why']}; "
+                         if placement["status"] != PROVEN else "")
+        why = (placement_why + f"the callee is {callee_summary.status}"
                + (f" ({callee_summary.refusal.get('code')})" if callee_summary.refusal else "")
                + f" and its effect on argument {argument_index} is {effect.ownership}/"
                  f"{effect.ownership_strength}")
