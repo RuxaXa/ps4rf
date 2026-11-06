@@ -105,7 +105,8 @@ class Graph:
             # Proving caller placement alone does not identify callee's object.
             # Require both independently checkable witness halves.
             callee = attrs.get("callee_identity_witness")
-            if (not attrs.get("argument_proven") or not isinstance(callee, dict)
+            if (not attrs.get("argument_proven") or not attrs.get("callee_identity_proven")
+                    or not isinstance(callee, dict)
                     or not callee.get("site") or not callee.get("text")):
                 raise AssertionError("proved transfer requires a callee object-identity witness")
         # Structural graph edges must remain unique. Otherwise independent
