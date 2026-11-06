@@ -92,15 +92,17 @@ booked as a write at its source offset. `movzx/movsxd/movsx` stay load-only;
 
 *Test:* `test_plain_mov_store_is_summarised_and_a_load_is_not`.
 
-### A1-06 (HIGH design risk) — invented cross-function `transfers-reference` edges — FIXED
+### A1-06 (HIGH design risk) — invented cross-function `transfers-reference` edges — PARTIAL
 
 *Counterexample:* every acquire in the caller plus *any* drop in the callee produced a
 `transfers-reference` edge, with a witness text claiming the register was handed over.
 
-*Fix:* `semgraph._argument_carries()` requires the object register to be moved into a
-System V argument register (`rdi, rsi, rdx, rcx, r8, r9`) in the setup window before the
-call. Without that proof the edge keeps its information but is emitted with
-`status=unknown` and `argument_proven=false`, so no chain can read it as a possible hop.
+*Partial remediation:* `semgraph._argument_carries()` requires a bounded, full-width
+caller argument-placement witness. Without such evidence, the transfer stays UNKNOWN.
+A caller placement alone cannot prove what the callee releases; the graph now requires
+a separate, concrete `callee_identity_witness` for a PROVED transfer. That producer
+is **not implemented** in PR #8, and the FW 13.52 audit found 55/55 placements refused.
+Thus the old false proof is addressed, but the complete positive proof path is still open.
 
 *Tests:* `test_argument_register_hand_off_proves_a_transfer`,
 `test_a_register_the_call_never_receives_proves_nothing`,
@@ -212,8 +214,10 @@ Work done in that pass:
 * **A1-06 gained the audit's second counterexample.** The audit asked for "an unrelated
   acquired object plus a callee that decrements a different object". `pass_other_object`
   acquires into `rax` and hands the callee `rcx`, so the transfer must stay unproven;
-  `pass_by_lea` is the positive twin (`lea rdi, [rax+0x10]`), so the fix cannot be satisfied
-  by refusing every `lea`. Both are assembled by binutils and decoded by capstone.
+  `pass_by_lea` is instead an **interior-pointer negative control**:
+  `lea rdi, [rax+0x10]` derives another address and must not prove transfer of the
+  same object. Only identity `lea rdi, [rax]` may serve as a local same-address
+  placement witness. Both forms can be checked with Capstone/binutils fixtures.
 * **A1-10 is pinned, not merely declared.** `capstone>=5` became `capstone>=5,<6`: an open
   lower bound lets a future major change decode behaviour under a fixed analysis.
   `FREEZE-DRIFT.md` carries the new hash and the reason. Offline install for an environment

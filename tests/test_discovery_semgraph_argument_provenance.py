@@ -9,7 +9,8 @@ import pytest
 from types import SimpleNamespace
 
 from capstone.x86 import X86_OP_IMM, X86_OP_MEM, X86_OP_REG
-from tools.discovery.semgraph import _argument_carries, _transfer_status, POSSIBLE, UNKNOWN, Graph, chains
+from tools.discovery.semgraph import (_argument_carries, _transfer_status, POSSIBLE,
+                                      UNKNOWN, REFUTED, Graph, chains, check_evidence)
 
 
 @dataclass
@@ -242,3 +243,129 @@ def test_subregister_clobber_kills_source_pointer_identity(source, partial):
                    move(0x12, partial, reg("rax")),
                    move(0x14, "rdi", reg(source)), call(0x20)]
     assert not _argument_carries(overwritten, 0x20, source, obj_load_site=0x10)
+
+
+# Independent firmware-audit findings N1-N4: mutations must make these red.
+
+def test_n1_statusless_reference_transfer_is_explicitly_unknown():
+    graph = Graph()
+    w = {"site": "0x14", "kind": "call", "text": "call free_wrapper"}
+    graph.edge("function:0x1", "function:0x2", "transfers-reference", w)
+    edge = graph.export()["edges"][0]
+    assert edge["status"] == UNKNOWN
+    assert check_evidence(graph.export()) == []
+
+
+def test_n1_legacy_statusless_transfer_is_rejected_by_evidence_validator():
+    w = {"site": "0x14", "kind": "call", "text": "call free_wrapper"}
+    graph = {"edges": [{"src": "entry:probe", "dst": "function:0x2",
+                        "kind": "transfers-reference", "witness": w}],
+             "nodes": [{"id": "entry:probe", "kind": "entry"},
+                       {"id": "function:0x2", "kind": "function"}]}
+    assert any("transfer-status-missing" in error
+               for error in check_evidence(graph))
+    finding = {"detector": "D1", "function": {"rva": "0x2"},
+               "bug_class": "OWNERSHIP_DOUBLE_FREE", "rank": 1}
+    result = chains(graph, {"findings": [finding]}, facts={})["chains"][0]
+    assert result["hop_status"] == UNKNOWN
+
+
+def test_n2_refuted_unknown_disagreement_is_visible_and_order_independent():
+    w = {"site": "0x14", "kind": "call", "text": "call helper"}
+    exports = []
+    for statuses in ((UNKNOWN, REFUTED), (REFUTED, UNKNOWN)):
+        graph = Graph()
+        for status in statuses:
+            graph.edge("function:0x1", "function:0x2", "calls", w,
+                       status=status, detector=status)
+        edge = graph.export()["edges"][0]
+        assert edge["status"] == UNKNOWN
+        assert edge["evidence_conflict"] is True
+        assert {rec["attrs"]["status"] for rec in edge["evidence"]} == {
+            UNKNOWN, REFUTED}
+        exports.append(graph.export())
+    assert exports[0] == exports[1]
+
+
+def test_n3_conflicted_aggregate_does_not_advertise_proved_identity():
+    graph = Graph()
+    w = {"site": "0x14", "kind": "call", "text": "call helper"}
+    proof = {"site": "0x44", "text": "free(arg0)", "kind": "release"}
+    graph.edge("function:0x1", "function:0x2", "transfers-reference", w,
+               status="proved", argument_proven=True,
+               callee_identity_proven=True, callee_identity_witness=proof)
+    graph.edge("function:0x1", "function:0x2", "transfers-reference", w,
+               status=REFUTED, detector="negative")
+    edge = graph.export()["edges"][0]
+    assert edge["status"] == UNKNOWN
+    assert edge["evidence_conflict"] is True
+    for attribute in ("argument_proven", "callee_identity_proven",
+                      "callee_identity_witness"):
+        assert attribute not in edge
+    assert any(rec["attrs"].get("callee_identity_witness") == proof
+               for rec in edge["evidence"])
+
+
+def test_n4_alternative_routes_preserve_aggregated_witnesses():
+    graph = Graph()
+    for name in ("entry:best", "entry:alternate"):
+        graph.node(name, "entry")
+    graph.node("function:0x20", "function")
+    w1 = {"site": "0x40", "kind": "entry-table", "text": "best -> fn"}
+    w2 = {"site": "0x50", "kind": "entry-table", "text": "alternate -> fn"}
+    graph.edge("entry:best", "function:0x20", "reaches", w1,
+               status="proved", detector="D1")
+    graph.edge("entry:alternate", "function:0x20", "reaches", w2,
+               status="possible", detector="D2")
+    graph.edge("entry:alternate", "function:0x20", "reaches", w2,
+               status=UNKNOWN, detector="D3")
+    finding = {"detector": "D1", "function": {"rva": "0x20"},
+               "bug_class": "OWNERSHIP_DOUBLE_FREE", "rank": 1}
+    chain = chains(graph.export(), {"findings": [finding]}, facts={})["chains"][0]
+    assert chain["entry"] == "entry:best"
+    alt = chain["path_selection"]["alternatives"][0]
+    assert alt["entry"] == "entry:alternate"
+    assert len(alt["hops"][0]["evidence"]) == 2
+    assert {obs["attrs"]["detector"] for obs in alt["hops"][0]["evidence"]} == {
+        "D2", "D3"}
+
+
+def test_mutation_partial_width_lea_guard_is_discriminating():
+    # LEA into edi is a valid x86-64 instruction but loses high pointer bits.
+    # Removing the explicit full-width destination guard makes it PROVED.
+    code = [move(0x10, "edi", mem("rax"), mnemonic="lea"), call(0x20)]
+    assert not _argument_carries(code, 0x20, "rax")
+
+
+def test_mutation_branch_in_placement_window_must_refuse_linear_proof():
+    # A conditional after placement is an unresolved control-flow window.
+    # The old independent test used a branch *before* placement, which was
+    # already caught by a different skip-path check.
+    code = [move(0x10, "rdi", reg("rax")),
+            Ins(0x14, "jne", [imm(0x1e)]), call(0x20)]
+    assert not _argument_carries(code, 0x20, "rax")
+
+
+def test_n1_null_transfer_grade_is_unknown_and_invalid_is_refused():
+    w = {"site": "0x14", "kind": "call", "text": "call helper"}
+    graph = Graph()
+    assert graph.edge("function:0x1", "function:0x2", "transfers-reference",
+                      w, status=None)
+    assert graph.export()["edges"][0]["status"] == UNKNOWN
+    with pytest.raises(AssertionError, match="invalid proof status"):
+        graph.edge("function:0x1", "function:0x3", "transfers-reference",
+                   w, status="pr0ved")
+
+
+def test_n1_unvalidated_external_null_grade_cannot_break_chain_scoring():
+    w = {"site": "0x14", "kind": "call", "text": "call helper"}
+    graph = {"nodes": [{"id": "entry:probe", "kind": "entry"},
+                       {"id": "function:0x2", "kind": "function"}],
+             "edges": [{"src": "entry:probe", "dst": "function:0x2",
+                        "kind": "transfers-reference", "witness": w,
+                        "status": None}]}
+    assert check_evidence(graph)
+    finding = {"detector": "D1", "function": {"rva": "0x2"},
+               "bug_class": "OWNERSHIP_DOUBLE_FREE", "rank": 1}
+    result = chains(graph, {"findings": [finding]}, facts={})["chains"][0]
+    assert result["hop_status"] == UNKNOWN
