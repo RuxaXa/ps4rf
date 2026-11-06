@@ -126,11 +126,21 @@ def combine_transfer_claim(caller: dict, callee: dict) -> dict:
     arg = caller.get("argument")
     # A bare status="proved" is not itself a caller witness. Require the
     # exact output contract of the CFG must-reaching-definitions producer.
+    # Must-flow begins at a memory LOAD, not at the producer call.
+    # Its witness alone cannot establish that an earlier acquire wrote
+    # the loaded slot. Keep the graph UNKNOWN until a separate producer
+    # binding witness agrees on the exact generation site.
+    binding = caller.get("producer_witness")
     caller_proved = (caller.get("status") == "proved"
                      and caller.get("kind") == "cfg-must-reach"
+                     and caller.get("producer_binding") == "verified"
                      and arg in ARG_REGS
                      and bool(caller.get("site") and caller.get("text")
-                              and caller.get("acquisition")))
+                              and caller.get("generation_site"))
+                     and isinstance(binding, dict)
+                     and binding.get("kind") == "verified-object-generation"
+                     and binding.get("generation_site") == caller.get("generation_site")
+                     and bool(binding.get("site") and binding.get("text")))
     cw = callee.get("witness")
     callee_status = callee.get("status")
     agreed = (arg in ARG_REGS and callee.get("argument") == arg
