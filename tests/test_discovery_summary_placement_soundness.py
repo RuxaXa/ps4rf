@@ -27,6 +27,10 @@ def reg(name):
     return SimpleNamespace(type=X86_OP_REG, reg=name)
 
 
+def imm(value):
+    return SimpleNamespace(type=X86_OP_IMM, imm=value)
+
+
 def memory(base, displacement=0, index=0):
     return SimpleNamespace(
         type=X86_OP_MEM,
@@ -90,7 +94,7 @@ def test_unrelated_argument_does_not_hide_proven_second_argument():
 def test_nearest_redefinition_of_same_register_still_wins():
     result = place(insn(0x10, "mov", reg("rdi"), reg("rax")),
                    insn(0x18, "mov", reg("rdi"), reg("rbx")))
-    assert result["status"] == summaries.REFUTED
+    assert result["status"] == summaries.UNKNOWN
 
 
 def test_unknown_first_argument_does_not_hide_proven_second_argument():
@@ -102,3 +106,20 @@ def test_unknown_first_argument_does_not_hide_proven_second_argument():
 
 def test_no_setup_remains_unknown():
     assert place()["status"] == summaries.UNKNOWN
+
+
+def test_a_direct_branch_can_bypass_argument_setup():
+    result = place(insn(0x05, "je", imm(0x30)),
+                   insn(0x10, "mov", reg("rdi"), reg("rax")))
+    assert result["status"] == summaries.UNKNOWN
+
+
+def test_an_xchg_clobber_invalidates_earlier_argument_setup():
+    result = place(insn(0x10, "mov", reg("rdi"), reg("rax")),
+                   insn(0x18, "xchg", reg("rbx"), reg("rdi")))
+    assert result["status"] == summaries.UNKNOWN
+
+
+def test_distinct_register_values_are_not_evidence_of_distinct_objects():
+    result = place(insn(0x10, "mov", reg("rdi"), reg("rcx")))
+    assert result["status"] == summaries.UNKNOWN
